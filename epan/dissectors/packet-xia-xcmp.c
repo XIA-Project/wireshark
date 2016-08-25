@@ -152,9 +152,9 @@ static int
 dissect_xcmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	gint8         type;
-	gint16        chksum;
-	gint16        seq;
-	gint16        id;
+	guint16        chksum;
+	guint16        seq;
+	guint16        id;
     int           tot_len;
     proto_tree   *xcmp_tree = NULL;
     proto_item   *ti;
