@@ -46,6 +46,7 @@ void proto_reg_handoff_xip(void);
 static dissector_handle_t xip_serval_handle;
 static dissector_handle_t xip_xdgram_handle;
 static dissector_handle_t xip_xstream_handle;
+static dissector_handle_t xip_xcmp_handle;
 
 static gint proto_xip			= -1;
 
@@ -507,6 +508,8 @@ dissect_xip_next_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 		return call_dissector(xip_xstream_handle, next_tvb, pinfo, tree);
 
 	case XIA_NEXT_HEADER_XCMP:
+		next_tvb = tvb_new_subset_remaining(tvb, offset);
+		return call_dissector(xip_xcmp_handle, next_tvb, pinfo, tree);
 
 	case XIA_NEXT_HEADER_DATA:
 		next_tvb = tvb_new_subset_remaining(tvb, offset);
@@ -724,6 +727,7 @@ proto_reg_handoff_xip(void)
 {
 	dissector_add_uint("ethertype", ETHERTYPE_XIP, xip_handle);
 
+	xip_xcmp_handle = find_dissector_add_dependency("xcmp", proto_xip);
 	xip_xstream_handle = find_dissector_add_dependency("xstream", proto_xip);
 	xip_xdgram_handle = find_dissector_add_dependency("xdatagram", proto_xip);
 	xip_serval_handle = find_dissector_add_dependency("xipserval", proto_xip);
