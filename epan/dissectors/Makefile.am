@@ -1386,6 +1386,9 @@ DISSECTOR_SRC = \
 	packet-x29.c		\
 	packet-xcsl.c		\
 	packet-xdmcp.c		\
+	packet-xia-xarp.c	\
+	packet-xia-xdgram.c	\
+	packet-xia-xstream.c	\
 	packet-xip.c		\
 	packet-xip-serval.c	\
 	packet-xmcp.c		\

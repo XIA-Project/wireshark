@@ -44,6 +44,8 @@ void proto_reg_handoff_xip(void);
 
 /* Next dissector handles. */
 static dissector_handle_t xip_serval_handle;
+static dissector_handle_t xip_xdgram_handle;
+static dissector_handle_t xip_xstream_handle;
 
 static gint proto_xip			= -1;
 
@@ -396,7 +398,22 @@ xia_ntop(const struct xia_addr *src, wmem_strbuf_t *buf)
 
 #define XIPH_MIN_LEN		36
 #define ETHERTYPE_XIP		0xC0DE
+
 #define XIA_NEXT_HEADER_DATA	0
+#define XIA_NEXT_HEADER_XCMP	0x01
+#define XIA_NEXT_HEADER_XDGRAM	0x02
+#define XIA_NEXT_HEADER_XSTREAM	0x03
+
+/* Principal string values. */
+static const value_string next_header_vals[] = {
+	{ XIA_NEXT_HEADER_DATA,	  "Data" },
+	{ XIA_NEXT_HEADER_XCMP,	  "XCMP" },
+	{ XIA_NEXT_HEADER_XDGRAM, "Xdatagram" },
+	{ XIA_NEXT_HEADER_XSTREAM,"Xstream" },
+	{ 0,			NULL }
+};
+
+
 
 /* Offsets of XIP fields in bytes. */
 #define XIPH_VERS		0
@@ -481,12 +498,22 @@ dissect_xip_next_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 	guint8 next_header = tvb_get_guint8(tvb, XIPH_NXTH);
 
 	switch (next_header) {
+	case XIA_NEXT_HEADER_XDGRAM:
+		next_tvb = tvb_new_subset_remaining(tvb, offset);
+		return call_dissector(xip_xdgram_handle, next_tvb, pinfo, tree);
+
+	case XIA_NEXT_HEADER_XSTREAM:
+		next_tvb = tvb_new_subset_remaining(tvb, offset);
+		return call_dissector(xip_xstream_handle, next_tvb, pinfo, tree);
+
+	case XIA_NEXT_HEADER_XCMP:
+
 	case XIA_NEXT_HEADER_DATA:
 		next_tvb = tvb_new_subset_remaining(tvb, offset);
 		return call_data_dissector(next_tvb, pinfo, tree);
 	default:
 		expert_add_info_format(pinfo, next_ti, &ei_xip_next_header,
-		 "Unrecognized next header type: 0x%02x", next_header);
+		 "Unrecognized next header: 0x%02x", next_header);
 		return 0;
 	}
 }
@@ -614,7 +641,7 @@ proto_register_xip(void)
 
 		{ &hf_xip_next_hdr,
 		{ "Next Header", "xip.next_hdr", FT_UINT8,
-		   BASE_DEC, NULL, 0x0, NULL, HFILL }},
+		   BASE_HEX, next_header_vals, 0x0, NULL, HFILL }},
 
 		{ &hf_xip_payload_len,
 		{ "Payload Length", "xip.payload_len", FT_UINT16,
@@ -697,6 +724,8 @@ proto_reg_handoff_xip(void)
 {
 	dissector_add_uint("ethertype", ETHERTYPE_XIP, xip_handle);
 
+	xip_xstream_handle = find_dissector_add_dependency("xstream", proto_xip);
+	xip_xdgram_handle = find_dissector_add_dependency("xdatagram", proto_xip);
 	xip_serval_handle = find_dissector_add_dependency("xipserval", proto_xip);
 }
 

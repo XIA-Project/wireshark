@@ -2240,6 +2240,18 @@ indent_size = tab
 indent_style = tab
 indent_size = tab
 
+[packet-xia-xarp.[ch]]
+indent_size=4
+
+[packet-xia-xdgram.[ch]]
+indent_size=4
+
+[packet-xia-xstream.[ch]]
+indent_size=4
+
+[packet-xia-xcmp.[ch]]
+indent_size=4
+
 [packet-xmcp.[ch]]
 indent_size = 2
 
