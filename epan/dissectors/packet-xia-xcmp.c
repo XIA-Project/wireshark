@@ -72,7 +72,7 @@ static dissector_handle_t xcmp_handle;
 #define XCMP_ECHO_SEQ  6
 #define XCMP_ECHO_TIME 8
 
-#define MIN_XCMP_HEADER_SIZE 8
+#define MIN_XCMP_HEADER_SIZE 4
 
 // XIA only uses a limited # of types
 #define	XCMP_ECHOREPLY 0
@@ -168,7 +168,18 @@ dissect_xcmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
 	type = tvb_get_guint8(tvb, XCMP_TYPE);
 	chksum = tvb_get_ntohs(tvb, XCMP_CHKSUM);
 
-    tot_len = MIN_XCMP_HEADER_SIZE + 8;
+	switch (type) {
+		case XCMP_UNREACH:
+		case XCMP_TIMXCEED:
+			tot_len = MIN_XCMP_HEADER_SIZE;
+			break;
+		case XCMP_ECHOREPLY:
+		case XCMP_ECHO:
+			tot_len = MIN_XCMP_HEADER_SIZE + 4 + 8;
+			break;
+		default:
+			tot_len = MIN_XCMP_HEADER_SIZE;
+	}
 
     //tvb_set_reported_length(tvb, tot_len);
 
@@ -184,12 +195,18 @@ dissect_xcmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
 	}
     switch (type) {
     case XCMP_UNREACH:
+
+
         col_add_fstr(pinfo->cinfo, COL_INFO, "Foo is unreachable");
+        break;
+
+	case XCMP_TIMXCEED:
+        col_add_fstr(pinfo->cinfo, COL_INFO, "TTL Exceeded");
         break;
 
 	case XCMP_ECHOREPLY:
 	case XCMP_ECHO:
-		tot_len = MIN_XCMP_HEADER_SIZE + 8;
+
 		seq = tvb_get_ntohs(tvb, XCMP_ECHO_SEQ);
 		id = tvb_get_ntohs(tvb, XCMP_ECHO_ID);
 		proto_tree_add_uint(xcmp_tree, hf_xcmp_id,  tvb, XCMP_ECHO_ID,  2, id);
@@ -227,10 +244,7 @@ dissect_xcmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
 		col_append_fstr(pinfo->cinfo, COL_INFO, " id=0x%04x, seq=%u",
 			tvb_get_ntohs(tvb, 4), tvb_get_ntohs(tvb, 6));
 		break;
-	case XCMP_TIMXCEED:
-        col_add_fstr(pinfo->cinfo, COL_INFO, "TTL Exceeded");
-        break;
-	case XCMP_REDIRECT:
+
     default:
         col_add_fstr(pinfo->cinfo, COL_INFO, "Unknown XCMP type 0x%0x", type);
         break;
