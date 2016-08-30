@@ -168,9 +168,9 @@ dissect_xcmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
 	type = tvb_get_guint8(tvb, XCMP_TYPE);
 	chksum = tvb_get_ntohs(tvb, XCMP_CHKSUM);
 
-    tot_len = MIN_XCMP_HEADER_SIZE + sizeof(struct timeval);
+    tot_len = MIN_XCMP_HEADER_SIZE + 8;
 
-    tvb_set_reported_length(tvb, tot_len);
+    //tvb_set_reported_length(tvb, tot_len);
 
 //    src_xid_str = xid_to_str(tvb, spa_offset);
 //    tgt_xid_str = xid_to_str(tvb, tpa_offset);
@@ -189,7 +189,7 @@ dissect_xcmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
 
 	case XCMP_ECHOREPLY:
 	case XCMP_ECHO:
-
+		tot_len = MIN_XCMP_HEADER_SIZE + 8;
 		seq = tvb_get_ntohs(tvb, XCMP_ECHO_SEQ);
 		id = tvb_get_ntohs(tvb, XCMP_ECHO_ID);
 		proto_tree_add_uint(xcmp_tree, hf_xcmp_id,  tvb, XCMP_ECHO_ID,  2, id);
@@ -237,7 +237,7 @@ dissect_xcmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
     }
 
 	// everything else is data
-	next_tvb = tvb_new_subset_remaining(tvb, 8);
+	next_tvb = tvb_new_subset_remaining(tvb, tot_len);
 	call_data_dissector(next_tvb, pinfo, tree);
 
     return tvb_captured_length(tvb);
