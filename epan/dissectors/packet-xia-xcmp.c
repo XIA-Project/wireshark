@@ -37,6 +37,7 @@
 static int proto_xcmp = -1;
 static int hf_xcmp_type = -1;
 static int hf_xcmp_code = -1;
+static int hf_xcmp_unreach_code = -1;
 static int hf_xcmp_seq = -1;
 static int hf_xcmp_id = -1;
 static int hf_xcmp_chksum = -1;
@@ -70,12 +71,25 @@ static dissector_handle_t xcmp_handle;
 #define    XCMP_ECHO      8
 #define    XCMP_TIMXCEED  11
 
+/* XCMP unreachable codes */
+#define XCMP_UNREACH_NET         0
+#define XCMP_UNREACH_HOST        1
+#define XCMP_UNREACH_INTENT      3
+#define XCMP_UNREACH_UNSPECIFIED 16
+
 static const value_string type_vals[] = {
     { XCMP_ECHOREPLY, "Pong"        },
     { XCMP_UNREACH,   "Unreachable" },
     { XCMP_REDIRECT,  "Redirect"    },
     { XCMP_ECHO,      "Ping"        },
     { XCMP_TIMXCEED,  "TTL Exceeded"},
+    {0, NULL}};
+
+static const value_string unreach_vals[] = {
+    { XCMP_UNREACH_NET,         "Network" },
+    { XCMP_UNREACH_HOST,        "Host"    },
+    { XCMP_UNREACH_INTENT,      "Intent"  },
+    { XCMP_UNREACH_UNSPECIFIED, "Unknown" },
     {0, NULL}};
 
 /*  FIXME: move this stuff to a common file */
@@ -120,6 +134,7 @@ static int
 dissect_xcmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
     gint8       type;
+    gint8       code;
     guint16     chksum;
     guint16     seq;
     guint16     id;
@@ -133,6 +148,7 @@ dissect_xcmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "XCMP");
 
     type = tvb_get_guint8(tvb, XCMP_TYPE);
+    code = tvb_get_guint8(tvb, XCMP_CODE);
     chksum = tvb_get_ntohs(tvb, XCMP_CHKSUM);
 
     actual_len = tvb_reported_length(tvb);
@@ -150,13 +166,17 @@ dissect_xcmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
         ti = proto_tree_add_protocol_format(tree, proto_xcmp, tvb, 0, tot_len, "XIA Control Message Protocol");
         xcmp_tree = proto_item_add_subtree(ti, ett_xcmp);
         proto_tree_add_item(xcmp_tree, hf_xcmp_type, tvb, XCMP_TYPE, 1, ENC_NA);
-        proto_tree_add_item(xcmp_tree, hf_xcmp_code, tvb, XCMP_CODE, 1, ENC_NA);
+        if (type != XCMP_UNREACH) {
+            proto_tree_add_item(xcmp_tree, hf_xcmp_code, tvb, XCMP_CODE, 1, ENC_NA);
+        } else {
+            proto_tree_add_item(xcmp_tree, hf_xcmp_unreach_code, tvb, XCMP_CODE, 1, ENC_NA);
+        }
         proto_tree_add_uint(xcmp_tree, hf_xcmp_chksum, tvb, XCMP_CHKSUM, 2, chksum);
     }
 
     switch (type) {
     case XCMP_UNREACH:
-        col_add_fstr(pinfo->cinfo, COL_INFO, "Foo is unreachable");
+        col_add_fstr(pinfo->cinfo, COL_INFO, "%s Foo is unreachable", try_val_to_str(code, unreach_vals));
         break;
 
     case XCMP_TIMXCEED:
@@ -214,10 +234,11 @@ void
 proto_register_xcmp(void)
 {
     static hf_register_info hf[] = {
-        { &hf_xcmp_type,   { "Type", "xcmp.type",       FT_UINT8,  BASE_DEC, VALS(type_vals), 0x0, NULL, HFILL }},
-        { &hf_xcmp_code,   { "Code", "xcmp.code",       FT_UINT8,  BASE_DEC, NULL, 0x0, NULL, HFILL }},
-        { &hf_xcmp_chksum, { "Checksum", "xcmp.chksum", FT_UINT16, BASE_HEX, NULL, 0x0, NULL, HFILL }},
-        { &hf_xcmp_id,     { "ID", "xcmp.echo.id",      FT_UINT16, BASE_HEX, NULL, 0x0, NULL, HFILL }},
+        { &hf_xcmp_type,   { "Type", "xcmp.type",         FT_UINT8,  BASE_DEC, VALS(type_vals), 0x0, NULL, HFILL }},
+        { &hf_xcmp_code,   { "Code", "xcmp.code",         FT_UINT8,  BASE_DEC, NULL, 0x0, NULL, HFILL }},
+        { &hf_xcmp_unreach_code,   { "Code", "xcmp.unreach_code", FT_UINT8,  BASE_DEC, VALS(unreach_vals), 0x0, NULL, HFILL }},
+        { &hf_xcmp_chksum, { "Checksum", "xcmp.chksum",   FT_UINT16, BASE_HEX, NULL, 0x0, NULL, HFILL }},
+        { &hf_xcmp_id,     { "ID", "xcmp.echo.id",        FT_UINT16, BASE_HEX, NULL, 0x0, NULL, HFILL }},
         { &hf_xcmp_seq,    { "Sequence No", "xcmp.echo.seq", FT_UINT16, BASE_DEC, NULL, 0x0, NULL, HFILL }},
 
         {&hf_xcmp_time,
