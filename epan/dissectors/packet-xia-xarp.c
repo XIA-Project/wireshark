@@ -35,6 +35,8 @@
 #include <epan/capture_dissectors.h>
 #include <epan/arptypes.h>
 #include <epan/addr_resolv.h>
+#include <epan/expert.h>
+#include "packet-xip.h"
 
 void proto_register_xarp(void);
 void proto_reg_handoff_xarp(void);
@@ -52,6 +54,8 @@ static int hf_xarp_dst_xip = -1;
 
 static gint ett_xarp = -1;
 
+static expert_field ei_xarp_invalid_len = EI_INIT;
+
 static dissector_handle_t xarp_handle;
 
 /*  Offsets of fields within an XARP packet */
@@ -62,64 +66,29 @@ static dissector_handle_t xarp_handle;
 #define AR_OP  6
 #define MIN_XARP_HEADER_SIZE 8
 
-// XIA only supports 2 operations
+/* XIA only supports 2 ARP operations */
 #define XARPOP_REQUEST 1
 #define XARPOP_REPLY   2
 
 static const value_string op_vals[] = {
-    {XARPOP_REQUEST, "request" },
-    {XARPOP_REPLY,   "reply"   },
+    {XARPOP_REQUEST, "request"},
+    {XARPOP_REPLY,   "reply"  },
     {0, NULL}};
 
-/*  FIXME: move this stuff to a common file */
-/*  XIA principals */
-#define XIDTYPE_NAT    0x00
-#define XIDTYPE_AD     0x10
-#define XIDTYPE_HID    0x11
-#define XIDTYPE_CID    0x12
-#define XIDTYPE_SID    0x13
-#define XIDTYPE_UNI4ID 0x14
-#define XIDTYPE_I4ID   0x15
-#define XIDTYPE_U4ID   0x16
-#define XIDTYPE_XDP    0x17
-#define XIDTYPE_SRVCID 0x18
-#define XIDTYPE_FLOWID 0x19
-#define XIDTYPE_ZF     0x20
-
-/*  Principal string values */
-static const value_string xidtype_vals[] = {
-    { XIDTYPE_AD,     "ad" },
-    { XIDTYPE_HID,    "hid" },
-    { XIDTYPE_CID,    "cid" },
-    { XIDTYPE_SID,    "sid" },
-    { XIDTYPE_UNI4ID, "uni4id" },
-    { XIDTYPE_I4ID,   "i4id" },
-    { XIDTYPE_U4ID,   "u4id" },
-    { XIDTYPE_XDP,    "xdp" },
-    { XIDTYPE_SRVCID, "serval" },
-    { XIDTYPE_FLOWID, "flowid" },
-    { XIDTYPE_ZF,     "zf" },
-    { 0,              NULL }
-};
-
-/* XIA Ethertypes */
-#define ETHERTYPE_XIP   0xc0de
-#define ETHERTYPE_XARP  0x9990
-#define ETHERTYPE_XNETJ 0x9991
-
 static const value_string etype_vals[] = {
-	{ETHERTYPE_XIP,   "XIP"  },
-	{ETHERTYPE_XARP,  "XARP" },
-    {ETHERTYPE_XNETJ, "XNETJ" },
+    {ETHERTYPE_XIP,   "XIP"  },
+    {ETHERTYPE_XARP,  "XARP" },
+    {ETHERTYPE_XNETJ, "XNETJ"},
     {0, NULL}
 };
 
 static const value_string hw_vals[] = {
-    {ARPHRD_ETHER, "Ethernet" },
+    {ARPHRD_ETHER, "Ethernet"},
     {0, NULL}
 };
 
 
+// FIXME: move to common code location
 static const gchar *
 xid_to_str(tvbuff_t *tvb, gint offset)
 {
@@ -150,16 +119,24 @@ capture_xarp(const guchar *pd _U_, int offset _U_, int len _U_, capture_packet_i
 static int
 dissect_xarp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-    guint16       ar_hrd;
-    guint16       ar_pro;
-    guint8        ar_hln;
-    guint8        ar_pln;
-    guint16       ar_op;
-    int           sha_offset, spa_offset, tha_offset, tpa_offset;
-    int           tot_len;
-    proto_tree   *xarp_tree = NULL;
-    proto_item   *ti;
-    const gchar  *src_xid_str, *tgt_xid_str;
+    guint16 ar_hrd;
+    guint16 ar_pro;
+    guint8  ar_hln;
+    guint8  ar_pln;
+    guint16 ar_op;
+    guint32 needed_len;
+    guint32 actual_len;
+    guint32 sha_offset, spa_offset, tha_offset, tpa_offset;
+    proto_item *ti;
+    proto_tree *xarp_tree = NULL;
+    const gchar *src_xid_str = NULL;
+    const gchar *tgt_xid_str = NULL;
+
+    /* make sure we have enough data for a simple XARP header */
+    actual_len = tvb_reported_length(tvb);
+    if (actual_len < MIN_XARP_HEADER_SIZE) {
+        return 0;
+    }
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "XARP");
 
@@ -169,42 +146,48 @@ dissect_xarp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
     ar_pln = tvb_get_guint8(tvb, AR_PLN);
     ar_op  = tvb_get_ntohs(tvb, AR_OP);
 
-    tot_len = MIN_XARP_HEADER_SIZE + ar_hln * 2 + ar_pln * 2;
-
-    tvb_set_reported_length(tvb, tot_len);
+    needed_len = MIN_XARP_HEADER_SIZE + ar_hln * 2 + ar_pln * 2;
 
     sha_offset = MIN_XARP_HEADER_SIZE;
     spa_offset = sha_offset + ar_hln;
     tha_offset = spa_offset + ar_pln;
     tpa_offset = tha_offset + ar_hln;
 
-    src_xid_str = xid_to_str(tvb, spa_offset);
-    tgt_xid_str = xid_to_str(tvb, tpa_offset);
+    ti = proto_tree_add_protocol_format(tree, proto_xarp, tvb, 0, needed_len, "XIA Address Resolution Protocol");
+    xarp_tree = proto_item_add_subtree(ti, ett_xarp);
+    proto_tree_add_uint(xarp_tree, hf_xarp_hard_type, tvb, AR_HRD, 2, ar_hrd);
+    proto_tree_add_uint(xarp_tree, hf_xarp_proto_type, tvb, AR_PRO, 2, ar_pro);
+    proto_tree_add_uint(xarp_tree, hf_xarp_hard_size, tvb, AR_HLN, 1, ar_hln);
+    proto_tree_add_uint(xarp_tree, hf_xarp_proto_size, tvb, AR_PLN, 1, ar_pln);
+    proto_tree_add_uint(xarp_tree, hf_xarp_opcode, tvb, AR_OP,  2, ar_op);
 
-    switch (ar_op) {
-    case XARPOP_REQUEST:
-        col_add_fstr(pinfo->cinfo, COL_INFO, "Who has %s? Tell %s", tgt_xid_str, src_xid_str);
-        break;
-    case XARPOP_REPLY:
-        col_add_fstr(pinfo->cinfo, COL_INFO, "%s is at %s", src_xid_str, tvb_ether_to_str(tvb, sha_offset));
-        break;
-    default:
-        col_add_fstr(pinfo->cinfo, COL_INFO, "Unknown XARP opcode 0x%04x", ar_op);
-        break;
-    }
+    if (needed_len <= actual_len) {
+        src_xid_str = xid_to_str(tvb, spa_offset);
+        tgt_xid_str = xid_to_str(tvb, tpa_offset);
 
-    if (tree) {
-        ti = proto_tree_add_protocol_format(tree, proto_xarp, tvb, 0, tot_len, "XIA Address Resolution Protocol");
-        xarp_tree = proto_item_add_subtree(ti, ett_xarp);
-        proto_tree_add_uint(xarp_tree, hf_xarp_hard_type, tvb, AR_HRD, 2, ar_hrd);
-        proto_tree_add_uint(xarp_tree, hf_xarp_proto_type, tvb, AR_PRO, 2, ar_pro);
-        proto_tree_add_uint(xarp_tree, hf_xarp_hard_size, tvb, AR_HLN, 1, ar_hln);
-        proto_tree_add_uint(xarp_tree, hf_xarp_proto_size, tvb, AR_PLN, 1, ar_pln);
-        proto_tree_add_uint(xarp_tree, hf_xarp_opcode, tvb, AR_OP,  2, ar_op);
         proto_tree_add_item(xarp_tree, hf_xarp_src_hw_mac,tvb, sha_offset, ar_hln, ENC_BIG_ENDIAN);
         proto_tree_add_string_format(xarp_tree, hf_xarp_src_xip, tvb, spa_offset, 24, src_xid_str, "Source XID: %s", src_xid_str);
         proto_tree_add_item(xarp_tree, hf_xarp_dst_hw_mac, tvb, tha_offset, ar_hln, ENC_BIG_ENDIAN);
         proto_tree_add_string_format(xarp_tree, hf_xarp_dst_xip, tvb, tpa_offset, 24, tgt_xid_str, "Target XID: %s", tgt_xid_str);
+
+        switch (ar_op) {
+        case XARPOP_REQUEST:
+            col_add_fstr(pinfo->cinfo, COL_INFO, "Who has %s? Tell %s", tgt_xid_str, src_xid_str);
+            break;
+        case XARPOP_REPLY:
+            col_add_fstr(pinfo->cinfo, COL_INFO, "%s is at %s", src_xid_str, tvb_ether_to_str(tvb, sha_offset));
+            break;
+        default:
+            col_add_fstr(pinfo->cinfo, COL_INFO, "Unknown XARP opcode 0x%04x", ar_op);
+            break;
+        }
+
+    } else {
+        col_add_fstr(pinfo->cinfo, COL_INFO, "Truncated Packet!");
+        expert_add_info_format(pinfo, ti, &ei_xarp_invalid_len,
+            "Packet size is too small: received %d bytes, need %d",
+            actual_len, needed_len);
+            return MIN_XARP_HEADER_SIZE;
     }
 
     return tvb_captured_length(tvb);
@@ -214,16 +197,21 @@ void
 proto_register_xarp(void)
 {
     static hf_register_info hf[] = {
-        { &hf_xarp_hard_type,  { "Hardware type", "xarp.hw.type",         FT_UINT16, BASE_HEX,  VALS(hw_vals), 0x0, NULL, HFILL }},
-        { &hf_xarp_proto_type, { "Protocol type", "xarp.proto.type",      FT_UINT16, BASE_HEX,  VALS(etype_vals), 0x0, NULL, HFILL }},
-        { &hf_xarp_hard_size,  { "Hardware size", "xarp.hw.size",         FT_UINT8,  BASE_DEC,  NULL, 0x0, NULL, HFILL }},
-        { &hf_xarp_proto_size, { "Protocol size", "xarp.proto.size",      FT_UINT8,  BASE_DEC,  NULL, 0x0, NULL, HFILL }},
-        { &hf_xarp_opcode,     { "Opcode", "xarp.opcode",                 FT_UINT16, BASE_DEC,  VALS(op_vals), 0x0, NULL, HFILL }},
-        { &hf_xarp_src_hw_mac, { "Sender MAC address", "xarp.src.hw_mac", FT_ETHER,  BASE_NONE, NULL, 0x0, NULL, HFILL }},
-        { &hf_xarp_src_xip,    { "Sender XID", "xarp.src.xip",            FT_STRING, BASE_NONE, NULL, 0x0, NULL, HFILL }},
-        { &hf_xarp_dst_hw_mac, { "Target MAC address", "xarp.dst.hw_mac", FT_ETHER,  BASE_NONE, NULL, 0x0, NULL, HFILL }},
-        { &hf_xarp_dst_xip,    { "Target XID", "xarp.dst.xip",            FT_STRING, BASE_NONE, NULL, 0x0, NULL, HFILL }},
+        { &hf_xarp_hard_type,  {"Hardware type", "xarp.hw.type",         FT_UINT16, BASE_HEX,  VALS(hw_vals), 0x0, NULL, HFILL}},
+        { &hf_xarp_proto_type, {"Protocol type", "xarp.proto.type",      FT_UINT16, BASE_HEX,  VALS(etype_vals), 0x0, NULL, HFILL}},
+        { &hf_xarp_hard_size,  {"Hardware size", "xarp.hw.size",         FT_UINT8,  BASE_DEC,  NULL, 0x0, NULL, HFILL}},
+        { &hf_xarp_proto_size, {"Protocol size", "xarp.proto.size",      FT_UINT8,  BASE_DEC,  NULL, 0x0, NULL, HFILL}},
+        { &hf_xarp_opcode,     {"Opcode", "xarp.opcode",                 FT_UINT16, BASE_DEC,  VALS(op_vals), 0x0, NULL, HFILL}},
+        { &hf_xarp_src_hw_mac, {"Sender MAC address", "xarp.src.hw_mac", FT_ETHER,  BASE_NONE, NULL, 0x0, NULL, HFILL}},
+        { &hf_xarp_src_xip,    {"Sender XID", "xarp.src.xip",            FT_STRING, BASE_NONE, NULL, 0x0, NULL, HFILL}},
+        { &hf_xarp_dst_hw_mac, {"Target MAC address", "xarp.dst.hw_mac", FT_ETHER,  BASE_NONE, NULL, 0x0, NULL, HFILL}},
+        { &hf_xarp_dst_xip,    {"Target XID", "xarp.dst.xip",            FT_STRING, BASE_NONE, NULL, 0x0, NULL, HFILL}},
     };
+
+    static ei_register_info ei[] = {{ &ei_xarp_invalid_len, {"xarp.invalid.len", PI_MALFORMED, PI_ERROR, "Invalid length", EXPFILL}},
+    };
+
+    expert_module_t* expert_xarp;
 
     static gint *ett[] = {
         &ett_xarp,
@@ -233,6 +221,9 @@ proto_register_xarp(void)
 
     proto_register_field_array(proto_xarp, hf, array_length(hf));
     proto_register_subtree_array(ett, array_length(ett));
+
+    expert_xarp = expert_register_protocol(proto_xarp);
+    expert_register_field_array(expert_xarp, ei, array_length(ei));
 
     xarp_handle = register_dissector( "xarp" , dissect_xarp, proto_xarp );
 }

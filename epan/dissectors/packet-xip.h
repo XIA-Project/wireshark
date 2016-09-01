@@ -37,7 +37,9 @@
 #ifndef __PACKET_XIP_H
 #define __PACKET_XIP_H
 
-#define ETHERTYPE_XIP  0xC0DE
+#define ETHERTYPE_XIP   0xC0DE
+#define ETHERTYPE_XARP  0x9990
+#define ETHERTYPE_XNETJ 0x9991
 
 /*  XIA principals */
 #define XIDTYPE_NAT    0x00
