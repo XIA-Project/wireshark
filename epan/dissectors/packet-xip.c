@@ -38,6 +38,7 @@
 #include "config.h"
 #include <epan/packet.h>
 #include <epan/expert.h>
+#include "packet-xip.h"
 
 void proto_register_xip(void);
 void proto_reg_handoff_xip(void);
@@ -73,22 +74,10 @@ static expert_field ei_xip_bad_num_src = EI_INIT;
 
 static dissector_handle_t xip_handle;
 
-/* XIA principals. */
-#define XIDTYPE_NAT		0x00
-#define XIDTYPE_AD		0x10
-#define XIDTYPE_HID		0x11
-#define XIDTYPE_CID		0x12
-#define XIDTYPE_SID		0x13
-#define XIDTYPE_UNI4ID		0x14
-#define XIDTYPE_I4ID		0x15
-#define XIDTYPE_U4ID		0x16
-#define XIDTYPE_XDP		0x17
-#define XIDTYPE_SRVCID		0x18
-#define XIDTYPE_FLOWID		0x19
-#define XIDTYPE_ZF		0x20
-
 /* Principal string values. */
-static const value_string xidtype_vals[] = {
+// FIXME: made non-static so other xia modules have access, but
+//  global data probably isn't great. make our XIA_VALS() macro?
+const value_string xidtype_vals[] = {
 	{ XIDTYPE_AD,		"ad" },
 	{ XIDTYPE_HID,		"hid" },
 	{ XIDTYPE_CID,		"cid" },
@@ -398,15 +387,10 @@ xia_ntop(const struct xia_addr *src, wmem_strbuf_t *buf)
  */
 
 #define XIPH_MIN_LEN		36
-#define ETHERTYPE_XIP		0xC0DE
-
-#define XIA_NEXT_HEADER_DATA	0
-#define XIA_NEXT_HEADER_XCMP	0x01
-#define XIA_NEXT_HEADER_XDGRAM	0x02
-#define XIA_NEXT_HEADER_XSTREAM	0x03
 
 /* Principal string values. */
-static const value_string next_header_vals[] = {
+// FIXME: another table that shouldn't be global
+const value_string next_header_vals[] = {
 	{ XIA_NEXT_HEADER_DATA,	  "Data" },
 	{ XIA_NEXT_HEADER_XCMP,	  "XCMP" },
 	{ XIA_NEXT_HEADER_XDGRAM, "Xdatagram" },
