@@ -62,5 +62,7 @@
 #define XIA_NEXT_HEADER_XSTREAM	0x03
 
 extern const value_string xidtype_vals[];
+extern const value_string next_header_vals[];
+
 
 #endif
