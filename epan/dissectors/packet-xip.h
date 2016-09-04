@@ -56,13 +56,12 @@
 #define XIDTYPE_ZF     0x20
 
 /* XIP next header IDs */
-#define XIA_NEXT_HEADER_DATA	0
-#define XIA_NEXT_HEADER_XCMP	0x01
-#define XIA_NEXT_HEADER_XDGRAM	0x02
-#define XIA_NEXT_HEADER_XSTREAM	0x03
+#define XIA_NEXT_HEADER_DATA    0
+#define XIA_NEXT_HEADER_XCMP    0x01
+#define XIA_NEXT_HEADER_XDGRAM  0x02
+#define XIA_NEXT_HEADER_XSTREAM 0x03
 
 extern const value_string xidtype_vals[];
 extern const value_string next_header_vals[];
-
 
 #endif
