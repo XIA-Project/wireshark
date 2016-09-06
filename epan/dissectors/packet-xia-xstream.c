@@ -30,6 +30,7 @@
 #include <config.h>
 #include <epan/packet.h>
 #include <epan/expert.h>
+#include <wsutil/str_util.h>
 #include <epan/ip_opts.h>
 #include "packet-xip.h"
 
@@ -45,7 +46,13 @@ static int hf_xstream_off = -1;
 static int hf_xstream_flags = -1;
 static int hf_xstream_seqno = -1;
 static int hf_xstream_ackno = -1;
-static int hf_xstream_flags_res = -1;
+static int hf_xstream_flags_res1 = -1;
+static int hf_xstream_flags_res2 = -1;
+static int hf_xstream_flags_res3 = -1;
+static int hf_xstream_flags_res4 = -1;
+static int hf_xstream_flags_res5 = -1;
+static int hf_xstream_flags_res6 = -1;
+static int hf_xstream_flags_res7 = -1;
 static int hf_xstream_flags_ns = -1;
 static int hf_xstream_flags_cwr = -1;
 static int hf_xstream_flags_ecn = -1;
@@ -66,6 +73,9 @@ static int hf_xstream_option_wscale_shift = -1;
 static int hf_xstream_option_wscale_multiplier = -1;
 static int hf_xstream_option_timestamp_tsval = -1;
 static int hf_xstream_option_timestamp_tsecr = -1;
+static int hf_xstream_option_padding = -1;
+static int hf_xstream_option_migrate = -1;
+static int hf_xstream_option_migrate_ack = -1;
 static int hf_xstream_option_type = -1;
 static int hf_xstream_option_type_copy = -1;
 static int hf_xstream_option_type_class = -1;
@@ -80,6 +90,8 @@ static expert_field ei_xstream_ack_nonzero = EI_INIT;
 static expert_field ei_xstream_suboption_malformed = EI_INIT;
 static expert_field ei_xstream_invalid_len = EI_INIT;
 static expert_field ei_xstream_next_header = EI_INIT;
+static expert_field ei_ip_nop = EI_INIT;
+
 
 static gint ett_xstream = -1;
 static gint ett_xstream_flags = -1;
@@ -88,6 +100,11 @@ static gint ett_xstream_option_type = -1;
 static gint ett_xstream_option_timestamp = -1;
 static gint ett_xstream_option_mss = -1;
 static gint ett_xstream_option_wscale = -1;
+static gint ett_xstream_option_migrate = -1;
+static gint ett_xstream_option_migrate_ack = -1;
+static gint ett_xstream_option_other = -1;
+static gint ett_xstream_unknown_opt = -1;
+
 
 /* size of the xstream header with no options */
 #define XSTREAM_MIN_LENGTH 16
@@ -101,7 +118,7 @@ static gint ett_xstream_option_wscale = -1;
 #define XSTREAM_WIN   12
 #define XSTREAM_OPTS  16
 
-/* Xstream option lengths */
+/* Xstream options */
 #define XSTREAM_OPT_EOL         0
 #define XSTREAM_OPT_NOP         1
 #define XSTREAM_OPT_MSS         2
@@ -110,9 +127,12 @@ static gint ett_xstream_option_wscale = -1;
 #define XSTREAM_OPT_MIGRATE     50
 #define XSTREAM_OPT_MIGRATE_ACK 51
 
-#define XSTREAM_OLEN_MSS       4
-#define XSTREAM_OLEN_WSCALE    3
-#define XSTREAM_OLEN_TIMESTAMP 10
+/* Xstream option lengths */
+#define XSTREAM_OLEN_MSS             4
+#define XSTREAM_OLEN_WSCALE          4
+#define XSTREAM_OLEN_TIMESTAMP       12
+#define XSTREAM_OLEN_MIGRATE_MIN     12
+#define XSTREAM_OLEN_MIGRATE_ACK_MIN 12
 
 static const value_string xstream_option_kind_vs[] = {
     {XSTREAM_OPT_EOL, "End of Option List"},
@@ -120,22 +140,31 @@ static const value_string xstream_option_kind_vs[] = {
     {XSTREAM_OPT_MSS, "Maximum Segment Size"},
     {XSTREAM_OPT_WINDOW, "Window Scale"},
     {XSTREAM_OPT_TIMESTAMP, "Time Stamp Option"},
+	{XSTREAM_OPT_MIGRATE, "Migration"},
+	{XSTREAM_OPT_MIGRATE_ACK, "Migration ACK"},
     {0, NULL}
 };
 
 static value_string_ext xstream_option_kind_vs_ext = VALUE_STRING_EXT_INIT(xstream_option_kind_vs);
 
 /* Xstream Flags */
-#define TH_FIN  0x01
-#define TH_SYN  0x02
-#define TH_RST  0x04
-#define TH_PUSH 0x08
-#define TH_ACK  0x10
-#define TH_URG  0x20  /* FIXME: we don't have anything from here down... */
-#define TH_ECE  0x40
-#define TH_CWR  0x80
-#define TH_NS   0x100
-#define TH_RES  0x200
+#define TH_FIN   0x01
+#define TH_SYN   0x02
+#define TH_RST   0x04
+#define TH_PUSH  0x08
+#define TH_ACK   0x10
+#define TH_URG   0x20  /* FIXME: we don't have anything from here down... */
+#define TH_ECE   0x40
+#define TH_CWR   0x80
+#define TH_NS    0x100
+#define TH_RES1  0x200
+#define TH_RES2  0x400
+#define TH_RES3  0x800
+#define TH_RES4  0x1000
+#define TH_RES5  0x2000
+#define TH_RES6  0x4000
+#define TH_RES7  0x8000
+#define TH_RESERVED (TH_RES1|TH_RES2|TH_RES3|TH_RES4|TH_RES5|TH_RES6|TH_RES7)
 
 static const char *
 xstream_flags_to_str(gint16 f)
@@ -157,7 +186,7 @@ xstream_flags_to_str(gint16 f)
         }
     }
 
-    if (f & TH_RES) {
+    if (f & TH_RESERVED) {
         if (buf[0])
             pbuf = g_stpcpy(pbuf, ", ");
         g_stpcpy(pbuf, "Reserved");
@@ -203,13 +232,19 @@ dissect_xstream_opt_mss(const ip_tcp_opt *optp, tvbuff_t *tvb,
     proto_item *item;
     proto_tree *exp_tree;
     guint16 mss;
+	guint16 len;
 
     mss = tvb_get_ntohs(tvb, offset + 2);
+	len = tvb_get_guint8(tvb, offset + 1) << 2;
+
+	// FIXME: add error handler for incorrect len
     item = proto_tree_add_none_format(opt_tree, hf_xstream_option_mss, tvb, offset, optlen, "%s: %u bytes", optp->name, mss);
     exp_tree = proto_item_add_subtree(item, ett_xstream_option_mss);
     proto_tree_add_item(exp_tree, hf_xstream_option_kind, tvb, offset, 1, ENC_BIG_ENDIAN);
-    proto_tree_add_item(exp_tree, hf_xstream_option_len, tvb, offset + 1, 1, ENC_BIG_ENDIAN);
-    proto_tree_add_item(exp_tree, hf_xstream_option_mss_val, tvb, offset + 2, 2, ENC_BIG_ENDIAN);
+	offset += 1;
+	proto_tree_add_uint_format_value(exp_tree, hf_xstream_option_len, tvb, offset, 1, len, "%u bytes (%u)", len, len >> 2);
+	offset += 1;
+    proto_tree_add_item(exp_tree, hf_xstream_option_mss_val, tvb, offset, 2, ENC_BIG_ENDIAN);
     xstream_info_append_uint(pinfo, "MSS", mss);
 }
 
@@ -222,15 +257,18 @@ dissect_xstream_opt_wscale(const ip_tcp_opt *optp _U_, tvbuff_t *tvb,
     guint32 shift;
     proto_item *wscale_pi, *shift_pi, *gen_pi;
     proto_tree *wscale_tree;
+	guint16 len;
 
-    wscale_tree = proto_tree_add_subtree(opt_tree, tvb, offset, 3, ett_xstream_option_wscale, &wscale_pi, "Window scale: ");
+	len = tvb_get_guint8(tvb, offset + 1) << 2;
+
+    wscale_tree = proto_tree_add_subtree(opt_tree, tvb, offset, 4, ett_xstream_option_wscale, &wscale_pi, "Window scale: ");
 
     proto_tree_add_item(wscale_tree, hf_xstream_option_kind, tvb, offset, 1, ENC_BIG_ENDIAN);
     offset += 1;
-
-    proto_tree_add_item(wscale_tree, hf_xstream_option_len, tvb, offset, 1, ENC_BIG_ENDIAN);
+	proto_tree_add_uint_format_value(wscale_tree, hf_xstream_option_len, tvb, offset, 1, len, "%u bytes (%u)", len, len >> 2);
     offset += 1;
-
+	proto_tree_add_item(wscale_tree, hf_xstream_option_padding, tvb, offset, 1, ENC_BIG_ENDIAN);
+	offset += 1;
     shift_pi = proto_tree_add_item_ret_uint(wscale_tree, hf_xstream_option_wscale_shift, tvb, offset, 1, ENC_BIG_ENDIAN, &shift);
     if (shift > 14) {
         /* RFC 1323: "If a Window Scale option is received with a shift.cnt
@@ -251,20 +289,103 @@ dissect_xstream_opt_wscale(const ip_tcp_opt *optp _U_, tvbuff_t *tvb,
 }
 
 static void
+dissect_xstream_opt_migrate_ack(const ip_tcp_opt *optp _U_, tvbuff_t *tvb,
+    int offset, guint optlen _U_, packet_info *pinfo, proto_tree *opt_tree, void *data _U_)
+{
+    proto_item *ti;
+    proto_tree *m_tree;
+	guint16 len;
+
+	len = tvb_get_guint8(tvb, offset + 1) << 2;
+
+    m_tree = proto_tree_add_subtree(opt_tree, tvb, offset, 10, ett_xstream_option_migrate, &ti, "Migration Ack");
+
+    proto_tree_add_item(m_tree, hf_xstream_option_kind, tvb, offset, 1, ENC_BIG_ENDIAN);
+    offset += 1;
+
+	proto_tree_add_uint_format_value(m_tree, hf_xstream_option_len, tvb, offset, 1, len, "%u bytes (%u)", len, len >> 2);
+    offset += 1;
+
+	if (0) {
+		// FIXME: use real error here, not dummy for pinfo use
+        expert_add_info(pinfo, ti, &ei_xstream_option_wscale_shift_invalid);
+    }
+
+//    proto_tree_add_item_ret_uint(ts_tree, hf_xstream_option_timestamp_tsval, tvb, offset,
+//                        4, ENC_BIG_ENDIAN, &ts_val);
+//    offset += 4;
+//
+//    proto_tree_add_item_ret_uint(ts_tree, hf_xstream_option_timestamp_tsecr, tvb, offset,
+//                        4, ENC_BIG_ENDIAN, &ts_ecr);
+//    /* offset += 4; */
+//
+//    proto_item_append_text(ti, "TSval %u, TSecr %u", ts_val, ts_ecr);
+//    if (xstream_ignore_timestamps == FALSE) {
+//        xstream_info_append_uint(pinfo, "TSval", ts_val);
+//        xstream_info_append_uint(pinfo, "TSecr", ts_ecr);
+//    }
+}
+
+static void
+dissect_xstream_opt_migrate(const ip_tcp_opt *optp _U_, tvbuff_t *tvb,
+    int offset, guint optlen _U_, packet_info *pinfo, proto_tree *opt_tree, void *data _U_)
+{
+    proto_item *ti;
+    proto_tree *ma_tree;
+	guint16 len;
+
+	len = tvb_get_guint8(tvb, offset + 1) << 2;
+
+    ma_tree = proto_tree_add_subtree(opt_tree, tvb, offset, 10, ett_xstream_option_migrate, &ti, "Migration");
+
+    proto_tree_add_item(ma_tree, hf_xstream_option_kind, tvb, offset, 1, ENC_BIG_ENDIAN);
+    offset += 1;
+
+	proto_tree_add_uint_format_value(ma_tree, hf_xstream_option_len, tvb, offset, 1, len, "%u bytes (%u)", len, len >> 2);
+    offset += 1;
+
+	if (0) {
+		// FIXME: use real error here, not dummy for pinfo use
+        expert_add_info(pinfo, ti, &ei_xstream_option_wscale_shift_invalid);
+    }
+
+//    proto_tree_add_item_ret_uint(ts_tree, hf_xstream_option_timestamp_tsval, tvb, offset,
+//                        4, ENC_BIG_ENDIAN, &ts_val);
+//    offset += 4;
+//
+//    proto_tree_add_item_ret_uint(ts_tree, hf_xstream_option_timestamp_tsecr, tvb, offset,
+//                        4, ENC_BIG_ENDIAN, &ts_ecr);
+//    /* offset += 4; */
+//
+//    proto_item_append_text(ti, "TSval %u, TSecr %u", ts_val, ts_ecr);
+//    if (xstream_ignore_timestamps == FALSE) {
+//        xstream_info_append_uint(pinfo, "TSval", ts_val);
+//        xstream_info_append_uint(pinfo, "TSecr", ts_ecr);
+//    }
+}
+
+static void
 dissect_xstream_opt_timestamp(const ip_tcp_opt *optp _U_, tvbuff_t *tvb,
     int offset, guint optlen _U_, packet_info *pinfo, proto_tree *opt_tree, void *data _U_)
 {
     proto_item *ti;
     proto_tree *ts_tree;
     guint32 ts_val, ts_ecr;
+	guint16 len;
+
+	len = tvb_get_guint8(tvb, offset + 1) << 2;
 
     ts_tree = proto_tree_add_subtree(opt_tree, tvb, offset, 10, ett_xstream_option_timestamp, &ti, "Timestamps: ");
 
     proto_tree_add_item(ts_tree, hf_xstream_option_kind, tvb, offset, 1, ENC_BIG_ENDIAN);
     offset += 1;
 
-    proto_tree_add_item(ts_tree, hf_xstream_option_len, tvb, offset, 1, ENC_BIG_ENDIAN);
+	proto_tree_add_uint_format_value(ts_tree, hf_xstream_option_len, tvb, offset, 1, len, "%u bytes (%u)", len, len >> 2);
     offset += 1;
+
+	// zeros
+	proto_tree_add_item(ts_tree, hf_xstream_option_padding, tvb, offset, 2, ENC_BIG_ENDIAN);
+	offset += 2;
 
     proto_tree_add_item_ret_uint(ts_tree, hf_xstream_option_timestamp_tsval, tvb, offset,
                         4, ENC_BIG_ENDIAN, &ts_val);
@@ -323,7 +444,23 @@ static const ip_tcp_opt xstreamopts[] = {
         OPT_LEN_FIXED_LENGTH,
         XSTREAM_OLEN_TIMESTAMP,
         dissect_xstream_opt_timestamp
-    }
+    },
+	{
+		XSTREAM_OPT_MIGRATE,
+		"Migration",
+		NULL,
+		OPT_LEN_VARIABLE_LENGTH,
+		XSTREAM_OLEN_MIGRATE_MIN,
+		dissect_xstream_opt_migrate
+	},
+	{
+		XSTREAM_OPT_MIGRATE_ACK,
+		"Migration Ack",
+		NULL,
+		OPT_LEN_VARIABLE_LENGTH,
+		XSTREAM_OLEN_MIGRATE_ACK_MIN,
+		dissect_xstream_opt_migrate_ack
+	}
 };
 
 #define N_XSTREAM_OPTS  array_length(xstreamopts)
@@ -335,6 +472,153 @@ static ip_tcp_opt_type XSTREAM_OPT_TYPES = {
     &hf_xstream_option_type_class,
     &hf_xstream_option_type_number
 };
+
+static void
+dissect_ipopt_type(tvbuff_t *tvb, int offset, proto_tree *tree, ip_tcp_opt_type* opttypes)
+{
+  proto_tree *type_tree;
+  proto_item *ti;
+
+  ti = proto_tree_add_item(tree, *opttypes->phf_opt_type, tvb, offset, 1, ENC_NA);
+  type_tree = proto_item_add_subtree(ti, *opttypes->pett_opt_type);
+  proto_tree_add_item(type_tree, *opttypes->phf_opt_type_copy, tvb, offset, 1, ENC_NA);
+  proto_tree_add_item(type_tree, *opttypes->phf_opt_type_class, tvb, offset, 1, ENC_NA);
+  proto_tree_add_item(type_tree, *opttypes->phf_opt_type_number, tvb, offset, 1, ENC_NA);
+}
+
+void
+dissect_xstream_options(tvbuff_t *tvb, int offset, guint length,
+                       const ip_tcp_opt *opttab, int nopts, int eol,
+                       ip_tcp_opt_type* opttypes, expert_field* ei_bad,
+                       packet_info *pinfo, proto_tree *opt_tree,
+                       proto_item *opt_item, void * data)
+{
+  guchar            opt;
+  const ip_tcp_opt *optp;
+  opt_len_type      len_type;
+  unsigned int      optlen;
+  const char       *name;
+  void            (*dissect)(const struct ip_tcp_opt *, tvbuff_t *,
+                             int, guint, packet_info *, proto_tree *,
+                             void *);
+  guint             len, nop_count = 0;
+
+  while (length > 0) {
+    opt = tvb_get_guint8(tvb, offset);
+    for (optp = &opttab[0]; optp < &opttab[nopts]; optp++) {
+      if (optp->optcode == opt)
+        break;
+    }
+    if (optp == &opttab[nopts]) {
+      /* We assume that the only OPT_LEN_NO_LENGTH options are EOL and NOP options,
+         so that we can treat unknown options as OPT_LEN_VARIABLE_LENGTH with a
+         minimum of 2, and at least be able to move on to the next option
+         by using the length in the option. */
+      optp = NULL;  /* indicate that we don't know this option */
+      len_type = OPT_LEN_VARIABLE_LENGTH;
+      optlen = 2;
+      name = wmem_strdup_printf(wmem_packet_scope(), "Unknown (0x%02x)", opt);
+      dissect = NULL;
+      nop_count = 0;
+    } else {
+      len_type = optp->len_type;
+      optlen = optp->optlen;
+      name = optp->name;
+      dissect = optp->dissect;
+      if (opt_item && len_type == OPT_LEN_NO_LENGTH && optlen == 0 && opt == 1 &&
+         (nop_count == 0 || offset % 4)) { /* opt 1 = NOP in both IP and TCP */
+        /* Count number of NOP in a row within a uint32 */
+        nop_count++;
+      } else {
+        nop_count = 0;
+      }
+    }
+    --length;      /* account for type byte */
+    if (len_type != OPT_LEN_NO_LENGTH) {
+      /* Option has a length. Is it in the packet? */
+      if (length == 0) {
+        /* Bogus - packet must at least include option code byte and
+           length byte! */
+        proto_tree_add_expert_format(opt_tree, pinfo, ei_bad, tvb, offset, 1,
+                                     "%s (length byte past end of options)", name);
+        return;
+      }
+      len = tvb_get_guint8(tvb, offset + 1) << 2;  /* total including type, len */
+      --length;    /* account for length byte */
+      if (len < 2) {
+        /* Bogus - option length is too short to include option code and
+           option length. */
+        proto_tree_add_expert_format(opt_tree, pinfo, ei_bad, tvb, offset, 2,
+                            "%s (with too-short option length = %u byte%s)",
+                            name, len, plurality(len, "", "s"));
+        return;
+      } else if (len - 2 > length) {
+        /* Bogus - option goes past the end of the header. */
+        proto_tree_add_expert_format(opt_tree, pinfo, ei_bad, tvb, offset, length,
+                            "%s (option length = %u byte%s says option goes past end of options)",
+                            name, len, plurality(len, "", "s"));
+        return;
+      } else if (len_type == OPT_LEN_FIXED_LENGTH && len != optlen) {
+        /* Bogus - option length isn't what it's supposed to be for this
+           option. */
+        proto_tree_add_expert_format(opt_tree, pinfo, ei_bad, tvb, offset, len,
+                            "%s (with option length = %u byte%s; should be %u)",
+                            name, len, plurality(len, "", "s"), optlen);
+        return;
+      } else if (len_type == OPT_LEN_VARIABLE_LENGTH && len < optlen) {
+        /* Bogus - option length is less than what it's supposed to be for
+           this option. */
+        proto_tree_add_expert_format(opt_tree, pinfo, ei_bad, tvb, offset, len,
+                            "%s (with option length = %u byte%s; should be >= %u)",
+                            name, len, plurality(len, "", "s"), optlen);
+        return;
+      } else {
+        if (optp == NULL) {
+          proto_tree_add_subtree_format(opt_tree, tvb, offset, len, ett_xstream_unknown_opt, NULL, "%s (%u byte%s)",
+                              name, len, plurality(len, "", "s"));
+        } else {
+          if (dissect != NULL) {
+            /* Option has a dissector. */
+            proto_item_append_text(proto_tree_get_parent(opt_tree), ", %s",
+                                   optp->name);
+            (*dissect)(optp, tvb, offset, len, pinfo, opt_tree, data);
+          } else {
+            proto_tree *field_tree;
+
+            /* Option has no data, hence no dissector. */
+            proto_item_append_text(proto_tree_get_parent(opt_tree), ", %s",
+                                   name);
+            field_tree = proto_tree_add_subtree(opt_tree, tvb, offset, len, ett_xstream_option_other, NULL, name);
+            dissect_ipopt_type(tvb, offset, field_tree, opttypes);
+          }
+        }
+        len -= 2;   /* subtract size of type and length */
+        offset += 2 + len;
+      }
+      length -= len;
+    } else {
+      if (dissect != NULL) {
+        proto_item_append_text(proto_tree_get_parent(opt_tree), ", %s",
+                               optp->name);
+        (*dissect)(optp, tvb, offset, 1, pinfo, opt_tree, data);
+      } else {
+        proto_tree *field_tree;
+
+        /* Option has no data, hence no dissector. */
+        proto_item_append_text(proto_tree_get_parent(opt_tree), ", %s", name);
+        field_tree = proto_tree_add_subtree(opt_tree, tvb, offset, 1, ett_xstream_option_other, NULL, name);
+        dissect_ipopt_type(tvb, offset, field_tree, opttypes);
+      }
+      offset += 1;
+
+      if (nop_count == 4 && strcmp (name, "No-Operation (NOP)") == 0) {
+        expert_add_info(pinfo, opt_item, &ei_ip_nop);
+      }
+    }
+    if (opt == eol)
+      break;
+  }
+}
 
 static int
 dissect_xstream(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
@@ -371,7 +655,13 @@ dissect_xstream(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data 
     tf = proto_tree_add_uint_format(xstream_tree, hf_xstream_flags, tvb, XSTREAM_FLAGS, 2,
                                     flags, "Flags: 0x%04x (%s)", flags, flags_str);
     field_tree = proto_item_add_subtree(tf, ett_xstream_flags);
-    proto_tree_add_boolean(field_tree, hf_xstream_flags_res, tvb, XSTREAM_FLAGS, 1, flags);
+	proto_tree_add_boolean(field_tree, hf_xstream_flags_res7, tvb, XSTREAM_FLAGS, 1, flags);
+	proto_tree_add_boolean(field_tree, hf_xstream_flags_res6, tvb, XSTREAM_FLAGS, 1, flags);
+	proto_tree_add_boolean(field_tree, hf_xstream_flags_res5, tvb, XSTREAM_FLAGS, 1, flags);
+	proto_tree_add_boolean(field_tree, hf_xstream_flags_res4, tvb, XSTREAM_FLAGS, 1, flags);
+	proto_tree_add_boolean(field_tree, hf_xstream_flags_res3, tvb, XSTREAM_FLAGS, 1, flags);
+	proto_tree_add_boolean(field_tree, hf_xstream_flags_res2, tvb, XSTREAM_FLAGS, 1, flags);
+    proto_tree_add_boolean(field_tree, hf_xstream_flags_res1, tvb, XSTREAM_FLAGS, 1, flags);
     proto_tree_add_boolean(field_tree, hf_xstream_flags_ns, tvb, XSTREAM_FLAGS, 1, flags);
     proto_tree_add_boolean(field_tree, hf_xstream_flags_cwr, tvb, XSTREAM_FLAGS, 1, flags);
     proto_tree_add_boolean(field_tree, hf_xstream_flags_ecn, tvb, XSTREAM_FLAGS, 1, flags);
@@ -401,7 +691,7 @@ dissect_xstream(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data 
 
     /* Now dissect the options. */
     if (optlen) {
-        dissect_ip_tcp_options(tvb, XSTREAM_MIN_LENGTH, optlen, xstreamopts, N_XSTREAM_OPTS,
+        dissect_xstream_options(tvb, XSTREAM_MIN_LENGTH, optlen, xstreamopts, N_XSTREAM_OPTS,
                                XSTREAM_OPT_EOL, &XSTREAM_OPT_TYPES,
                                &ei_xstream_opt_len_invalid, pinfo, options_tree,
                                options_item, NULL);
@@ -430,8 +720,26 @@ proto_register_xstream(void)
         {&hf_xstream_flags, {"Flags", "xstream.flags",
             FT_UINT16, BASE_HEX, NULL, 0x0, NULL, HFILL}},
 
-        {&hf_xstream_flags_res, {"Reserved", "xstream.flags.res",
-            FT_BOOLEAN, 16, TFS(&tfs_set_notset), TH_RES, "Three reserved bits (must be zero)", HFILL}},
+		{&hf_xstream_flags_res7, {"Reserved", "xstream.flags.res7",
+        	FT_BOOLEAN, 16, TFS(&tfs_set_notset), TH_RES7, "Three reserved bits (must be zero)", HFILL}},
+
+		{&hf_xstream_flags_res6, {"Reserved", "xstream.flags.res6",
+            FT_BOOLEAN, 16, TFS(&tfs_set_notset), TH_RES6, "Three reserved bits (must be zero)", HFILL}},
+
+		{&hf_xstream_flags_res5, {"Reserved", "xstream.flags.res5",
+            FT_BOOLEAN, 16, TFS(&tfs_set_notset), TH_RES5, "Three reserved bits (must be zero)", HFILL}},
+
+		{&hf_xstream_flags_res4, {"Reserved", "xstream.flags.res4",
+        	FT_BOOLEAN, 16, TFS(&tfs_set_notset), TH_RES4, "Three reserved bits (must be zero)", HFILL}},
+
+		{&hf_xstream_flags_res3, {"Reserved", "xstream.flags.res3",
+            FT_BOOLEAN, 16, TFS(&tfs_set_notset), TH_RES3, "Three reserved bits (must be zero)", HFILL}},
+
+		{&hf_xstream_flags_res2, {"Reserved", "xstream.flags.res2",
+            FT_BOOLEAN, 16, TFS(&tfs_set_notset), TH_RES2, "Three reserved bits (must be zero)", HFILL}},
+
+        {&hf_xstream_flags_res1, {"Reserved", "xstream.flags.res1",
+            FT_BOOLEAN, 16, TFS(&tfs_set_notset), TH_RES1, "Three reserved bits (must be zero)", HFILL}},
 
         {&hf_xstream_flags_ns, {"Nonce", "xstream.flags.ns",
             FT_BOOLEAN, 16, TFS(&tfs_set_notset), TH_NS, "ECN concealment protection (RFC 3540)", HFILL}},
@@ -510,6 +818,15 @@ proto_register_xstream(void)
 
         {&hf_xstream_option_timestamp_tsecr, {"Timestamp echo reply", "xstream.options.timestamp.tsecr",
             FT_UINT32, BASE_DEC, NULL, 0x0, "Echoed timestamp from remote machine", HFILL}},
+
+		{&hf_xstream_option_padding, {"Padding", "xstream.options.padding",
+            FT_NONE, BASE_NONE, NULL, 0x0, "Padding byte(s)", HFILL}},
+
+		{&hf_xstream_option_migrate, {"Migration Signature", "xstream.options.migrate",
+			FT_UINT32, BASE_DEC, NULL, 0x0, "Migration Header", HFILL}},
+
+		{&hf_xstream_option_migrate_ack, {"Migration ACK Signature", "xstream.options.migrate.ack",
+			FT_UINT32, BASE_DEC, NULL, 0x0, "Migration ACK Header", HFILL}}
     };
 
     static gint *ett[] = {
@@ -519,7 +836,12 @@ proto_register_xstream(void)
         &ett_xstream_option_type,
         &ett_xstream_option_wscale,
         &ett_xstream_option_timestamp,
-        &ett_xstream_option_mss
+        &ett_xstream_option_mss,
+		&ett_xstream_option_migrate,
+		&ett_xstream_option_migrate_ack,
+		&ett_xstream_unknown_opt,
+		&ett_xstream_option_other
+
     };
 
     static ei_register_info ei[] = {
@@ -530,6 +852,7 @@ proto_register_xstream(void)
         {&ei_xstream_suboption_malformed, {"xstream.suboption_malformed", PI_MALFORMED, PI_ERROR, "suboption would go past end of option", EXPFILL}},
         {&ei_xstream_next_header, {"xstream.next.header", PI_MALFORMED, PI_WARN, "Unknown next header", EXPFILL}},
         {&ei_xstream_invalid_len, {"xstream.invalid.len", PI_MALFORMED, PI_ERROR, "Invalid length", EXPFILL}},
+		{ &ei_ip_nop, { "ip.nop", PI_PROTOCOL, PI_WARN, "4 NOP in a row - a router may have removed some options", EXPFILL }},
   };
 
     proto_xstream = proto_register_protocol("XIA XStream", "XStream", "xstream");
