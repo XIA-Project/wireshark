@@ -26,7 +26,6 @@
  *  https://github.com/XIAProject/xia-core
  *  https://github.com/AltraMayor/XIA-for-Linux/wiki
  */
-
 #include <config.h>
 #include <epan/packet.h>
 #include <epan/expert.h>
@@ -307,9 +306,10 @@ dissect_xstream_opt_migrate(const ip_tcp_opt *optp _U_, tvbuff_t *tvb,
 	proto_tree *src_tree, *dst_tree, *ts_tree;
 	guint16 len;
 	guint16 cnt;
+    int start;
 	guint16 size, section_size;
 
-
+    start = offset;
 	len = tvb_get_guint8(tvb, offset + 1) << 2;
 
     m_tree = proto_tree_add_subtree(opt_tree, tvb, offset, len, ett_xstream_option_migrate, &ti, optp->name);
@@ -317,7 +317,8 @@ dissect_xstream_opt_migrate(const ip_tcp_opt *optp _U_, tvbuff_t *tvb,
     proto_tree_add_item(m_tree, hf_xstream_option_kind, tvb, offset, 1, ENC_BIG_ENDIAN);
     offset += 1;
 
-	proto_tree_add_uint_format_value(m_tree, hf_xstream_option_len, tvb, offset, 1, len, "%u bytes (%u)", len, len >> 2);
+	proto_tree_add_uint_format_value(m_tree, hf_xstream_option_len, tvb, offset, 1, len,
+        "%u bytes (%u)", len, len >> 2);
     offset += 1;
 
 	// FIXME: these will need to do network byte ordering
@@ -373,7 +374,7 @@ dissect_xstream_opt_migrate(const ip_tcp_opt *optp _U_, tvbuff_t *tvb,
 	offset += size;
 
 	if (offset != len) {
-		proto_tree_add_item(m_tree, hf_xstream_option_padding, tvb, offset, offset - len, ENC_NA);
+		proto_tree_add_item(m_tree, hf_xstream_option_padding, tvb, offset, start + len - offset, ENC_NA);
 	}
 
 
@@ -394,12 +395,14 @@ dissect_xstream_opt_timestamp(const ip_tcp_opt *optp _U_, tvbuff_t *tvb,
 
 	len = tvb_get_guint8(tvb, offset + 1) << 2;
 
-    ts_tree = proto_tree_add_subtree(opt_tree, tvb, offset, 10, ett_xstream_option_timestamp, &ti, "Timestamps: ");
+    ts_tree = proto_tree_add_subtree(opt_tree, tvb, offset, XSTREAM_OLEN_TIMESTAMP,
+        ett_xstream_option_timestamp, &ti, "Timestamps: ");
 
     proto_tree_add_item(ts_tree, hf_xstream_option_kind, tvb, offset, 1, ENC_BIG_ENDIAN);
     offset += 1;
 
-	proto_tree_add_uint_format_value(ts_tree, hf_xstream_option_len, tvb, offset, 1, len, "%u bytes (%u)", len, len >> 2);
+	proto_tree_add_uint_format_value(ts_tree, hf_xstream_option_len, tvb, offset, 1, len,
+        "%u bytes (%u)", len, len >> 2);
     offset += 1;
 
 	// zeros
