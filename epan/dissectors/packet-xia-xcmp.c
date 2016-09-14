@@ -34,6 +34,8 @@
 #include <epan/packet.h>
 #include <epan/expert.h>
 #include <epan/capture_dissectors.h>
+#include <epan/proto_data.h>
+#include <epan/in_cksum.h>
 #include "packet-xip.h"
 
 static int proto_xcmp = -1;
@@ -43,10 +45,12 @@ static int hf_xcmp_unreach_code = -1;
 static int hf_xcmp_seq = -1;
 static int hf_xcmp_id = -1;
 static int hf_xcmp_chksum = -1;
+static int hf_xcmp_chksum_status = -1;
 static int hf_xcmp_time = -1;
 static int hf_xcmp_time_relative = -1;
 
 static expert_field ei_xcmp_invalid_len = EI_INIT;
+static expert_field ei_xcmp_chksum = EI_INIT;
 
 static gint ett_xcmp = -1;
 
@@ -107,14 +111,17 @@ static int
 dissect_xcmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
     guint8  type, code;
-    guint16 chksum;
+    //guint16 chksum;
     guint16 seq, id;
-    guint16 header_len, actual_len;
+    guint16 header_len, actual_len, captured_len;
     gboolean save_in_error_pkt;
     tvbuff_t *next_tvb, *xip_tvb;
     nstime_t ts, time_relative;
     proto_item *ti;
+	proto_item *checksum_item;
     proto_tree *xcmp_tree = NULL;
+
+	captured_len = tvb_captured_length(tvb);
 
     /* make sure we have enough data for a simple XCMP header */
     actual_len = tvb_reported_length(tvb);
@@ -125,7 +132,6 @@ dissect_xcmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "XCMP");
     type = tvb_get_guint8(tvb, XCMP_TYPE);
     code = tvb_get_guint8(tvb, XCMP_CODE);
-    chksum = tvb_get_ntohs(tvb, XCMP_CHKSUM);
 
     /* compute header size required */
     if (type == XCMP_ECHO || type == XCMP_ECHOREPLY) {
@@ -146,7 +152,16 @@ dissect_xcmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
     } else {
         proto_tree_add_item(xcmp_tree, hf_xcmp_unreach_code, tvb, XCMP_CODE, 1, ENC_NA);
     }
-    proto_tree_add_uint(xcmp_tree, hf_xcmp_chksum, tvb, XCMP_CHKSUM, 2, chksum);
+	if ((captured_len >= actual_len) && !pinfo->flags.in_error_pkt) {
+		// this is a normal looking xcmp packet, do whole checksum
+		proto_tree_add_checksum(xcmp_tree, tvb, XCMP_CHKSUM, hf_xcmp_chksum, hf_xcmp_chksum_status, &ei_xcmp_chksum,
+			pinfo, ip_checksum_tvb(tvb, 0, actual_len), ENC_BIG_ENDIAN, PROTO_CHECKSUM_VERIFY|PROTO_CHECKSUM_IN_CKSUM);
+	} else {
+		// we're in an error packet, just show the packet's checksum
+		checksum_item = proto_tree_add_checksum(xcmp_tree, tvb, XCMP_CHKSUM, hf_xcmp_chksum, hf_xcmp_chksum_status,
+			&ei_xcmp_chksum, pinfo, 0, ENC_BIG_ENDIAN, PROTO_CHECKSUM_NO_FLAGS);
+		proto_item_append_text(checksum_item, " [in ICMP error packet]");
+	}
 
     if (header_len > actual_len) {
         // not enough room for the extended header information
@@ -235,6 +250,9 @@ proto_register_xcmp(void)
         { &hf_xcmp_chksum, { "Checksum", "xcmp.chksum",
             FT_UINT16, BASE_HEX, NULL, 0x0, NULL, HFILL }},
 
+		{ &hf_xcmp_chksum_status, { "Checksum Status", "xcmp.chksum.status",
+			FT_UINT8, BASE_NONE, VALS(proto_checksum_vals), 0x0, NULL, HFILL}},
+
         { &hf_xcmp_id, { "ID", "xcmp.echo.id",
             FT_UINT16, BASE_HEX, NULL, 0x0, NULL, HFILL }},
 
@@ -255,6 +273,8 @@ proto_register_xcmp(void)
     static ei_register_info ei[] = {
         { &ei_xcmp_invalid_len, { "xcmp.invalid.len",
             PI_MALFORMED, PI_ERROR, "Invalid length", EXPFILL }},
+		{ &ei_xcmp_chksum, { "icmp.checksum_bad",
+			PI_CHECKSUM, PI_WARN, "Bad checksum", EXPFILL }}
     };
 
     expert_module_t* expert_xcmp;
