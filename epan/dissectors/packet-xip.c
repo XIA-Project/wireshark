@@ -541,10 +541,12 @@ display_xip(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 	payload_ti = proto_tree_add_uint_format(xip_tree, hf_xip_payload_len,
 		tvb, XIPH_PLEN, 2, payload_len, "Payload Length: %u bytes",
 		payload_len);
-	if (tvb_captured_length_remaining(tvb, xiph_len) != payload_len)
+	if (tvb_captured_length_remaining(tvb, xiph_len) != payload_len
+		&& (!pinfo->flags.in_error_pkt)) {
 		expert_add_info_format(pinfo, payload_ti, &ei_xip_invalid_len,
 		"Payload length field (%d bytes) does not match actual payload length (%d bytes)",
 		payload_len, tvb_captured_length_remaining(tvb, xiph_len));
+	}
 
 	/* Add XIP hop limit. */
 	proto_tree_add_item(xip_tree, hf_xip_hop_limit, tvb,

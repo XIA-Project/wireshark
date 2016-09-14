@@ -110,6 +110,7 @@ dissect_xcmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
     guint16 chksum;
     guint16 seq, id;
     guint16 header_len, actual_len;
+    gboolean save_in_error_pkt;
     tvbuff_t *next_tvb, *xip_tvb;
     nstime_t ts, time_relative;
     proto_item *ti;
@@ -137,7 +138,7 @@ dissect_xcmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
     }
 
     /* display common fields */
-    ti = proto_tree_add_protocol_format(tree, proto_xcmp, tvb, 0, header_len, "XIA Control Message Protocol");
+    ti = proto_tree_add_protocol_format(tree, proto_xcmp, tvb, 0, actual_len, "XIA Control Message Protocol");
     xcmp_tree = proto_item_add_subtree(ti, ett_xcmp);
     proto_tree_add_item(xcmp_tree, hf_xcmp_type, tvb, XCMP_TYPE, 1, ENC_NA);
     if (type != XCMP_UNREACH) {
@@ -155,17 +156,23 @@ dissect_xcmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
             return MIN_XCMP_HEADER_SIZE;
     }
 
+    save_in_error_pkt = pinfo->flags.in_error_pkt;
+    pinfo->flags.in_error_pkt = TRUE;
+
     switch (type) {
+        // FIXME: combine unreach, and timxceed cases
     case XCMP_UNREACH:
         xip_tvb = tvb_new_subset_remaining(tvb, 8);
-        call_dissector(xip_handle, xip_tvb, pinfo, tree);
+        call_dissector(xip_handle, xip_tvb, pinfo, xcmp_tree);
+        pinfo->flags.in_error_pkt = save_in_error_pkt;
         col_add_fstr(pinfo->cinfo, COL_INFO, "%s is unreachable", try_val_to_str(code, unreach_vals));
         return tvb_captured_length(tvb);
         break;
 
     case XCMP_TIMXCEED:
         xip_tvb = tvb_new_subset_remaining(tvb, 8);
-        call_dissector(xip_handle, xip_tvb, pinfo, tree);
+        call_dissector(xip_handle, xip_tvb, pinfo, xcmp_tree);
+        pinfo->flags.in_error_pkt = save_in_error_pkt;
         col_add_fstr(pinfo->cinfo, COL_INFO, "TTL Exceeded");
         return tvb_captured_length(tvb);
         break;
