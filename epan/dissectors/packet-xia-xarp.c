@@ -90,21 +90,29 @@ static const value_string hw_vals[] = {
 
 // FIXME: move to common code location
 static const gchar *
-xid_to_str(tvbuff_t *tvb, gint offset)
+xid_to_str(tvbuff_t *tvb, gint offset, int condense)
 {
     gint32 type;
     wmem_strbuf_t *buf;
 
     type = tvb_get_ntohl(tvb, offset);
     buf = wmem_strbuf_sized_new(wmem_packet_scope(), 64, 64);
+	offset += sizeof(gint32);
 
-    wmem_strbuf_append_printf(buf, "%s:%08x%08x%08x%08x%08x",
-        try_val_to_str(type, xidtype_vals),
-        tvb_get_guint32(tvb, offset +     sizeof(gint32), ENC_BIG_ENDIAN),
-        tvb_get_guint32(tvb, offset + 2 * sizeof(gint32), ENC_BIG_ENDIAN),
-        tvb_get_guint32(tvb, offset + 3 * sizeof(gint32), ENC_BIG_ENDIAN),
-        tvb_get_guint32(tvb, offset + 4 * sizeof(gint32), ENC_BIG_ENDIAN),
-        tvb_get_guint32(tvb, offset + 5 * sizeof(gint32), ENC_BIG_ENDIAN));
+	if (condense) {
+		wmem_strbuf_append_printf(buf, "%s:%04x...%04x",
+	        try_val_to_str(type, xidtype_vals),
+	        tvb_get_guint16(tvb, offset, ENC_BIG_ENDIAN),
+	        tvb_get_guint16(tvb, offset + 9 * sizeof(gint16), ENC_BIG_ENDIAN));
+	} else {
+	    wmem_strbuf_append_printf(buf, "%s:%08x%08x%08x%08x%08x",
+	        try_val_to_str(type, xidtype_vals),
+	        tvb_get_guint32(tvb, offset +     sizeof(gint32), ENC_BIG_ENDIAN),
+	        tvb_get_guint32(tvb, offset + 2 * sizeof(gint32), ENC_BIG_ENDIAN),
+	        tvb_get_guint32(tvb, offset + 3 * sizeof(gint32), ENC_BIG_ENDIAN),
+	        tvb_get_guint32(tvb, offset + 4 * sizeof(gint32), ENC_BIG_ENDIAN),
+	        tvb_get_guint32(tvb, offset + 5 * sizeof(gint32), ENC_BIG_ENDIAN));
+	}
 
     return wmem_strbuf_get_str(buf);
 }
@@ -162,8 +170,8 @@ dissect_xarp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
     proto_tree_add_uint(xarp_tree, hf_xarp_opcode, tvb, AR_OP,  2, ar_op);
 
     if (needed_len <= actual_len) {
-        src_xid_str = xid_to_str(tvb, spa_offset);
-        tgt_xid_str = xid_to_str(tvb, tpa_offset);
+        src_xid_str = xid_to_str(tvb, spa_offset, TRUE);
+        tgt_xid_str = xid_to_str(tvb, tpa_offset, TRUE);
 
         proto_tree_add_item(xarp_tree, hf_xarp_src_hw_mac,tvb, sha_offset, ar_hln, ENC_BIG_ENDIAN);
         proto_tree_add_string_format(xarp_tree, hf_xarp_src_xip, tvb, spa_offset, 24, src_xid_str, "Source XID: %s", src_xid_str);
