@@ -127,6 +127,7 @@ MACRO(XML2HTML _target_dep _dir_pfx _mode _dbk_source _gfx_sources)
             ${_dbk_source}
         DEPENDS
             generate_${_dbk_source}
+            ${_dbk_source}
             ${_dbk_dep}
             ${_gfx_deps}
     )
@@ -151,6 +152,7 @@ ENDMACRO(XML2HTML)
 MACRO(XML2PDF _target_dep _output _dbk_source _stylesheet _paper)
     # We depend on the docbook target to avoid parallel builds.
     SET(_dbk_dep ${_target_dep}_docbook)
+    file(RELATIVE_PATH _img_relative_path ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR})
     ADD_CUSTOM_COMMAND(
         OUTPUT
             ${_output}
@@ -158,10 +160,10 @@ MACRO(XML2PDF _target_dep _output _dbk_source _stylesheet _paper)
         COMMAND ${XSLTPROC_EXECUTABLE}
             --path "${_xsltproc_path}"
             --stringparam paper.type ${_paper}
-            --stringparam img.src.path ${CMAKE_CURRENT_SOURCE_DIR}/
+            --stringparam img.src.path ${_img_relative_path}/
             --stringparam use.id.as.filename 1
             --stringparam admon.graphics 1
-            --stringparam admon.graphics.path ${CMAKE_CURRENT_SOURCE_DIR}/common_graphics/
+            --stringparam admon.graphics.path ${_img_relative_path}/common_graphics/
             --stringparam admon.graphics.extension .svg
             --nonet
             --output ${_output}.fo
@@ -172,6 +174,7 @@ MACRO(XML2PDF _target_dep _output _dbk_source _stylesheet _paper)
             ${_output}
         DEPENDS
             generate_${_dbk_source}
+            ${_dbk_source}
             ${_dbk_dep}
             ${_stylesheet}
     )
@@ -182,10 +185,10 @@ ENDMACRO(XML2PDF)
 #       wsug or wsdg
 #       user-guide.xml or developer-guide.xml
 #)
-MACRO(XML2HHP _target_dep _guide _docbooksource)
+MACRO(XML2HHP _target_dep _guide _dbk_source)
     # We depend on the docbook target to avoid parallel builds.
     SET(_dbk_dep ${_target_dep}_docbook)
-    GET_FILENAME_COMPONENT( _source_base_name ${_docbooksource} NAME_WE )
+    GET_FILENAME_COMPONENT( _source_base_name ${_dbk_source} NAME_WE )
     set( _output_chm ${_source_base_name}.chm )
     set( _output_hhp ${_source_base_name}.hhp )
     set( _output_toc_hhc ${_source_base_name}-toc.hhc )
@@ -204,7 +207,7 @@ MACRO(XML2HHP _target_dep _guide _docbooksource)
         # HTML Help doesn't render decimal character entities in the title.
         COMMAND ${SED_EXECUTABLE}
             -e "s|er&#8217;s Guide</title>|er's Guide</title>|"
-            < ${_docbooksource}
+            < ${_dbk_source}
             > ${_docbook_plain_title}
         COMMAND ${XSLTPROC_EXECUTABLE}
             --path "${_xsltproc_path}"
@@ -217,7 +220,8 @@ MACRO(XML2HHP _target_dep _guide _docbooksource)
             --nonet custom_layer_chm.xsl
             ${_docbook_plain_title}
         DEPENDS
-            generate_${_docbooksource}
+            generate_${_dbk_source}
+            ${_dbk_source}
             ${_dbk_dep}
             # AsciiDoc uses UTF-8 by default, which is unsupported by HTML
             # Help. We may want to render an ISO-8859-1 version, or get rid

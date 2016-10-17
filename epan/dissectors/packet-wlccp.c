@@ -69,7 +69,7 @@ void proto_reg_handoff_wlccp(void);
 
 /* The UDP port that WLCCP is expected to ride on */
 /* WLCCP also uses an LLC OUI type and an ethertype */
-#define WLCCP_UDP_PORT 2887
+#define WLCCP_UDP_PORT 2887 /* Not IANA registered */
 
 
 /* SAP is 2-bit version and 6-bit Type */
@@ -1315,7 +1315,7 @@ static guint dissect_wlccp_ccm_msg(proto_tree *_tree, tvbuff_t *_tvb, guint _off
 					    _tvb, _offset, 6, ENC_NA);
 			_offset += 6;
 
-			/*kan - according to the patent applicatoin these fields vary based
+			/*kan - according to the patent application these fields vary based
 			on one another.
 			For now we decode what we know about and then we'll come back and add
 			the rest */
@@ -4114,7 +4114,7 @@ proto_reg_handoff_wlccp(void)
 	wlccp_handle = create_dissector_handle(dissect_wlccp, proto_wlccp);
 
 	dissector_add_uint("ethertype", ETHERTYPE_WLCCP, wlccp_handle);
-	dissector_add_uint("udp.port", WLCCP_UDP_PORT, wlccp_handle);
+	dissector_add_uint_with_preference("udp.port", WLCCP_UDP_PORT, wlccp_handle);
 	dissector_add_uint("llc.wlccp_pid", 0x0000, wlccp_handle);
 
 }

@@ -276,8 +276,7 @@ static gint ett_rtpproxy_reply = -1;
 static gint ett_rtpproxy_ng_bencode = -1;
 
 /* Default values */
-static guint rtpproxy_tcp_port = 22222;
-static guint rtpproxy_udp_port = 22222;
+#define RTPPROXY_PORT 22222  /* Not IANA registered */
 static gboolean rtpproxy_establish_conversation = TRUE;
 /* See - https://www.opensips.org/html/docs/modules/1.10.x/rtpproxy.html#id293555 */
 /* See - http://www.kamailio.org/docs/modules/4.3.x/modules/rtpproxy.html#idp15794952 */
@@ -342,7 +341,7 @@ rtpproxy_add_parameter(tvbuff_t *tvb, packet_info *pinfo, proto_tree *rtpproxy_t
     rawstr = tvb_get_string_enc(wmem_packet_scope(), tvb, begin, realsize, ENC_ASCII);
 
     while(offset < realsize){
-        ti = proto_tree_add_item(rtpproxy_tree, hf_rtpproxy_command_parameter, tvb, begin + offset, 1, ENC_BIG_ENDIAN);
+        ti = proto_tree_add_item(rtpproxy_tree, hf_rtpproxy_command_parameter, tvb, begin + offset, 1, ENC_ASCII | ENC_NA);
         offset++; /* Skip 1-byte parameter's type */
         switch (g_ascii_tolower(tvb_get_guint8(tvb, begin+offset-1)))
         {
@@ -414,7 +413,7 @@ rtpproxy_add_parameter(tvbuff_t *tvb, packet_info *pinfo, proto_tree *rtpproxy_t
                 break;
             case 'p':
                 another_tree = proto_item_add_subtree(ti, ett_rtpproxy_command_parameters_proto);
-                proto_tree_add_item(another_tree, hf_rtpproxy_command_parameter_proto, tvb, begin+offset, 1, ENC_BIG_ENDIAN);
+                proto_tree_add_item(another_tree, hf_rtpproxy_command_parameter_proto, tvb, begin+offset, 1, ENC_ASCII | ENC_NA);
                 offset++;
                 break;
             case 't':
@@ -427,7 +426,7 @@ rtpproxy_add_parameter(tvbuff_t *tvb, packet_info *pinfo, proto_tree *rtpproxy_t
                 break;
             case 'u':
                 another_tree = proto_item_add_subtree(ti, ett_rtpproxy_command_parameters_acc);
-                proto_tree_add_item(another_tree, hf_rtpproxy_command_parameter_acc, tvb, begin+offset, 1, ENC_BIG_ENDIAN);
+                proto_tree_add_item(another_tree, hf_rtpproxy_command_parameter_acc, tvb, begin+offset, 1, ENC_ASCII | ENC_NA);
                 offset++;
                 break;
             default:
@@ -655,7 +654,7 @@ dissect_rtpproxy(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data
             }
 
             /* All other commands */
-            ti = proto_tree_add_item(rtpproxy_tree, hf_rtpproxy_command, tvb, offset, 1, ENC_BIG_ENDIAN);
+            ti = proto_tree_add_item(rtpproxy_tree, hf_rtpproxy_command, tvb, offset, 1, ENC_ASCII | ENC_NA);
 
             /* A specific case - handshake/ping */
             if (tmp == 'v')
@@ -964,8 +963,8 @@ proto_register_rtpproxy(void)
             {
                 "Ok",
                 "rtpproxy.ok",
-                FT_UINT8,
-                BASE_DEC,
+                FT_CHAR,
+                BASE_HEX,
                 VALS(oktypenames),
                 0x0,
                 NULL,
@@ -1042,8 +1041,8 @@ proto_register_rtpproxy(void)
             {
                 "Command",
                 "rtpproxy.command",
-                FT_UINT8,
-                BASE_DEC,
+                FT_CHAR,
+                BASE_HEX,
                 VALS(commandtypenames),
                 0x0,
                 NULL,
@@ -1068,8 +1067,8 @@ proto_register_rtpproxy(void)
             {
                 "Parameter",
                 "rtpproxy.command_parameter",
-                FT_UINT8,
-                BASE_DEC,
+                FT_CHAR,
+                BASE_HEX,
                 VALS(paramtypenames),
                 0x0,
                 NULL,
@@ -1146,8 +1145,8 @@ proto_register_rtpproxy(void)
             {
                 "RTP tramsission protocol",
                 "rtpproxy.command_parameter_proto",
-                FT_UINT8,
-                BASE_DEC,
+                FT_CHAR,
+                BASE_HEX,
                 VALS(prototypenames),
                 0x0,
                 NULL,
@@ -1172,8 +1171,8 @@ proto_register_rtpproxy(void)
             {
                 "Accounting",
                 "rtpproxy.command_parameter_acc",
-                FT_UINT8,
-                BASE_DEC,
+                FT_CHAR,
+                BASE_HEX,
                 VALS(acctypenames),
                 0x0,
                 NULL,
@@ -1440,11 +1439,7 @@ proto_register_rtpproxy(void)
         &ett_rtpproxy_ng_bencode
     };
 
-    proto_rtpproxy = proto_register_protocol (
-            "Sippy RTPproxy Protocol", /* name       */
-            "RTPproxy",      /* short name */
-            "rtpproxy"       /* abbrev     */
-            );
+    proto_rtpproxy = proto_register_protocol ("Sippy RTPproxy Protocol", "RTPproxy", "rtpproxy");
 
     proto_register_field_array(proto_rtpproxy, hf, array_length(hf));
     proto_register_subtree_array(ett, array_length(ett));
@@ -1453,18 +1448,6 @@ proto_register_rtpproxy(void)
     expert_register_field_array(expert_rtpproxy_module, ei, array_length(ei));
 
     rtpproxy_module = prefs_register_protocol(proto_rtpproxy, proto_reg_handoff_rtpproxy);
-
-    prefs_register_uint_preference(rtpproxy_module, "tcp.port",
-                                 "RTPproxy TCP Port", /* Title */
-                                 "RTPproxy TCP Port", /* Descr */
-                                 10,
-                                 &rtpproxy_tcp_port);
-
-    prefs_register_uint_preference(rtpproxy_module, "udp.port",
-                                 "RTPproxy UDP Port", /* Title */
-                                 "RTPproxy UDP Port", /* Descr */
-                                 10,
-                                 &rtpproxy_udp_port);
 
     prefs_register_bool_preference(rtpproxy_module, "establish_conversation",
                                  "Establish Media Conversation",
@@ -1482,32 +1465,19 @@ proto_register_rtpproxy(void)
 void
 proto_reg_handoff_rtpproxy(void)
 {
-    static guint old_rtpproxy_tcp_port = 0;
-    static guint old_rtpproxy_udp_port = 0;
-
     static gboolean rtpproxy_initialized = FALSE;
 
-    static dissector_handle_t rtpproxy_tcp_handle, rtpproxy_udp_handle;
+    dissector_handle_t rtpproxy_tcp_handle, rtpproxy_udp_handle;
 
     if(!rtpproxy_initialized){
         rtpproxy_tcp_handle = create_dissector_handle(dissect_rtpproxy, proto_rtpproxy);
         rtpproxy_udp_handle = create_dissector_handle(dissect_rtpproxy, proto_rtpproxy);
+
+        /* Register TCP port for dissection */
+        dissector_add_uint_with_preference("tcp.port", RTPPROXY_PORT, rtpproxy_tcp_handle);
+        dissector_add_uint_with_preference("udp.port", RTPPROXY_PORT, rtpproxy_udp_handle);
         rtpproxy_initialized = TRUE;
     }
-
-    /* Register TCP port for dissection */
-    if(old_rtpproxy_tcp_port != 0 && old_rtpproxy_tcp_port != rtpproxy_tcp_port)
-        dissector_delete_uint("tcp.port", old_rtpproxy_tcp_port, rtpproxy_tcp_handle);
-    if(rtpproxy_tcp_port != 0 && old_rtpproxy_tcp_port != rtpproxy_tcp_port)
-        dissector_add_uint("tcp.port", rtpproxy_tcp_port, rtpproxy_tcp_handle);
-    old_rtpproxy_tcp_port = rtpproxy_tcp_port;
-
-    /* Register UDP port for dissection */
-    if(old_rtpproxy_udp_port != 0 && old_rtpproxy_udp_port != rtpproxy_udp_port)
-        dissector_delete_uint("udp.port", old_rtpproxy_udp_port, rtpproxy_udp_handle);
-    if(rtpproxy_udp_port != 0 && old_rtpproxy_udp_port != rtpproxy_udp_port)
-        dissector_add_uint("udp.port", rtpproxy_udp_port, rtpproxy_udp_handle);
-    old_rtpproxy_udp_port = rtpproxy_udp_port;
 
     rtcp_handle   = find_dissector_add_dependency("rtcp", proto_rtpproxy);
     rtp_events_handle    = find_dissector_add_dependency("rtpevent", proto_rtpproxy);

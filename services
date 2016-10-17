@@ -1938,8 +1938,8 @@ ivcollector      1275/tcp # ivcollector
 ivcollector      1275/udp # ivcollector
 miva-mqs         1277/tcp # mqs [Miva_Corporation] [Miva_Corporation]
 miva-mqs         1277/udp # mqs [Miva_Corporation] [Miva_Corporation]
-dellwebadmin-1   1278/tcp # Dell Web Admin 1
-dellwebadmin-1   1278/udp # Dell Web Admin 1
+dellwebadmin-1   1278/tcp # Dell Web Admin 1 [Bridget_Navoda] [Bridget_Navoda]
+dellwebadmin-1   1278/udp # Dell Web Admin 1 [Bridget_Navoda] [Bridget_Navoda]
 dellwebadmin-2   1279/tcp # Dell Web Admin 2 [Bridget_Navoda] [Bridget_Navoda]
 dellwebadmin-2   1279/udp # Dell Web Admin 2 [Bridget_Navoda] [Bridget_Navoda]
 pictrography     1280/tcp # Pictrography [Takashi_Hoshino] [Takashi_Hoshino]
@@ -2455,6 +2455,7 @@ pdap-np          1526/tcp # Prospero Data Access Prot non-priv [B_Clifford_Neuma
 pdap-np          1526/udp # Prospero Data Access Prot non-priv [B_Clifford_Neuman] [B_Clifford_Neuman]
 tlisrv           1527/tcp # oracle
 tlisrv           1527/udp # oracle
+ngr-t            1528/udp # NGR transport protocol for mobile ad-hoc networks [nyantec] [Mikael_Voss] 2016-09-13
 coauthor         1529/tcp # oracle
 coauthor         1529/udp # oracle
 rap-service      1530/tcp # rap-service
@@ -3690,8 +3691,8 @@ ias-reg          2140/tcp # IAS-REG
 ias-reg          2140/udp # IAS-REG
 ias-admind       2141/tcp # IAS-ADMIND [Baiju_V_Patel] [Baiju_V_Patel]
 ias-admind       2141/udp # IAS-ADMIND [Baiju_V_Patel] [Baiju_V_Patel]
-tdmoip           2142/tcp # TDM OVER IP [RFC5087]
-tdmoip           2142/udp # TDM OVER IP [RFC5087]
+tdmoip           2142/tcp # TDM OVER IP [Yaakov_Stein] [Yaakov_Stein] 2016-09-21 [RFC5087]
+tdmoip           2142/udp # TDM OVER IP [Yaakov_Stein] [Yaakov_Stein] 2016-09-21 [RFC5087]
 lv-jc            2143/tcp # Live Vault Job Control
 lv-jc            2143/udp # Live Vault Job Control
 lv-ffx           2144/tcp # Live Vault Fast Object Transfer
@@ -8202,6 +8203,9 @@ snap             4752/tcp # Simple Network Audio Protocol [Dameon_Wagner] [Dameo
 snap             4752/udp # Simple Network Audio Protocol [Dameon_Wagner] [Dameon_Wagner] 2002-02
 simon            4753/tcp # Simple Invocation of Methods Over Network (SIMON) [Alexander_Christian] [Alexander_Christian] 2012-04-19
 simon-disc       4753/udp # Simple Invocation of Methods Over Network (SIMON) Discovery [Alexander_Christian] [Alexander_Christian] 2012-04-19
+gre-in-udp       4754/udp # GRE-in-UDP Encapsulation [IESG] [IETF_Chair] 2016-10-05 [RFC-ietf-tsvwg-gre-in-udp-encap-19]
+gre-udp-dtls     4755/udp # GRE-in-UDP Encapsulation with DTLS [IESG] [IETF_Chair] 2016-10-05 [RFC-ietf-tsvwg-gre-in-udp-encap-19]
+converge         4774/tcp # Converge RPC [Asteris_LLC] [Steven_Borrelli] 2016-09-16
 bfd-multi-ctl    4784/tcp # BFD Multihop Control [Dave_Katz][Dave_Ward] [Dave_Katz][Dave_Ward] 2006-02
 bfd-multi-ctl    4784/udp # BFD Multihop Control [Dave_Katz][Dave_Ward] [Dave_Katz][Dave_Ward] 2006-02
 cncp             4785/udp # Cisco Nexus Control Protocol [Joseph_Swaminathan] [Joseph_Swaminathan] 2009-04-01
@@ -9463,8 +9467,7 @@ smc-admin        6787/tcp # Sun Web Console Admin [Bill_Edwards] [Bill_Edwards] 
 smc-admin        6787/udp # Sun Web Console Admin [Bill_Edwards] [Bill_Edwards] 2005-08
 smc-http         6788/tcp # SMC-HTTP [Ratnadeep_Bhattachar] [Ratnadeep_Bhattachar] 2002-11
 smc-http         6788/udp # SMC-HTTP [Ratnadeep_Bhattachar] [Ratnadeep_Bhattachar] 2002-11
-smc-https        6789/tcp # SMC-HTTPS [Ratnadeep_Bhattachar] [Ratnadeep_Bhattachar] 2002-08
-smc-https        6789/udp # SMC-HTTPS [Ratnadeep_Bhattachar] [Ratnadeep_Bhattachar] 2002-08
+radg             6789/tcp # GSS-API for the Oracle Remote Administration Daemon [Oracle_9] [Shawn_Emery] 2002-08 2016-09-15
 hnmp             6790/tcp # HNMP [Jude_George] [Jude_George]
 hnmp             6790/udp # HNMP [Jude_George] [Jude_George]
 hnm              6791/tcp # Halcyon Network Manager [Richard_Harriss] [Richard_Harriss] 2005-05
@@ -9773,6 +9776,7 @@ sun-user-https   7677/udp # Sun App Server - HTTPS [Abhijit_Kumar] [Abhijit_Kuma
 pando-pub        7680/tcp # Pando Media Public Distribution [Laird_Popkin] [Laird_Popkin] 2008-02-27
 pando-pub        7680/udp # Pando Media Public Distribution [Laird_Popkin] [Laird_Popkin] 2008-02-27
 dmt              7683/tcp # Cleondris DMT [Cleondris_GmbH] [Christian_Plattner] 2015-03-31
+bolt             7687/tcp # Bolt database connection [Neo_Technology_Inc] [Julian_Simpson] 2016-09-29
 collaber         7689/tcp # Collaber Network Service [Rajesh_Akkineni] [Rajesh_Akkineni] 2007-01
 collaber         7689/udp # Collaber Network Service [Rajesh_Akkineni] [Rajesh_Akkineni] 2007-01
 klio             7697/tcp # KLIO communications [Helmut_Giritzer_2] [Helmut_Giritzer_2] 2005-08
@@ -10145,8 +10149,8 @@ openqueue        8764/tcp # OPENQUEUE [Matt_Jensen] [Matt_Jensen]
 openqueue        8764/udp # OPENQUEUE [Matt_Jensen] [Matt_Jensen]
 ultraseek-http   8765/tcp # Ultraseek HTTP [Walter_Underwood] [Walter_Underwood]
 ultraseek-http   8765/udp # Ultraseek HTTP [Walter_Underwood] [Walter_Underwood]
-amcs             8766/tcp # Agilent Connectivity Service [Agilent_Technologies_Inc] [Tom_Fay] 2013-01-16
-amcs             8766/udp # Agilent Connectivity Service [Agilent_Technologies_Inc] [Tom_Fay] 2013-01-16
+amcs             8766/tcp # Agilent Connectivity Service [Keysight_Technologies_Inc] [Tom_Fay] 2013-01-16 2016-09-12
+amcs             8766/udp # Agilent Connectivity Service [Keysight_Technologies_Inc] [Tom_Fay] 2013-01-16 2016-09-12
 dpap             8770/tcp # Digital Photo Access Protocol (iPhoto) [Amandeep_Jawa_2] [Amandeep_Jawa_2] 2004-11 Defined TXT keys: txtvers, Version, iPSh Version, Machine ID, Machine Name, Password
 dpap             8770/udp # Digital Photo Access Protocol (iPhoto) [Amandeep_Jawa_2] [Amandeep_Jawa_2] 2004-11 Defined TXT keys: txtvers, Version, iPSh Version, Machine ID, Machine Name, Password
 uec              8778/tcp # Stonebranch Universal Enterprise Controller [Stonebranch_Inc] [Nathan_Hammond_2] 2013-06-25
@@ -10240,6 +10244,8 @@ swa-4            9026/tcp # Secure Web Access - 4 [Tim_McGranaghan] [Tim_McGrana
 swa-4            9026/udp # Secure Web Access - 4 [Tim_McGranaghan] [Tim_McGranaghan]
 versiera         9050/tcp # Versiera Agent Listener [Frank_Pikelner] [Frank_Pikelner] 2010-01-15
 fio-cmgmt        9051/tcp # Fusion-io Central Manager Service [Jim_Sermersheim] [Jim_Sermersheim] 2010-01-15
+CardWeb-IO       9060/tcp # CardWeb request-response I/O exchange [Virtual_Electric_Inc] [David_Wyatt] 2016-10-07
+CardWeb-RT       9060/udp # CardWeb realtime device data [Virtual_Electric_Inc] [David_Wyatt] 2016-10-07
 glrpc            9080/tcp # Groove GLRPC [Adrian_Popescu] [Adrian_Popescu] 2002-09
 glrpc            9080/udp # Groove GLRPC [Adrian_Popescu] [Adrian_Popescu] 2002-09
 lcs-ap           9082/sctp # LCS Application Protocol [Kimmo_Kymalainen] [Kimmo_Kymalainen] 2010-06-04
@@ -10612,6 +10618,7 @@ apollo-relay    10252/udp # Apollo Relay Port [Anthony_Carrabino] [Anthony_Carra
 eapol-relay     10253/udp # Relay of EAPOL frames [Wi-SUN_Alliance] [Phil_Beecher] 2015-06-26
 axis-wimp-port  10260/tcp # Axis WIMP Port [Stefan_Eriksson] [Stefan_Eriksson]
 axis-wimp-port  10260/udp # Axis WIMP Port [Stefan_Eriksson] [Stefan_Eriksson]
+tile-ml         10261/tcp # Tile remote machine learning [_1026_Labs] [Rob_Earhart] 2016-09-27
 blocks          10288/tcp # Blocks [Carl_Malamud] [Carl_Malamud]
 blocks          10288/udp # Blocks [Carl_Malamud] [Carl_Malamud]
 cosir           10321/tcp # Computer Op System Information Report [Kevin_C_Barber] [Kevin_C_Barber] 2009-01-13
@@ -10830,6 +10837,7 @@ cps             14250/tcp # Fencing Server [Mayank_Vasa] [Mayank_Vasa] 2008-04-0
 cps             14250/udp # Fencing Server [Mayank_Vasa] [Mayank_Vasa] 2008-04-03
 ca-web-update   14414/tcp # CA eTrust Web Update Service [Robert_Ciochon] [Robert_Ciochon] 2006-08
 ca-web-update   14414/udp # CA eTrust Web Update Service [Robert_Ciochon] [Robert_Ciochon] 2006-08
+xpra            14500/tcp # xpra network protocol [Xpra] [Antoine_Martin] 2016-10-05
 hde-lcesrvr-1   14936/tcp # hde-lcesrvr-1 [Horizon_Digital_Ente] [Horizon_Digital_Ente]
 hde-lcesrvr-1   14936/udp # hde-lcesrvr-1 [Horizon_Digital_Ente] [Horizon_Digital_Ente]
 hde-lcesrvr-2   14937/tcp # hde-lcesrvr-2 [Horizon_Digital_Ente] [Horizon_Digital_Ente]
@@ -11460,6 +11468,8 @@ rs-status       45002/tcp # Redspeed Status Monitor [Redspeed_International_Ltd]
 synctest        45045/tcp # Remote application control protocol [Eleks_Ltd] [Andriy_Skop] 2013-04-08
 invision-ag     45054/tcp # InVision AG [Matthias_Schroer] [Matthias_Schroer]
 invision-ag     45054/udp # InVision AG [Matthias_Schroer] [Matthias_Schroer]
+cloudcheck      45514/tcp # ASSIA CloudCheck WiFi Management System [ASSIA_Inc] [Leonardo_Dagum] 2016-08-29
+cloudcheck-ping 45514/udp # ASSIA CloudCheck WiFi Management keepalive [ASSIA_Inc] [Leonardo_Dagum] 2016-08-29
 eba             45678/tcp # EBA PRISE [Patrick_Kara] [Patrick_Kara]
 eba             45678/udp # EBA PRISE [Patrick_Kara] [Patrick_Kara]
 dai-shell       45824/tcp # Server for the DAI family of client-server products [Data_Access_Inc] [Adam_Robinson] 2012-04-30

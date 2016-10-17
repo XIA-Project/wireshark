@@ -1576,12 +1576,12 @@ static void
 epl_duplication_remove(GHashTable* table, guint8 src, guint8 dest)
 {
 	GHashTableIter iter;
-	gpointer pkey, pvalue;
+	gpointer pkey;
 	duplication_key *key;
 
 	g_hash_table_iter_init(&iter, table);
 
-	while(g_hash_table_iter_next(&iter, &pkey, &pvalue))
+	while(g_hash_table_iter_next(&iter, &pkey, NULL))
 	{
 		key = (duplication_key *)pkey;
 
@@ -1599,15 +1599,13 @@ epl_duplication_insert(GHashTable* table, gpointer ptr, guint32 frame)
 {
 	duplication_data *data = NULL;
 	duplication_key *key = NULL;
-	gpointer pkey = NULL;
 	gpointer pdata;
 
 	/* check if the values are stored */
-	if(g_hash_table_lookup_extended(table,ptr,&pkey,&pdata))
+	if(g_hash_table_lookup_extended(table, ptr, NULL, &pdata))
 	{
 		data = (duplication_data *)pdata;
 		data->frame = frame;
-		g_hash_table_insert(table, pkey, data);
 	}
 	/* insert the data struct into the table */
 	else
@@ -1639,10 +1637,9 @@ static guint32
 epl_duplication_get(GHashTable* table, gpointer ptr)
 {
 	duplication_data *data = NULL;
-	gpointer *pkey = NULL;
 	gpointer pdata;
 
-	if(g_hash_table_lookup_extended(table,ptr,pkey,&pdata))
+	if(g_hash_table_lookup_extended(table, ptr, NULL, &pdata))
 	{
 		data = (duplication_data *)pdata;
 		if(data->frame == 0x00)
@@ -1671,6 +1668,7 @@ static void
 cleanup_dissector(void)
 {
 	reassembly_table_destroy(&epl_reassembly_table);
+	g_hash_table_destroy(epl_duplication_table);
 	count = 0;
 	ct = 0;
 	first_read = TRUE;
@@ -4530,7 +4528,7 @@ proto_register_epl(void)
 	heur_epl_subdissector_list = register_heur_dissector_list("epl", proto_epl);
 	heur_epl_data_subdissector_list = register_heur_dissector_list("epl_data", proto_epl);
 	epl_asnd_dissector_table = register_dissector_table("epl.asnd",
-		"Manufacturer specific ASND service", proto_epl, FT_UINT8, BASE_DEC, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
+		"Manufacturer specific ASND service", proto_epl, FT_UINT8, BASE_DEC);
 
 	/* Registering protocol to be called by another dissector */
 	epl_handle = register_dissector("epl", dissect_epl, proto_epl);
@@ -4564,7 +4562,7 @@ proto_reg_handoff_epl(void)
 	dissector_handle_t epl_udp_handle = create_dissector_handle( dissect_epludp, proto_epl );
 
 	dissector_add_uint("ethertype", ETHERTYPE_EPL_V2, epl_handle);
-	dissector_add_uint("udp.port", UDP_PORT_EPL, epl_udp_handle);
+	dissector_add_uint_with_preference("udp.port", UDP_PORT_EPL, epl_udp_handle);
 
 	/* register frame init routine */
 	register_init_routine( setup_dissector );

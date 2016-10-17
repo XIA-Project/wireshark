@@ -31,8 +31,6 @@
 # To do:
 # - Make this the source of truth. Keep the list of libs here.
 # - Download everything unconditionally, at least initially.
-# - Download the Lua package for our compiler? It might make more
-#   sense to switch to Nuget instead.
 
 # Bugs:
 # - Unzipping from the shell seems to be slower than Cygwin's unzip or 7zip.
@@ -101,20 +99,22 @@ Param(
 # trouble instead of trying to catch exceptions everywhere.
 $ErrorActionPreference = "Stop"
 
-$Win64CurrentTag = "2016-08-09"
-$Win32CurrentTag = "2016-08-09"
+$Win64CurrentTag = "2016-09-29"
+$Win32CurrentTag = "2016-09-29"
 
 # Archive file / subdir.
 $Win64Archives = @{
     "AirPcap_Devpack_4_1_0_1622.zip" = "AirPcap_Devpack_4_1_0_1622";
-    "c-ares-1.11.0-win64ws.zip" = "";
+    "c-ares-1.12.0-win64ws.zip" = "";
     "GeoIP-1.6.6-win64ws.zip" = "GeoIP-1.6.6-win64ws";
     "gnutls-3.2.15-2.9-win64ws.zip" = "";
     "gtk+-bundle_2.24.23-3.39-2_win64ws.zip" = "gtk2";
     "kfw-3-2-2-x64-ws.zip" = "";
     "libsmi-svn-40773-win64ws.zip" = "";
     "libssh-0.7.2-win64ws.zip" = "";
+    "lua-5.2.4_Win64_dllw4_lib.zip" = "lua5.2.4";
     "nasm-2.09.08-win32.zip" = "";
+    "nghttp2-1.14.0-win64ws.zip" = "";
     "portaudio_v19_2.zip" = "";
     "upx303w.zip" = "";
     "WinSparkle-0.3-44-g2c8d9d3-win64ws.zip" = "";
@@ -124,28 +124,22 @@ $Win64Archives = @{
 
 $Win32Archives = @{
     "AirPcap_Devpack_4_1_0_1622.zip" = "AirPcap_Devpack_4_1_0_1622";
-    "c-ares-1.11.0-win32ws.zip" = "";
+    "c-ares-1.12.0-win32ws.zip" = "";
     "GeoIP-1.6.6-win32ws.zip" = "GeoIP-1.6.6-win32ws";
     "gnutls-3.2.15-2.7-win32ws.zip" = "";
     "gtk+-bundle_2.24.23-1.1-1_win32ws.zip" = "gtk2";
     "kfw-3-2-2-i386-ws-vc6.zip" = "";
     "libsmi-svn-40773-win32ws.zip" = "";
     "libssh-0.7.2-win32ws.zip" = "";
+    "lua-5.2.4_Win32_dllw4_lib.zip" = "lua5.2.4";
     "nasm-2.09.08-win32.zip" = "";
+    "nghttp2-1.14.0-win32ws.zip" = "";
     "portaudio_v19_2.zip" = "";
     "upx303w.zip" = "";
     "WinSparkle-0.3-44-g2c8d9d3-win32ws.zip" = "";
     "WpdPack_4_1_2.zip" = "";
     "zlib-1.2.8-ws.zip" = "";
 }
-
-# Lua
-
-if ( @("14", "12", "11", "10") -contains $VSVersion ) {
-    $Win64Archives["lua-5.2.4_Win64_dll$($VSVersion)_lib.zip"] = "lua5.2.4"
-    $Win32Archives["lua-5.2.4_Win32_dll$($VSVersion)_lib.zip"] = "lua5.2.4"
-}
-
 
 # Plain file downloads
 
@@ -171,7 +165,7 @@ if ($Platform -eq "win32") {
 
 $CleanupItems = @(
     "c-ares-1.9.1-1-win??ws"
-    "c-ares-1.11.0-win??ws"
+    "c-ares-1.1?.0-win??ws"
     "gnutls-3.1.22-*-win??ws"
     "gnutls-3.2.15-*-win??ws"
     "gtk2"
@@ -185,6 +179,7 @@ $CleanupItems = @(
     "libsmi-svn-40773-win??ws"
     "libssh-0.7.2-win??ws"
     "nasm-2.09.08"
+    "nghttp2-*-win??ws"
     "portaudio_v19"
     "portaudio_v19_2"
     "upx301w"

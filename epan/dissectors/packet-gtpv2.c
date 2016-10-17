@@ -2212,7 +2212,7 @@ dissect_gtpv2_tad(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, proto_ite
  * It can be found in 3GPP TS 36.413 v8.3.0, but it is expected that it will be moved
  * to 23.003 in a future version.
  */
-static gchar*
+gchar*
 dissect_gtpv2_tai(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int *offset)
 {
     gchar      *str = NULL;
@@ -3972,7 +3972,7 @@ dissect_gtpv2_mm_context_eps_qq(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tre
         proto_tree_add_item(tree, hf_gtpv2_mm_context_old_kasme, tvb, offset, 32, ENC_NA);
         offset += 32;
         /* (s+33) to (s+64) old NH */
-        if ((dword & 1) == 1) {
+        if (dword) {
             proto_tree_add_item(tree, hf_gtpv2_mm_context_old_nh, tvb, offset, 32, ENC_NA);
             offset += 32;
         }
@@ -8896,7 +8896,7 @@ void proto_register_gtpv2(void)
 
     register_dissector("gtpv2", dissect_gtpv2, proto_gtpv2);
     /* Dissector table for private extensions */
-    gtpv2_priv_ext_dissector_table = register_dissector_table("gtpv2.priv_ext", "GTPv2 PRIVATE EXT", proto_gtpv2, FT_UINT16, BASE_DEC, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
+    gtpv2_priv_ext_dissector_table = register_dissector_table("gtpv2.priv_ext", "GTPv2 PRIVATE EXT", proto_gtpv2, FT_UINT16, BASE_DEC);
 }
 
 void

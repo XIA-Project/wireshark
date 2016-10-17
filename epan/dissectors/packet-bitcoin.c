@@ -1860,7 +1860,7 @@ proto_register_bitcoin(void)
   expert_bitcoin = expert_register_protocol(proto_bitcoin);
   expert_register_field_array(expert_bitcoin, ei, array_length(ei));
 
-  bitcoin_command_table = register_dissector_table("bitcoin.command", "Bitcoin Command", proto_bitcoin, FT_STRING, BASE_NONE, DISSECTOR_TABLE_ALLOW_DUPLICATE);
+  bitcoin_command_table = register_dissector_table("bitcoin.command", "Bitcoin Command", proto_bitcoin, FT_STRING, BASE_NONE);
 
   bitcoin_handle = register_dissector("bitcoin", dissect_bitcoin, proto_bitcoin);
 
@@ -1878,7 +1878,7 @@ proto_reg_handoff_bitcoin(void)
 {
   dissector_handle_t command_handle;
 
-  dissector_add_for_decode_as("tcp.port", bitcoin_handle);
+  dissector_add_for_decode_as_with_preference("tcp.port", bitcoin_handle);
 
   heur_dissector_add( "tcp", dissect_bitcoin_heur, "Bitcoin over TCP", "bitcoin_tcp", hfi_bitcoin->id, HEURISTIC_ENABLE);
 

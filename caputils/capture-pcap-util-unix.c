@@ -211,6 +211,9 @@ get_interface_list(int *err, char **err_str)
 		g_list_foreach(il, search_for_if_cb, &user_data);
 		if (user_data.if_info != NULL) {
 			if_info_add_address(user_data.if_info, &ifr->ifr_addr);
+			if (user_data.if_info->addrs) {
+				g_slist_reverse(user_data.if_info->addrs);
+			}
 			goto next;
 		}
 
@@ -260,6 +263,9 @@ get_interface_list(int *err, char **err_str)
 		    strncmp(ifr->ifr_name, "lo", 2) == 0);
 		if_info = if_info_new(ifr->ifr_name, NULL, loopback);
 		if_info_add_address(if_info, &ifr->ifr_addr);
+		if (if_info->addrs) {
+			g_slist_reverse(if_info->addrs);
+		}
 		if (loopback)
 			il = g_list_append(il, if_info);
 		else {
@@ -433,7 +439,11 @@ get_if_capabilities_local(interface_options *interface_opts, char **err_str)
 }
 
 pcap_t *
-open_capture_device_local(capture_options *capture_opts,
+open_capture_device_local(capture_options *capture_opts
+#ifndef HAVE_PCAP_CREATE
+	_U_
+#endif
+	,
     interface_options *interface_opts, int timeout,
     char (*open_err_str)[PCAP_ERRBUF_SIZE])
 {

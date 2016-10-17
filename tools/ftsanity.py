@@ -62,7 +62,7 @@ def gather_data(tshark):
     output, error = proc.communicate()
 
     if proc.returncode != 0:
-        sys.exit("Failed: " + cmd)
+        sys.exit("Failed: tshark -G fields")
 
     if sys.version_info[0] >= 3:
         output = output.decode('utf-8')
@@ -81,7 +81,8 @@ def check_fields(fields):
         if field.bitmask != 0:
             if field.ftype.find("FT_UINT") != 0 and \
                     field.ftype.find("FT_INT") != 0 and \
-                    field.ftype != "FT_BOOLEAN":
+                    field.ftype != "FT_BOOLEAN" and \
+                    field.ftype != "FT_CHAR":
                 print("%s has a bitmask 0x%x but is type %s" % \
                         (field.abbrev, field.bitmask, field.ftype))
                 errors += 1

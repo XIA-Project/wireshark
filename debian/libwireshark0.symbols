@@ -238,6 +238,8 @@ libwireshark.so.0 libwireshark0 #MINVER#
  decode_as_default_reset@Base 1.12.0~rc1
  decode_as_list@Base 1.12.0~rc1
  decode_bits_in_field@Base 1.9.1
+ decode_build_reset_list@Base 2.3.0
+ decode_clear_all@Base 2.3.0
  decode_dcerpc_add_show_list@Base 1.12.0~rc1
  decode_dcerpc_reset_all@Base 1.12.0~rc1
  decode_tcp_ports@Base 1.99.0
@@ -287,6 +289,7 @@ libwireshark.so.0 libwireshark0 #MINVER#
  dissect_ber_set_of@Base 1.9.1
  dissect_ber_tagged_type@Base 1.9.1
  dissect_dap_SecurityParameters@Base 1.9.1
+ dissect_dcerpc_char@Base 2.3.0
  dissect_dcerpc_uint16@Base 1.9.1
  dissect_dcerpc_uint32@Base 1.9.1
  dissect_dcerpc_uint64@Base 1.9.1
@@ -408,10 +411,13 @@ libwireshark.so.0 libwireshark0 #MINVER#
  dissect_xdlc_control@Base 1.9.1
  dissector_add_custom_table_handle@Base 1.99.8
  dissector_add_for_decode_as@Base 1.9.1
+ dissector_add_for_decode_as_with_preference@Base 2.3.0
  dissector_add_guid@Base 2.1.0
  dissector_add_string@Base 1.9.1
  dissector_add_uint@Base 1.9.1
  dissector_add_uint_range@Base 1.12.0~rc1
+ dissector_add_uint_range_with_preference@Base 2.3.0
+ dissector_add_uint_with_preference@Base 2.3.0
  dissector_all_heur_tables_foreach_table@Base 1.9.1
  dissector_all_tables_foreach_changed@Base 1.9.1
  dissector_all_tables_foreach_table@Base 1.9.1
@@ -437,10 +443,11 @@ libwireshark.so.0 libwireshark0 #MINVER#
  dissector_hostlist_init@Base 1.99.0
  dissector_reset_string@Base 1.9.1
  dissector_reset_uint@Base 1.9.1
+ dissector_table_allow_decode_as@Base 2.3.0
  dissector_table_foreach@Base 1.9.1
  dissector_table_foreach_handle@Base 1.9.1
+ dissector_table_get_dissector_handle@Base 2.3.0
  dissector_table_get_dissector_handles@Base 1.12.0~rc1
- dissector_table_get_proto_allowed@Base 2.1.0
  dissector_table_get_type@Base 1.12.0~rc1
  dissector_try_guid@Base 2.1.0
  dissector_try_guid_new@Base 2.1.0
@@ -783,6 +790,7 @@ libwireshark.so.0 libwireshark0 #MINVER#
  guids_get_guid_name@Base 1.9.1
  guids_init@Base 1.9.1
  guids_resolve_guid_to_str@Base 1.9.1
+ guint8_to_hex@Base 2.3.0
  h225_RasMessage_vals@Base 1.9.1
  h225_ReleaseCompleteReason_vals@Base 1.9.1
  h245_set_h223_add_lc_handle@Base 1.9.1
@@ -804,6 +812,7 @@ libwireshark.so.0 libwireshark0 #MINVER#
  host_name_lookup_process@Base 1.9.1
  hostlist_table_set_gui_info@Base 1.99.0
  http_tcp_dissector_add@Base 2.1.0
+ http_tcp_dissector_delete@Base 2.3.0
  http_tcp_port_add@Base 2.1.0
  ieee80211_ht_Dbps@Base 2.1.0
  ieee80211_supported_rates_vals_ext@Base 1.99.1
@@ -829,6 +838,7 @@ libwireshark.so.0 libwireshark0 #MINVER#
  link_type_vals@Base 2.1.0
  list_stat_cmd_args@Base 1.9.1
  llc_add_oui@Base 1.9.1
+ load_decode_as_entries@Base 2.3.0
  make_printable_string@Base 1.9.1
  manually_resolve_cleanup@Base 1.12.0~rc1
  mark_frame_as_depended_upon@Base 1.9.1
@@ -980,6 +990,7 @@ libwireshark.so.0 libwireshark0 #MINVER#
  proto_field_display_to_string@Base 2.1.0
  proto_find_field_from_offset@Base 1.9.1
  proto_find_finfo@Base 1.9.1
+ proto_find_first_finfo@Base 2.3.0
  proto_find_undecoded_data@Base 1.99.3
  proto_free_deregistered_fields@Base 1.12.2
  proto_get_data_protocol@Base 1.9.1
@@ -1151,11 +1162,17 @@ libwireshark.so.0 libwireshark0 #MINVER#
  q932_PresentedNumberUnscreened_vals@Base 2.1.0
  qs_func_vals@Base 1.9.1
  qs_rate_vals_ext@Base 1.9.1
+ raknet_add_udp_dissector@Base 2.3.0
+ raknet_conversation_set_dissector@Base 2.3.0
+ raknet_delete_udp_dissector@Base 2.3.0
  range_convert_range@Base 1.9.1
  range_convert_str@Base 1.9.1
+ range_convert_str_work@Base 2.3.0
  range_copy@Base 1.9.1
  range_empty@Base 1.9.1
  range_foreach@Base 1.9.1
+ range_add_value@Base 2.3.0
+ range_remove_value@Base 2.3.0
  ranges_are_equal@Base 1.9.1
  read_disabled_heur_dissector_list@Base 1.99.8
  read_disabled_protos_list@Base 1.12.0~rc1
@@ -1246,6 +1263,7 @@ libwireshark.so.0 libwireshark0 #MINVER#
  s1ap_CauseProtocol_vals@Base 1.9.1
  s1ap_CauseRadioNetwork_vals@Base 1.9.1
  s1ap_CauseTransport_vals@Base 1.9.1
+ save_decode_as_entries@Base 2.3.0
  save_disabled_heur_dissector_list@Base 1.99.8
  save_disabled_protos_list@Base 1.12.0~rc1
  sccp_address_signal_values@Base 1.9.1
@@ -1468,6 +1486,7 @@ libwireshark.so.0 libwireshark0 #MINVER#
  tvb_ensure_bytes_exist64@Base 1.99.0
  tvb_ensure_captured_length_remaining@Base 1.12.0~rc1
  tvb_find_guint8@Base 1.9.1
+ tvb_find_guint16@Base 2.3.0
  tvb_find_line_end@Base 1.9.1
  tvb_find_line_end_unquoted@Base 1.9.1
  tvb_find_tvb@Base 1.9.1
@@ -1604,6 +1623,7 @@ libwireshark.so.0 libwireshark0 #MINVER#
  uat_foreach_table@Base 1.9.1
  uat_get_actual_filename@Base 1.12.0~rc1
  uat_get_table_by_name@Base 1.9.1
+ uat_insert_record_idx@Base 2.3.0
  uat_load@Base 1.9.1
  uat_new@Base 1.9.1
  uat_remove_record_idx@Base 1.9.1

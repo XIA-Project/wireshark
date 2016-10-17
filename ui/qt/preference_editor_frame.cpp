@@ -25,8 +25,10 @@
 
 #include <epan/prefs.h>
 #include <epan/prefs-int.h>
+#include <epan/decode_as.h>
 
 #include <ui/preference_utils.h>
+#include <ui/simple_dialog.h>
 
 #include "preference_editor_frame.h"
 #include <ui_preference_editor_frame.h>
@@ -37,11 +39,6 @@
 #include "wireshark_application.h"
 
 #include <QPushButton>
-
-#if QT_VERSION < QT_VERSION_CHECK(5, 0, 0)
-// Qt::escape
-#include <QTextDocument>
-#endif
 
 // To do:
 // - Handle PREF_FILENAME and PREF_DIRNAME.
@@ -85,12 +82,7 @@ void PreferenceEditorFrame::editPreference(preference *pref, pref_module *module
     ui->preferenceTitleLabel->setText(QString("%1:").arg(pref->title));
 
     // Convert the pref description from plain text to rich text.
-    QString description;
-#if QT_VERSION < QT_VERSION_CHECK(5, 0, 0)
-    description = Qt::escape(pref->description);
-#else
-    description = QString(pref->description).toHtmlEscaped();
-#endif
+    QString description = html_escape(pref->description);
     description.replace('\n', "<br>");
     QString tooltip = QString("<span>%1</span>").arg(description);
     ui->preferenceTitleLabel->setToolTip(tooltip);
@@ -222,10 +214,23 @@ void PreferenceEditorFrame::on_buttonBox_accepted()
     }
 
     if (apply && module_) {
-        pref_unstash(pref_, &module_->prefs_changed);
+        pref_unstash_data_t unstashed_data;
+
+        unstashed_data.module = module_;
+        unstashed_data.handle_decode_as = TRUE;
+
+        pref_unstash(pref_, &unstashed_data);
         prefs_apply(module_);
         if (!prefs.gui_use_pref_save) {
+            gchar* err = NULL;
+
             prefs_main_write();
+
+            if (save_decode_as_entries(&err) < 0)
+            {
+                simple_dialog(ESD_TYPE_ERROR, ESD_BTN_OK, "%s", err);
+                g_free(err);
+            }
         }
     }
     on_buttonBox_rejected();

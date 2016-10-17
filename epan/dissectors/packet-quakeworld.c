@@ -30,7 +30,13 @@
 #include <stdlib.h>
 #include <epan/packet.h>
 #include <epan/prefs.h>
+#include <epan/prefs-int.h>
+#include <epan/expert.h>
+
+#include <wsutil/strtoi.h>
+
 void proto_register_quakeworld(void);
+void proto_reg_handoff_quakeworld(void);
 
 static int proto_quakeworld = -1;
 
@@ -68,6 +74,8 @@ static gint ett_quakeworld_game_seq1 = -1;
 static gint ett_quakeworld_game_seq2 = -1;
 static gint ett_quakeworld_game_clc = -1;
 static gint ett_quakeworld_game_svc = -1;
+
+static expert_field ei_quakeworld_connectionless_command_invalid = EI_INIT;
 
 /*
 	helper functions, they may ave to go somewhere else
@@ -313,7 +321,7 @@ static const value_string names_direction[] = {
 
 
 /* I took this name and value directly out of the QW source. */
-#define PORT_MASTER 27500
+#define PORT_MASTER 27500 /* Not IANA registered */
 static guint gbl_quakeworldServerPort=PORT_MASTER;
 
 
@@ -342,6 +350,7 @@ dissect_quakeworld_ConnectionlessPacket(tvbuff_t *tvb, packet_info *pinfo,
 {
 	proto_tree	*cl_tree;
 	proto_tree	*text_tree = NULL;
+	proto_item	*pi;
 	guint8		*text;
 	int		len;
 	int		offset;
@@ -387,16 +396,19 @@ dissect_quakeworld_ConnectionlessPacket(tvbuff_t *tvb, packet_info *pinfo,
 			command = "Log";
 			command_len = 3;
 		} else if (strcmp(c,"connect") == 0) {
-			int version;
-			int qport;
-			int challenge;
+			guint32 version = 0;
+			guint16 qport = 0;
+			guint32 challenge = 0;
+			gboolean version_valid = TRUE;
+			gboolean qport_valid = TRUE;
+			gboolean challenge_valid = TRUE;
 			const char *infostring;
 			proto_tree *argument_tree = NULL;
 			command = "Connect";
 			command_len = Cmd_Argv_length(0);
 			if (text_tree) {
 				proto_item *argument_item;
-				proto_tree_add_string(text_tree, hf_quakeworld_connectionless_command,
+				pi = proto_tree_add_string(text_tree, hf_quakeworld_connectionless_command,
 					tvb, offset, command_len, command);
 				argument_item = proto_tree_add_string(text_tree,
 					hf_quakeworld_connectionless_arguments,
@@ -406,10 +418,14 @@ dissect_quakeworld_ConnectionlessPacket(tvbuff_t *tvb, packet_info *pinfo,
 								       ett_quakeworld_connectionless_arguments);
 				command_finished=TRUE;
 			}
-			version    = atoi(Cmd_Argv(1));
-			qport      = atoi(Cmd_Argv(2));
-			challenge  = atoi(Cmd_Argv(3));
+			version_valid = ws_strtou32(Cmd_Argv(1), NULL, &version);
+			qport_valid = ws_strtou16(Cmd_Argv(2), NULL, &qport);
+			challenge_valid = ws_strtou32(Cmd_Argv(3), NULL, &challenge);
 			infostring = Cmd_Argv(4);
+
+			if (text_tree && (!version_valid || !qport_valid || !challenge_valid))
+				expert_add_info(pinfo, pi, &ei_quakeworld_connectionless_command_invalid);
+
 			if (argument_tree) {
 				proto_item *info_item;
 				proto_tree *info_tree;
@@ -515,7 +531,7 @@ dissect_quakeworld_ConnectionlessPacket(tvbuff_t *tvb, packet_info *pinfo,
 		} else if (text[0] == S2C_CHALLENGE) {
 			command = "Challenge";
 			command_len = 1;
-			/* string, atoi */
+			/* string, conversion */
 		} else {
 			command = "Unknown";
 			command_len = len - 1;
@@ -685,12 +701,19 @@ dissect_quakeworld(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* da
 	return tvb_captured_length(tvb);
 }
 
-
-void proto_reg_handoff_quakeworld(void);
+static void
+apply_quakeworld_prefs(void)
+{
+    /* Port preference used to determine client/server */
+    pref_t *quakeworld_port = prefs_find_preference(prefs_find_module("quakeworld"), "udp.port");
+    gbl_quakeworldServerPort = *quakeworld_port->varp.uint;
+}
 
 void
 proto_register_quakeworld(void)
 {
+	expert_module_t* expert_quakeworld;
+
 	static hf_register_info hf[] = {
 		{ &hf_quakeworld_c2s,
 			{ "Client to Server", "quakeworld.c2s",
@@ -794,42 +817,31 @@ proto_register_quakeworld(void)
 		&ett_quakeworld_game_clc,
 		&ett_quakeworld_game_svc
 	};
-	module_t *quakeworld_module;
 
-	proto_quakeworld = proto_register_protocol("QuakeWorld Network Protocol",
-						"QUAKEWORLD", "quakeworld");
+	static ei_register_info ei[] = {
+		{ &ei_quakeworld_connectionless_command_invalid, { "quakeworld.connectionless.command.invalid",
+			PI_MALFORMED, PI_ERROR, "Invalid connectionless command", EXPFILL }}
+	};
+
+	proto_quakeworld = proto_register_protocol("QuakeWorld Network Protocol", "QUAKEWORLD", "quakeworld");
 	proto_register_field_array(proto_quakeworld, hf, array_length(hf));
 	proto_register_subtree_array(ett, array_length(ett));
 
 	/* Register a configuration option for port */
-	quakeworld_module = prefs_register_protocol(proto_quakeworld,
-		proto_reg_handoff_quakeworld);
-	prefs_register_uint_preference(quakeworld_module, "udp.port",
-					"QuakeWorld Server UDP Port",
-					"Set the UDP port for the QuakeWorld Server",
-					10, &gbl_quakeworldServerPort);
+	prefs_register_protocol(proto_quakeworld, apply_quakeworld_prefs);
+
+	expert_quakeworld = expert_register_protocol(proto_quakeworld);
+	expert_register_field_array(expert_quakeworld, ei, array_length(ei));
 }
 
 
 void
 proto_reg_handoff_quakeworld(void)
 {
-	static gboolean Initialized=FALSE;
-	static dissector_handle_t quakeworld_handle;
-	static guint ServerPort;
+	dissector_handle_t quakeworld_handle;
 
-	if (!Initialized) {
-		quakeworld_handle = create_dissector_handle(dissect_quakeworld,
-				proto_quakeworld);
-		Initialized=TRUE;
-	} else {
-		dissector_delete_uint("udp.port", ServerPort, quakeworld_handle);
-	}
-
-	/* set port for future deletes */
-	ServerPort=gbl_quakeworldServerPort;
-
-	dissector_add_uint("udp.port", gbl_quakeworldServerPort, quakeworld_handle);
+	quakeworld_handle = create_dissector_handle(dissect_quakeworld, proto_quakeworld);
+	dissector_add_uint("udp.port", PORT_MASTER, quakeworld_handle);
 }
 
 /*

@@ -70,7 +70,9 @@
 #include <epan/expert.h>
 #include <epan/crc16-tvb.h>
 #include <epan/proto_data.h>
-
+#if 0
+#include <stdio.h>
+#endif
 void proto_register_selfm(void);
 
 /* Initialize the protocol and registered fields */
@@ -255,8 +257,6 @@ static expert_field ei_selfm_crc16_incorrect = EI_INIT;
 
 static dissector_handle_t selfm_handle;
 
-#define PORT_SELFM    0
-
 #define CMD_FAST_MSG            0xA546
 #define CMD_CLEAR_STATBIT       0xA5B9
 #define CMD_RELAY_DEF           0xA5C0
@@ -345,7 +345,6 @@ static dissector_handle_t selfm_handle;
 /* Globals for SEL Protocol Preferences */
 static gboolean selfm_desegment = TRUE;
 static gboolean selfm_telnet_clean = TRUE;
-static guint global_selfm_tcp_port = PORT_SELFM; /* Port 0, by default */
 static gboolean selfm_crc16 = FALSE;             /* Default CRC16 valdiation to false */
 static const char *selfm_ser_list = NULL;
 
@@ -826,18 +825,17 @@ static const fragment_items selfm_frag_items = {
 /* Function Duplicated from packet-telnet.c (unescape_and_tvbuffify_telnet_option)                        */
 /**********************************************************************************************************/
 static tvbuff_t *
-clean_telnet_iac(packet_info *pinfo, tvbuff_t *tvb, int offset, int len)
+clean_telnet_iac(packet_info *pinfo, tvbuff_t *tvb, int offset, int len, int *num_skip_byte)
 {
     tvbuff_t     *telnet_tvb;
     guint8       *buf;
     const guint8 *spos;
     guint8       *dpos;
-    int           skip_byte, len_remaining;
+    int           len_remaining, skip_byte = 0;
 
     spos=tvb_get_ptr(tvb, offset, len);
     buf=(guint8 *)wmem_alloc(pinfo->pool, len);
     dpos=buf;
-    skip_byte = 0;
     len_remaining = len;
     while(len_remaining > 0){
 
@@ -859,6 +857,8 @@ clean_telnet_iac(packet_info *pinfo, tvbuff_t *tvb, int offset, int len)
     }
     telnet_tvb = tvb_new_child_real_data(tvb, buf, len-skip_byte, len-skip_byte);
     add_new_data_source(pinfo, telnet_tvb, "Processed Telnet Data");
+
+    *num_skip_byte = skip_byte;
 
     return telnet_tvb;
 }
@@ -1105,8 +1105,9 @@ dissect_relaydef_frame(tvbuff_t *tvb, proto_tree *tree, int offset)
     }
 
     proto_tree_add_checksum(relaydef_tree, tvb, offset, hf_selfm_checksum, -1, NULL, NULL, 0, ENC_BIG_ENDIAN, PROTO_CHECKSUM_NO_FLAGS);
+    offset += 1;
 
-    return tvb_reported_length(tvb);
+    return offset;
 }
 
 /******************************************************************************************************/
@@ -1209,8 +1210,9 @@ dissect_fmconfig_frame(tvbuff_t *tvb, proto_tree *tree, int offset)
     }
 
     proto_tree_add_checksum(fmconfig_tree, tvb, offset, hf_selfm_checksum, -1, NULL, NULL, 0, ENC_BIG_ENDIAN, PROTO_CHECKSUM_NO_FLAGS);
+    offset += 1;
 
-    return tvb_reported_length(tvb);
+    return offset;
 
 }
 
@@ -1425,6 +1427,7 @@ dissect_fmdata_frame(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, int of
                 }
 
                 proto_tree_add_checksum(fmdata_tree, tvb, offset, hf_selfm_checksum, -1, NULL, pinfo, 0, ENC_BIG_ENDIAN, PROTO_CHECKSUM_NO_FLAGS);
+                offset += 1;
 
             } /* matching config frame message was found */
 
@@ -1432,11 +1435,12 @@ dissect_fmdata_frame(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, int of
 
         if (!config_found) {
             proto_item_append_text(fmdata_item, ", No Fast Meter Configuration frame found");
-            return 0;
+            offset += (len-2);
+            return offset;
         }
     }
 
-    return tvb_reported_length(tvb);
+    return offset;
 
 }
 
@@ -1518,8 +1522,9 @@ dissect_foconfig_frame(tvbuff_t *tvb, proto_tree *tree, int offset)
     }
 
     proto_tree_add_checksum(foconfig_tree, tvb, offset, hf_selfm_checksum, -1, NULL, NULL, 0, ENC_BIG_ENDIAN, PROTO_CHECKSUM_NO_FLAGS);
+    offset += 1;
 
-    return tvb_reported_length(tvb);
+    return offset;
 
 }
 
@@ -1559,7 +1564,9 @@ dissect_alt_fastop_config_frame(tvbuff_t *tvb, proto_tree *tree, int offset)
     proto_tree_add_item(foconfig_tree, hf_selfm_alt_foconfig_funccode, tvb, offset+7, 1, ENC_BIG_ENDIAN);
     proto_tree_add_item(foconfig_tree, hf_selfm_alt_foconfig_funccode, tvb, offset+8, 1, ENC_BIG_ENDIAN);
 
-    return tvb_reported_length(tvb);
+    offset += (len - 2);
+
+    return offset;
 
 }
 
@@ -1607,8 +1614,9 @@ dissect_fastop_frame(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, int of
 
     /* Add checksum */
     proto_tree_add_checksum(fastop_tree, tvb, offset, hf_selfm_checksum, -1, NULL, pinfo, 0, ENC_BIG_ENDIAN, PROTO_CHECKSUM_NO_FLAGS);
+    offset += 1;
 
-    return tvb_reported_length(tvb);
+    return offset;
 
 }
 
@@ -1643,8 +1651,9 @@ dissect_alt_fastop_frame(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, in
 
     /* Operate Code Validation */
     proto_tree_add_item(fastop_tree, hf_selfm_alt_fastop_valid, tvb, offset, 2, ENC_BIG_ENDIAN);
+    offset += 2;
 
-    return tvb_reported_length(tvb);
+    return offset;
 
 }
 
@@ -2284,10 +2293,10 @@ dissect_fastmsg_frame(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, int o
 
             /* Some relays (4xx) don't follow the standard here and include an 8-byte sequence of all 0x00's to represent */
             /* 'reserved' space for the control regions.  Detect these and skip if they are present */
-            for (cnt = offset; cnt < len; cnt++) {
+            if (tvb_reported_length_remaining(tvb, offset) > 2) {
 
-                if (tvb_memeql(tvb, cnt, "\x00\x00\x00\x00\x00\x00\x00\x00", 8) == 0) {
-                    offset = cnt+8;
+                if (tvb_memeql(tvb, offset, "\x00\x00\x00\x00\x00\x00\x00\x00", 8) == 0) {
+                    offset += 8;
                 }
             }
 
@@ -2349,6 +2358,7 @@ dissect_fastmsg_frame(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, int o
     /* Add CRC16 to Tree */
     fastmsg_crc16_item = proto_tree_add_item(fastmsg_tree, hf_selfm_fastmsg_crc16, tvb, offset, 2, ENC_BIG_ENDIAN);
     crc16 = tvb_get_ntohs(tvb, offset);
+    offset += 2;
 
     /* If option is enabled, validate the CRC16 */
     if (selfm_crc16) {
@@ -2362,7 +2372,7 @@ dissect_fastmsg_frame(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, int o
 
     }
 
-    return tvb_reported_length(tvb);
+    return offset;
 
 }
 
@@ -2377,7 +2387,7 @@ dissect_selfm(tvbuff_t *selfm_tvb, packet_info *pinfo, proto_tree *tree, void* d
 /* Set up structures needed to add the protocol subtree and manage it */
     proto_item    *selfm_item=NULL;
     proto_tree    *selfm_tree=NULL;
-    int           offset=0, cnt=0;
+    int           offset=0, cnt=0, consumed_bytes=0;
     guint32       base_addr;
     guint16       msg_type, len, num_items;
     guint8        seq, seq_cnt;
@@ -2485,6 +2495,9 @@ dissect_selfm(tvbuff_t *selfm_tvb, packet_info *pinfo, proto_tree *tree, void* d
             /* Call the same read response function that will be called during GUI dissection */
             offset = dissect_fastmsg_readresp_frame( selfm_tvb, tree, pinfo, offset, seq);
 
+            /* Skip CRC16 */
+            offset += 2;
+
         }
 
         /* 4. Fill conversation data array with Fast Message Data Region info from Device Desc Response Messages.  This */
@@ -2517,6 +2530,8 @@ dissect_selfm(tvbuff_t *selfm_tvb, packet_info *pinfo, proto_tree *tree, void* d
                 wmem_tree_insert32(fm_conv_data->fastmsg_dataregions, base_address, dataregion_ptr);
                 offset += 18;
             }
+
+            offset = len;
         }
     } /* if (!visited) */
 
@@ -2531,46 +2546,47 @@ dissect_selfm(tvbuff_t *selfm_tvb, packet_info *pinfo, proto_tree *tree, void* d
         /* Add Message Type to Protocol Tree */
         proto_tree_add_item(selfm_tree, hf_selfm_msgtype, selfm_tvb, offset, 2, ENC_BIG_ENDIAN);
         offset += 2;
+        consumed_bytes += 2;
 
         /* Determine correct message type and call appropriate dissector */
         if (tvb_reported_length_remaining(selfm_tvb, offset) > 0) {
                 switch (msg_type) {
                     case CMD_RELAY_DEF:
-                        dissect_relaydef_frame(selfm_tvb, selfm_tree, offset);
+                        consumed_bytes = dissect_relaydef_frame(selfm_tvb, selfm_tree, offset);
                         break;
                     case CMD_FM_CONFIG:
                     case CMD_DFM_CONFIG:
                     case CMD_PDFM_CONFIG:
-                        dissect_fmconfig_frame(selfm_tvb, selfm_tree, offset);
+                        consumed_bytes = dissect_fmconfig_frame(selfm_tvb, selfm_tree, offset);
                         break;
                     case CMD_FM_DATA:
-                        dissect_fmdata_frame(selfm_tvb, selfm_tree, pinfo, offset, CMD_FM_CONFIG);
+                        consumed_bytes = dissect_fmdata_frame(selfm_tvb, selfm_tree, pinfo, offset, CMD_FM_CONFIG);
                         break;
                     case CMD_DFM_DATA:
-                        dissect_fmdata_frame(selfm_tvb, selfm_tree, pinfo, offset, CMD_DFM_CONFIG);
+                        consumed_bytes = dissect_fmdata_frame(selfm_tvb, selfm_tree, pinfo, offset, CMD_DFM_CONFIG);
                         break;
                     case CMD_PDFM_DATA:
-                        dissect_fmdata_frame(selfm_tvb, selfm_tree, pinfo, offset, CMD_PDFM_CONFIG);
+                        consumed_bytes = dissect_fmdata_frame(selfm_tvb, selfm_tree, pinfo, offset, CMD_PDFM_CONFIG);
                         break;
                     case CMD_FASTOP_CONFIG:
-                        dissect_foconfig_frame(selfm_tvb, selfm_tree, offset);
+                        consumed_bytes = dissect_foconfig_frame(selfm_tvb, selfm_tree, offset);
                         break;
                     case CMD_FAST_MSG:
-                        dissect_fastmsg_frame(selfm_tvb, selfm_tree, pinfo, offset);
+                        consumed_bytes = dissect_fastmsg_frame(selfm_tvb, selfm_tree, pinfo, offset);
                         break;
                     case CMD_FASTOP_RB_CTRL:
                     case CMD_FASTOP_BR_CTRL:
-                        dissect_fastop_frame(selfm_tvb, selfm_tree, pinfo, offset);
+                        consumed_bytes = dissect_fastop_frame(selfm_tvb, selfm_tree, pinfo, offset);
                         break;
                     case CMD_ALT_FASTOP_CONFIG:
-                        dissect_alt_fastop_config_frame(selfm_tvb, selfm_tree, offset);
+                        consumed_bytes = dissect_alt_fastop_config_frame(selfm_tvb, selfm_tree, offset);
                         break;
                     case CMD_ALT_FASTOP_OPEN:
                     case CMD_ALT_FASTOP_CLOSE:
                     case CMD_ALT_FASTOP_SET:
                     case CMD_ALT_FASTOP_CLEAR:
                     case CMD_ALT_FASTOP_PULSE:
-                        dissect_alt_fastop_frame(selfm_tvb, selfm_tree, pinfo, offset);
+                        consumed_bytes = dissect_alt_fastop_frame(selfm_tvb, selfm_tree, pinfo, offset);
                         break;
                     default:
                         break;
@@ -2578,39 +2594,31 @@ dissect_selfm(tvbuff_t *selfm_tvb, packet_info *pinfo, proto_tree *tree, void* d
         } /* remaining length > 0 */
     }
 
-    return tvb_reported_length(selfm_tvb);
+    return consumed_bytes;
 }
 
 /******************************************************************************************************/
-/* Return length of SEL Protocol over TCP message (used for re-assembly)                               */
-/* SEL Protocol "Scan" messages are generally 2-bytes in length and only include a 16-bit message type */
-/* SEL Protocol "Response" messages include a "length" byte in offset 2 of each response message       */
+/* Dissect (and possibly re-assemble) SEL protocol payload data                                       */
 /******************************************************************************************************/
-static guint
-get_selfm_len(packet_info *pinfo _U_, tvbuff_t *tvb, int offset _U_, void *data _U_)
-{
-    guint message_len=0;  /* message length, inclusive of header, data, crc */
-
-    /* Get length byte from message */
-    if (tvb_reported_length(tvb) > 2) {
-        message_len = tvb_get_guint8(tvb, offset+2);
-    }
-    /* for 2-byte poll messages, set the length to 2 */
-    else if (tvb_reported_length(tvb) == 2) {
-        message_len = 2;
-    }
-
-    return message_len;
-}
-
-/******************************************************************************************************/
-/* Dissect (and possibly Re-assemble) SEL protocol payload data */
+/* Since we are dealing with (usually) Telnet-encapsulated data with possible extra IAC bytes present,*/
+/* we cannot know the 'true' length of re-assembled TCP messages by just looking at the protocol PDU  */
+/* header and it's included length byte.  This precludes the use of tcp_dissect_pdus() and requires   */
+/* us to do the reassembly efforts here.                                                              */
+/* The tvb structure is as follows:                                                                   */
+/* tvb = original data tvb from TCP dissector                                                         */
+/* selfm_tvb = 'IAC-sanitized' (0xFF) version of tvb                                                  */
+/* selfm_pdu_tvb = with multiple PDUs in a single selfm_tvb, split them out for separate dissection   */
+/*                                                                                                    */
+/* tvb -> selfm_tvb -> selfm_pdu_tvb                                                                  */
+/*                  -> selfm_pdu_tvb                                                                  */
 /******************************************************************************************************/
 static int
 dissect_selfm_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 {
 
-    tvbuff_t      *selfm_tvb;
+    tvbuff_t      *selfm_tvb, *selfm_pdu_tvb;
+    int           skip_byte = 0, selfm_tvb_len, offset = 0;
+    guint8        selfm_PDU_len=0, new_selfm_PDU_len=0;
     gint length = tvb_reported_length(tvb);
 
     /* Check for a SEL Protocol packet.  It should begin with 0xA5 */
@@ -2619,20 +2627,74 @@ dissect_selfm_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
         return 0;
     }
 
+    /* If the length of this packet is only 2 bytes, it's a scan message so just do a simple dissection */
+    if (length == 2) {
+        return dissect_selfm(tvb, pinfo, tree, data);
+    }
+
+    selfm_PDU_len = tvb_get_guint8(tvb,2);
+
+    /* If the reported selfm PDU length is greater than the present tvb length, request more data */
+    if (length < selfm_PDU_len) {
+        pinfo->desegment_offset = 0;
+        pinfo->desegment_len = DESEGMENT_ONE_MORE_SEGMENT;
+        return tvb_captured_length(tvb);
+    }
+
     /* If this is a Telnet-encapsulated Ethernet packet, let's clean out the IAC 0xFF instances */
     /* before we attempt any kind of re-assembly of the message */
     if ((pinfo->srcport) && selfm_telnet_clean) {
-        selfm_tvb = clean_telnet_iac(pinfo, tvb, 0, length);
+        selfm_tvb = clean_telnet_iac(pinfo, tvb, 0, length, &skip_byte);
     }
     else {
         selfm_tvb = tvb_new_subset_length( tvb, 0, length);
     }
 
+    selfm_tvb_len = tvb_reported_length(selfm_tvb);
 
-    tcp_dissect_pdus(selfm_tvb, pinfo, tree, selfm_desegment, 2,
-                   get_selfm_len, dissect_selfm, data);
+    /* If sanitized selfm_tvb length is still less than the reported selfm PDU length, there is more segment data to follow */
+    if (selfm_tvb_len < selfm_PDU_len) {
+        pinfo->desegment_offset = 0;
+        pinfo->desegment_len = DESEGMENT_ONE_MORE_SEGMENT;
+        return tvb_captured_length(tvb);
+    }
 
-    return length;
+    /* If the available selfm_tvb length is greater than the reported selfm PDU length,  */
+    /* there is possibly a second PDU to follow so let's dig deeper...                   */
+    if (selfm_tvb_len > selfm_PDU_len) {
+        /* Check if additional data is actually selfm PDU data */
+        if (tvb_get_guint8(selfm_tvb, selfm_PDU_len) == 0xA5) {
+            new_selfm_PDU_len = tvb_get_guint8(selfm_tvb, selfm_PDU_len+2);
+            /* If we still don't have enough data to accomodate the 2 PDUs... */
+            if (selfm_tvb_len < (selfm_PDU_len + new_selfm_PDU_len)) {
+#if 0
+                fprintf(stderr, "On Packet: %d, continuing to desegment. PDU: %d NewPDU: %d  Still need %d bytes.. \n", pinfo->fd->num, selfm_PDU_len, new_selfm_PDU_len, (selfm_PDU_len + new_selfm_PDU_len) - selfm_tvb_len);
+#endif
+                /* If the current selfm_tvb length is less than the combined reported selfm length of the 2 PDUs, continue TCP desegmentation */
+                /* The desegment_len field will be used to report how many additional bytes remain to be reassembled */
+                pinfo->desegment_offset = 0;
+                pinfo->desegment_len = (selfm_PDU_len + new_selfm_PDU_len) - selfm_tvb_len;
+                return tvb_captured_length(tvb);
+            }
+        }
+    }
+
+    /* If multiple SEL protocol PDUs exist within a single tvb, dissect each of them sequentially */
+    while (offset < selfm_tvb_len) {
+        /* If random ASCII data makes its way onto the end of an SEL protocol PDU, ignore it */
+        if (tvb_get_guint8(selfm_tvb, offset) != 0xA5) {
+#if 0
+            fprintf(stderr, "On Packet: %d, extraneous data (starts with: %x).. \n", pinfo->fd->num, tvb_get_guint8(selfm_tvb, offset));
+#endif
+            break;
+        }
+        /* Create new selfm_pdu_tvb that contains only a single PDU worth of data */
+        selfm_pdu_tvb = tvb_new_subset_length( selfm_tvb, offset, tvb_get_guint8(selfm_tvb, offset+2));
+        offset += dissect_selfm(selfm_pdu_tvb, pinfo, tree, data);
+    }
+
+    /* Return the completed selfm_tvb dissected length + the count of any IAC skip bytes that were removed from the tvb payload */
+    return selfm_tvb_len + skip_byte;
 }
 
 /******************************************************************************************************/
@@ -3027,7 +3089,7 @@ proto_register_selfm(void)
 
 
     /* Register required preferences for SEL Protocol register decoding */
-    selfm_module = prefs_register_protocol(proto_selfm, proto_reg_handoff_selfm);
+    selfm_module = prefs_register_protocol(proto_selfm, NULL);
 
     /*  SEL Protocol - Desegmentmentation; defaults to TRUE for TCP desegmentation*/
     prefs_register_bool_preference(selfm_module, "desegment",
@@ -3040,11 +3102,6 @@ proto_register_selfm(void)
                                   "Remove extra 0xFF (Telnet IAC) bytes",
                                   "Whether the SEL Protocol dissector should automatically pre-process Telnet data to remove duplicate 0xFF IAC bytes",
                                   &selfm_telnet_clean);
-
-    /* SEL Protocol Preference - Default TCP Port, allows for "user" port either than 0. */
-    prefs_register_uint_preference(selfm_module, "tcp.port", "SEL Protocol Port",
-                       "Set the TCP port for SEL FM Protocol packets (if other than the default of 0)",
-                       10, &global_selfm_tcp_port);
 
     /* SEL Protocol Preference - Disable/Enable CRC verification, */
     prefs_register_bool_preference(selfm_module, "crc_verification", "Validate Fast Message CRC16",
@@ -3066,20 +3123,7 @@ proto_register_selfm(void)
 void
 proto_reg_handoff_selfm(void)
 {
-    static int selfm_prefs_initialized = FALSE;
-    static unsigned int selfm_port;
-
-    /* Make sure to use SEL FM Protocol Preferences field to determine default TCP port */
-    if (! selfm_prefs_initialized) {
-        selfm_prefs_initialized = TRUE;
-    }
-    else {
-        dissector_delete_uint("tcp.port", selfm_port, selfm_handle);
-    }
-
-    selfm_port = global_selfm_tcp_port;
-
-    dissector_add_uint("tcp.port", selfm_port, selfm_handle);
+    dissector_add_for_decode_as_with_preference("tcp.port", selfm_handle);
     dissector_add_for_decode_as("rtacser.data", selfm_handle);
 }
 

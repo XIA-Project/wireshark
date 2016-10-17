@@ -35,10 +35,17 @@ public:
 
     static void tapReset(void *conv_hash_ptr);
     static void tapDraw(void *conv_hash_ptr);
+    double minRelStartTime() { return min_rel_start_time_; }
+    double maxRelStopTime() { return max_rel_stop_time_; }
+
+public slots:
+    void updateStartTime(bool absolute);
 
 private:
     void initDirectionMap();
     void updateItems();
+    double min_rel_start_time_; // seconds
+    double max_rel_stop_time_; // seconds
 
 private slots:
     void filterActionTriggered();

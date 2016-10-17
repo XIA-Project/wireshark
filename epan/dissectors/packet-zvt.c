@@ -44,7 +44,6 @@
 #include "config.h"
 
 #include <epan/packet.h>
-#include <epan/prefs.h>
 #include <epan/addr_resolv.h>
 #include <epan/expert.h>
 
@@ -107,14 +106,18 @@ typedef struct _apdu_info_t {
 #define CTRL_INIT          0x0693
 #define CTRL_PRINT_LINE    0x06D1
 
+static void dissect_zvt_int_status(tvbuff_t *tvb, gint offset, guint16 len,
+        packet_info *pinfo, proto_tree *tree, zvt_transaction_t *zvt_trans);
 static void dissect_zvt_reg(tvbuff_t *tvb, gint offset, guint16 len,
         packet_info *pinfo, proto_tree *tree, zvt_transaction_t *zvt_trans);
 static void dissect_zvt_bitmap_seq(tvbuff_t *tvb, gint offset, guint16 len,
         packet_info *pinfo, proto_tree *tree, zvt_transaction_t *zvt_trans);
+static void dissect_zvt_init(tvbuff_t *tvb, gint offset, guint16 len,
+        packet_info *pinfo, proto_tree *tree, zvt_transaction_t *zvt_trans);
 
 static const apdu_info_t apdu_info[] = {
     { CTRL_STATUS,        0, DIRECTION_PT_TO_ECR, NULL },
-    { CTRL_INT_STATUS,    0, DIRECTION_PT_TO_ECR, NULL },
+    { CTRL_INT_STATUS,    0, DIRECTION_PT_TO_ECR, dissect_zvt_int_status },
     { CTRL_REGISTRATION,  4, DIRECTION_ECR_TO_PT, dissect_zvt_reg },
     /* authorisation has at least a 0x04 tag and 6 bytes for the amount */
     { CTRL_AUTHORISATION, 7, DIRECTION_ECR_TO_PT, dissect_zvt_bitmap_seq },
@@ -122,7 +125,7 @@ static const apdu_info_t apdu_info[] = {
     { CTRL_ABORT,         0, DIRECTION_PT_TO_ECR, NULL },
     { CTRL_END_OF_DAY,    0, DIRECTION_ECR_TO_PT, NULL },
     { CTRL_DIAG,          0,  DIRECTION_ECR_TO_PT, NULL },
-    { CTRL_INIT,          0, DIRECTION_ECR_TO_PT, NULL },
+    { CTRL_INIT,          0, DIRECTION_ECR_TO_PT, dissect_zvt_init },
     { CTRL_PRINT_LINE,    0, DIRECTION_PT_TO_ECR, NULL }
 };
 
@@ -152,6 +155,8 @@ typedef struct _bitmap_info_t {
 
 static gint dissect_zvt_tlv_container(
         tvbuff_t *tvb, gint offset, packet_info *pinfo, proto_tree *tree);
+static gint dissect_zvt_cc(
+        tvbuff_t *tvb, gint offset, packet_info *pinfo, proto_tree *tree);
 
 static const bitmap_info_t bitmap_info[] = {
     { BMP_TIMEOUT,                         1, NULL },
@@ -167,16 +172,12 @@ static const bitmap_info_t bitmap_info[] = {
     { BMP_T1_DAT,        BMP_PLD_LEN_UNKNOWN, NULL },
     { BMP_CVV_CVC,                         2, NULL },
     { BMP_ADD_DATA,      BMP_PLD_LEN_UNKNOWN, NULL },
-    { BMP_CC,                              2, NULL }
+    { BMP_CC,                              2, dissect_zvt_cc }
 };
 
 
 void proto_register_zvt(void);
 void proto_reg_handoff_zvt(void);
-
-/* the specification mentions tcp port 20007
-   this port is not officially registered with IANA */
-static guint pref_zvt_tcp_port = 0;
 
 static int proto_zvt = -1;
 
@@ -195,7 +196,8 @@ static int hf_zvt_ccrc = -1;
 static int hf_zvt_aprc = -1;
 static int hf_zvt_len = -1;
 static int hf_zvt_data = -1;
-static int hf_zvt_reg_pwd = -1;
+static int hf_zvt_int_status = -1;
+static int hf_zvt_pwd = -1;
 static int hf_zvt_reg_cfg = -1;
 static int hf_zvt_cc = -1;
 static int hf_zvt_reg_svc_byte = -1;
@@ -234,6 +236,11 @@ static const value_string ctrl_field[] = {
     { 0, NULL }
 };
 static value_string_ext ctrl_field_ext = VALUE_STRING_EXT_INIT(ctrl_field);
+
+static const value_string zvt_cc[] = {
+    { 0x0978, "EUR" },
+    { 0, NULL }
+};
 
 static const value_string bitmap[] = {
     { BMP_TIMEOUT,       "Timeout" },
@@ -389,6 +396,14 @@ dissect_zvt_tlv_container(tvbuff_t *tvb, gint offset,
 }
 
 
+static gint dissect_zvt_cc(
+        tvbuff_t *tvb, gint offset, packet_info *pinfo _U_, proto_tree *tree)
+{
+    proto_tree_add_item(tree, hf_zvt_cc, tvb, offset, 2, ENC_BIG_ENDIAN);
+    return 2;
+}
+
+
 /* dissect one "bitmap", i.e BMP and the corresponding data */
 static gint
 dissect_zvt_bitmap(tvbuff_t *tvb, gint offset,
@@ -433,11 +448,26 @@ dissect_zvt_bitmap(tvbuff_t *tvb, gint offset,
 }
 
 
+static void dissect_zvt_int_status(tvbuff_t *tvb, gint offset, guint16 len _U_,
+        packet_info *pinfo, proto_tree *tree, zvt_transaction_t *zvt_trans)
+{
+    proto_tree_add_item(tree, hf_zvt_int_status,
+            tvb, offset, 1, ENC_BIG_ENDIAN);
+    offset++;
+
+    if (len > 1)
+        offset++; /* skip "timeout" */
+
+    if (len > 2)
+        dissect_zvt_bitmap_seq(tvb, offset, len-2, pinfo, tree, zvt_trans);
+}
+
+
 static void
 dissect_zvt_reg(tvbuff_t *tvb, gint offset, guint16 len _U_,
         packet_info *pinfo, proto_tree *tree, zvt_transaction_t *zvt_trans)
 {
-    proto_tree_add_item(tree, hf_zvt_reg_pwd, tvb, offset, 3, ENC_NA);
+    proto_tree_add_item(tree, hf_zvt_pwd, tvb, offset, 3, ENC_NA);
     offset += 3;
 
     proto_tree_add_item(tree, hf_zvt_reg_cfg,
@@ -448,9 +478,7 @@ dissect_zvt_reg(tvbuff_t *tvb, gint offset, guint16 len _U_,
     if (tvb_captured_length_remaining(tvb, offset)>=4 &&
             tvb_get_guint8(tvb, offset+2)==0x03) {
 
-        proto_tree_add_item(tree, hf_zvt_cc,
-            tvb, offset, 2, ENC_BIG_ENDIAN);
-        offset += 2;
+        offset += dissect_zvt_cc(tvb, offset, pinfo, tree);
 
         offset++; /* 0x03 */
 
@@ -463,6 +491,14 @@ dissect_zvt_reg(tvbuff_t *tvb, gint offset, guint16 len _U_,
     dissect_zvt_bitmap_seq(tvb, offset,
             tvb_captured_length_remaining(tvb, offset),
             pinfo, tree, zvt_trans);
+}
+
+
+static void dissect_zvt_init(
+        tvbuff_t *tvb, gint offset, guint16 len _U_, packet_info *pinfo _U_,
+        proto_tree *tree, zvt_transaction_t *zvt_trans _U_)
+{
+    proto_tree_add_item(tree, hf_zvt_pwd, tvb, offset, 3, ENC_NA);
 }
 
 
@@ -801,7 +837,6 @@ void
 proto_register_zvt(void)
 {
     guint     i;
-    module_t *zvt_module;
     expert_module_t* expert_zvt;
 
     static gint *ett[] = {
@@ -839,8 +874,11 @@ proto_register_zvt(void)
         { &hf_zvt_data,
           { "APDU data", "zvt.data",
             FT_BYTES, BASE_NONE, NULL, 0, NULL, HFILL } },
-        { &hf_zvt_reg_pwd,
-            { "Password", "zvt.reg.password",
+        { &hf_zvt_int_status,
+            { "Intermediate status", "zvt.int_status",
+                FT_UINT8, BASE_HEX, NULL, 0, NULL, HFILL } },
+        { &hf_zvt_pwd,
+            { "Password", "zvt.password",
                 FT_BYTES, BASE_NONE, NULL, 0, NULL, HFILL } },
         { &hf_zvt_reg_cfg,
             { "Config byte", "zvt.reg.config_byte",
@@ -848,8 +886,8 @@ proto_register_zvt(void)
         /* we don't call the filter zvt.reg.cc, the currency code
            appears in several apdus */
         { &hf_zvt_cc,
-            { "Currency Code (CC)", "zvt.cc",
-                FT_UINT16, BASE_HEX, NULL, 0, NULL, HFILL } },
+            { "Currency Code", "zvt.cc",
+                FT_UINT16, BASE_HEX, VALS(zvt_cc), 0, NULL, HFILL } },
         { &hf_zvt_reg_svc_byte,
             { "Service byte", "zvt.reg.service_byte",
                 FT_UINT8, BASE_HEX, NULL, 0, NULL, HFILL } },
@@ -895,44 +933,28 @@ proto_register_zvt(void)
                             (gpointer)(&bitmap_info[i]));
     }
 
-    proto_zvt = proto_register_protocol(
-            "ZVT Kassenschnittstelle", "ZVT", "zvt");
+    proto_zvt = proto_register_protocol("ZVT Kassenschnittstelle", "ZVT", "zvt");
+
     proto_register_field_array(proto_zvt, hf, array_length(hf));
     proto_register_subtree_array(ett, array_length(ett));
     expert_zvt = expert_register_protocol(proto_zvt);
     expert_register_field_array(expert_zvt, ei, array_length(ei));
 
-    zvt_module = prefs_register_protocol(proto_zvt, proto_reg_handoff_zvt);
-    prefs_register_uint_preference(zvt_module, "tcp.port",
-                   "ZVT TCP Port",
-                   "Set the TCP port for ZVT messages (port 20007 according to the spec)",
-                   10,
-                   &pref_zvt_tcp_port);
-
     transactions = wmem_tree_new_autoreset(wmem_epan_scope(), wmem_file_scope());
+
+    /* register by name to allow mapping to a user DLT */
+    register_dissector("zvt", dissect_zvt, proto_zvt);
 }
 
 
 void
 proto_reg_handoff_zvt(void)
 {
-    static gboolean            registered_dissector = FALSE;
-    static int                 zvt_tcp_port;
-    static dissector_handle_t  zvt_tcp_handle;
+    dissector_handle_t  zvt_tcp_handle;
 
-    if (!registered_dissector) {
-        /* register by name to allow mapping to a user DLT */
-        register_dissector("zvt", dissect_zvt, proto_zvt);
+    zvt_tcp_handle = create_dissector_handle(dissect_zvt_tcp, proto_zvt);
 
-        zvt_tcp_handle = create_dissector_handle(dissect_zvt_tcp, proto_zvt);
-
-        registered_dissector = TRUE;
-    }
-    else
-        dissector_delete_uint("tcp.port", zvt_tcp_port, zvt_tcp_handle);
-
-    zvt_tcp_port = pref_zvt_tcp_port;
-    dissector_add_uint("tcp.port", zvt_tcp_port, zvt_tcp_handle);
+    dissector_add_for_decode_as_with_preference("tcp.port", zvt_tcp_handle);
 }
 
 

@@ -159,7 +159,13 @@ my %APIs = (
                 # "I" isn't always the upper-case form of "i", and "i" isn't
                 # always the lower-case form of "I").  Use the g_ascii_* version
                 # instead.
-                'toupper'
+                'toupper',
+
+                # use wsutil/ws_strtoi.h function
+                # because of the wide use of atoi, we keep it in soft-deprecation status
+                # until we approach its complete removal, otherwise windows buildbot
+                # will keep to stuck with error.
+                'atoi',
             ] },
 
         # APIs that SHOULD NOT be used in Wireshark (any more)
@@ -2041,7 +2047,6 @@ while ($_ = pop @filelist)
         my $fileContents = '';
         my @foundAPIs = ();
         my $line;
-        my $prohibit_cpp_comments = 1;
 
         if ($source_dir and ! -e $filename) {
                 $filename = $source_dir . '/' . $filename;
@@ -2057,10 +2062,6 @@ while ($_ = pop @filelist)
                 print STDERR "Warning: $filename is not of type file - skipping.\n";
                 next;
         }
-
-        # Establish or remove local taboos
-        if ($filename =~ m{ ui/qt/ }x) { $prohibit_cpp_comments = 0; }
-        if ($filename =~ m{ image/*.rc }x) { $prohibit_cpp_comments = 0; }
 
         # Read in the file (ouch, but it's easier that way)
         open(FC, $filename) || die("Couldn't open $filename");
@@ -2137,12 +2138,6 @@ while ($_ = pop @filelist)
         $fileContents =~ s{ $DoubleQuotedStr | $SingleQuotedStr } []xog;
 
         #$errorCount += check_ett_registration(\$fileContents, $filename);
-
-        if ($prohibit_cpp_comments && $fileContents =~ m{ \s// }xo)
-        {
-                print STDERR "Error: Found C++ style comments in " .$filename."\n";
-                $errorCount++;
-        }
 
         # Remove all blank lines
         $fileContents =~ s{ ^ \s* $ } []xog;

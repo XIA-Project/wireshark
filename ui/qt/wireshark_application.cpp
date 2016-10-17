@@ -39,6 +39,7 @@
 #include "epan/proto.h"
 #include "epan/tap.h"
 #include "epan/timestamp.h"
+#include "epan/decode_as.h"
 
 #include "ui/decode_as_utils.h"
 #include "ui/preference_utils.h"
@@ -157,7 +158,14 @@ add_menu_recent_capture_file(const gchar *cf_name) {
             /* do a case insensitive compare on win32 */
             ri->filename.compare(normalized_cf_name, Qt::CaseInsensitive) == 0 ||
 #else   /* _WIN32 */
-            /* do a case sensitive compare on unix */
+            /*
+             * Do a case sensitive compare on UN*Xes.
+             *
+             * XXX - on UN*Xes such as macOS, where you can use pathconf()
+             * to check whether a given file system is case-sensitive or
+             * not, we should check whether this particular file system
+             * is case-sensitive and do the appropriate comparison.
+             */
             ri->filename.compare(normalized_cf_name) == 0 ||
 #endif
             cnt >= prefs.gui_recent_files_count_max) {
@@ -246,16 +254,21 @@ void WiresharkApplication::setMonospaceFont(const char *font_string) {
 
     if (font_string && strlen(font_string) > 0) {
         mono_font_.fromString(font_string);
-//        mono_bold_font_ = QFont(mono_regular_font_);
-//        mono_bold_font_.setBold(true);
         return;
     }
 
     // http://en.wikipedia.org/wiki/Category:Monospaced_typefaces
     const char *win_default_font = "Consolas";
     const char *win_alt_font = "Lucida Console";
-    const char *osx_default_font = "Menlo";
-    const char *osx_alt_font = "Monaco";
+    // SF Mono might be a system font someday. Right now (Oct 2016) it appears
+    // to be limited to Xcode and Terminal.
+    // http://www.openradar.me/26790072
+    // http://www.openradar.me/26862220
+    const char *osx_default_font = "SF Mono";
+    const QStringList osx_alt_fonts = QStringList() << "Menlo" << "Monaco";
+    // XXX Detect Ubuntu systems (e.g. via /etc/os-release and/or
+    // /etc/lsb_release) and add "Ubuntu Mono Regular" there.
+    // http://font.ubuntu.com/
     const char *x11_default_font = "Liberation Mono";
     const QStringList x11_alt_fonts = QStringList() << "DejaVu Sans Mono" << "Bitstream Vera Sans Mono";
     const QStringList fallback_fonts = QStringList() << "Lucida Sans Typewriter" << "Inconsolata" << "Droid Sans Mono" << "Andale Mono" << "Courier New" << "monospace";
@@ -265,23 +278,20 @@ void WiresharkApplication::setMonospaceFont(const char *font_string) {
     // Try to pick the latest, shiniest fixed-width font for our OS.
 #if defined(Q_OS_WIN)
     const char *default_font = win_default_font;
-    substitutes << win_alt_font << osx_default_font << osx_alt_font << x11_default_font << x11_alt_fonts << fallback_fonts;
+    substitutes << win_alt_font << osx_default_font << osx_alt_fonts << x11_default_font << x11_alt_fonts << fallback_fonts;
     font_size_adjust = 2;
 #elif defined(Q_OS_MAC)
     const char *default_font = osx_default_font;
-    substitutes << osx_alt_font << win_default_font << win_alt_font << x11_default_font << x11_alt_fonts << fallback_fonts;
+    substitutes << osx_alt_fonts << win_default_font << win_alt_font << x11_default_font << x11_alt_fonts << fallback_fonts;
 #else
     const char *default_font = x11_default_font;
-    substitutes << x11_alt_fonts << win_default_font << win_alt_font << osx_default_font << osx_alt_font << fallback_fonts;
+    substitutes << x11_alt_fonts << win_default_font << win_alt_font << osx_default_font << osx_alt_fonts << fallback_fonts;
 #endif
 
     mono_font_.setFamily(default_font);
     mono_font_.insertSubstitutions(default_font, substitutes);
     mono_font_.setPointSize(wsApp->font().pointSize() + font_size_adjust);
     mono_font_.setBold(false);
-
-//    mono_bold_font_ = QFont(mono_font_);
-//    mono_bold_font_.setBold(true);
 
     g_free(prefs.gui_qt_font_name);
     prefs.gui_qt_font_name = qstring_strdup(mono_font_.toString());
@@ -911,7 +921,7 @@ void WiresharkApplication::allSystemsGo()
     err = iface_mon_start(&iface_mon_event_cb);
     if (err == 0) {
         if_notifier_ = new QSocketNotifier(iface_mon_get_sock(),
-                                           QSocketNotifier::Read);
+                                           QSocketNotifier::Read, this);
         connect(if_notifier_, SIGNAL(activated(int)), SLOT(ifChangeEventsAvailable()));
     }
 #endif
@@ -1043,6 +1053,33 @@ void WiresharkApplication::addRecentItem(const QString filename, qint64 size, bo
     recent_items_.prepend(ri);
 
     itemStatusFinished(filename, size, accessible);
+}
+
+void WiresharkApplication::removeRecentItem(const QString &filename)
+{
+    QMutableListIterator<recent_item_status *> rii(recent_items_);
+
+    while (rii.hasNext()) {
+        recent_item_status *ri = rii.next();
+#ifdef _WIN32
+        /* Do a case insensitive compare on win32 */
+        if (ri->filename.compare(filename, Qt::CaseInsensitive) == 0) {
+#else
+        /* Do a case sensitive compare on UN*Xes.
+         *
+         * XXX - on UN*Xes such as macOS, where you can use pathconf()
+         * to check whether a given file system is case-sensitive or
+         * not, we should check whether this particular file system
+         * is case-sensitive and do the appropriate comparison.
+         */
+        if (ri->filename.compare(filename) == 0) {
+#endif
+            rii.remove();
+            delete(ri);
+        }
+    }
+
+    emit updateRecentItemStatus(NULL, 0, false);
 }
 
 static void switchTranslator(QTranslator& myTranslator, const QString& filename,

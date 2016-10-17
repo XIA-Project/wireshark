@@ -769,6 +769,11 @@ dissect_dtls_record(tvbuff_t *tvb, packet_info *pinfo,
         ssl_finalize_decryption(ssl, &dtls_master_key_map);
         ssl_change_cipher(ssl, ssl_packet_from_server(session, dtls_associations, pinfo));
     }
+    /* Heuristic: any later ChangeCipherSpec is not a resumption of this
+     * session. Set the flag after ssl_finalize_decryption such that it has
+     * a chance to use resume using Session Tickets. */
+    if (is_from_server)
+      session->is_session_resumed = FALSE;
     break;
   case SSL_ID_ALERT:
     {
@@ -1286,6 +1291,11 @@ dissect_dtls_handshake(tvbuff_t *tvb, packet_info *pinfo,
                                            dtls_master_key_map.tickets);
             break;
 
+          case SSL_HND_HELLO_RETRY_REQUEST:
+            ssl_dissect_hnd_hello_retry_request(&dissect_dtls_hf, sub_tvb, pinfo, ssl_hand_tree,
+                                                0, length, session, ssl);
+            break;
+
           case SSL_HND_CERTIFICATE:
             ssl_dissect_hnd_cert(&dissect_dtls_hf, sub_tvb, ssl_hand_tree, 0,
                 pinfo, session, ssl, dtls_key_hash, is_from_server);
@@ -1300,8 +1310,8 @@ dissect_dtls_handshake(tvbuff_t *tvb, packet_info *pinfo,
             break;
 
           case SSL_HND_SVR_HELLO_DONE:
-            if (ssl)
-              ssl->state |= SSL_SERVER_HELLO_DONE;
+            /* This is not an abbreviated handshake, it is certainly not resumed. */
+            session->is_session_resumed = FALSE;
             break;
 
           case SSL_HND_CERT_VERIFY:
@@ -1771,7 +1781,7 @@ proto_register_dtls(void)
   proto_dtls = proto_register_protocol("Datagram Transport Layer Security",
                                        "DTLS", "dtls");
 
-  dtls_associations = register_dissector_table("dtls.port", "DTLS UDP Dissector", proto_dtls, FT_UINT16, BASE_DEC, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
+  dtls_associations = register_dissector_table("dtls.port", "DTLS UDP Dissector", proto_dtls, FT_UINT16, BASE_DEC);
 
   /* Required function calls to register the header fields and
    * subtrees used */

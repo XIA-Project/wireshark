@@ -7510,7 +7510,8 @@ elem_v(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, elem_idx_t idx, guin
             "Missing Mandatory element (0x%02x) %s%s, rest of dissection is suspect", \
                 ansi_a_elem_1_strings[elem_idx].value, \
                 ansi_a_elem_1_strings[elem_idx].strptr, \
-                (elem_name_addition == NULL) || (elem_name_addition[0] == '\0') ? "" : elem_name_addition \
+                /* coverity[array_null] */ \
+                (elem_name_addition == NULL) ? "" : elem_name_addition \
             ); \
     } \
     if (curr_len <= 0) return; \
@@ -7540,7 +7541,8 @@ elem_v(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, elem_idx_t idx, guin
             "Missing Mandatory element (0x%02x) %s%s, rest of dissection is suspect", \
                 ansi_a_elem_1_strings[elem_idx].value, \
                 ansi_a_elem_1_strings[elem_idx].strptr, \
-                (elem_name_addition == NULL) || (elem_name_addition[0] == '\0') ? "" : elem_name_addition \
+                /* coverity[array_null] */ \
+                (elem_name_addition == NULL) ? "" : elem_name_addition \
             ); \
     } \
     if (curr_len <= 0) return; \
@@ -12855,15 +12857,15 @@ proto_register_ansi_a(void)
 
     is637_dissector_table =
         register_dissector_table("ansi_a.sms", "IS-637-A (SMS)",
-        proto_a_bsmap, FT_UINT8, BASE_DEC, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
+        proto_a_bsmap, FT_UINT8, BASE_DEC);
 
     is683_dissector_table =
         register_dissector_table("ansi_a.ota", "IS-683-A (OTA)",
-        proto_a_bsmap, FT_UINT8, BASE_DEC, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
+        proto_a_bsmap, FT_UINT8, BASE_DEC);
 
     is801_dissector_table =
         register_dissector_table("ansi_a.pld", "IS-801 (PLD)",
-        proto_a_bsmap, FT_UINT8, BASE_DEC, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
+        proto_a_bsmap, FT_UINT8, BASE_DEC);
 
     proto_register_subtree_array(ett, array_length(ett));
 

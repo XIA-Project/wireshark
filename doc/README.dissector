@@ -103,7 +103,7 @@ PROTOABBREV     A name for the protocol for use in filter expressions;
 FIELDNAME       The displayed name for the header field.
 FIELDABBREV     The abbreviated name for the header field; it may contain
                 only letters, digits, hyphens, underscores, and periods.
-FIELDTYPE       FT_NONE, FT_BOOLEAN, FT_UINT8, FT_UINT16, FT_UINT24,
+FIELDTYPE       FT_NONE, FT_BOOLEAN, FT_CHAR, FT_UINT8, FT_UINT16, FT_UINT24,
                 FT_UINT32, FT_UINT40, FT_UINT48, FT_UINT56, FT_UINT64,
                 FT_INT8, FT_INT16, FT_INT24, FT_INT32, FT_INT40, FT_INT48,
                 FT_INT56, FT_INT64, FT_FLOAT, FT_DOUBLE, FT_ABSOLUTE_TIME,
@@ -128,6 +128,13 @@ FIELDDISPLAY    --For FT_UINT{8,16,24,32,40,48,56,64} and
                 --For FT_UINT16:
 
                   BASE_PT_UDP, BASE_PT_TCP, BASE_PT_DCCP or BASE_PT_SCTP
+
+                --For FT_CHAR:
+                  BASE_HEX, BASE_OCT, BASE_CUSTOM, or BASE_NONE, possibly
+                  ORed with BASE_RANGE_STRING, BASE_EXT_STRING or
+                  BASE_VAL64_STRING.
+
+                  BASE_NONE can be used in the same way as with FT_UINT8.
 
                 --For FT_ABSOLUTE_TIME:
 
@@ -747,6 +754,9 @@ The type of value this field holds. The current field types are:
     FT_FRAMENUM A frame number; if this is used, the "Go
                 To Corresponding Frame" menu item can
                 work on that field.
+    FT_CHAR     An 8-bit ASCII character.  It's treated similarly to an
+                FT_UINT8, but is displayed as a C-style character
+                constant.
     FT_UINT8    An 8-bit unsigned integer.
     FT_UINT16   A 16-bit unsigned integer.
     FT_UINT24   A 24-bit unsigned integer.
@@ -880,9 +890,11 @@ For FT_BOOLEAN fields that are also bitfields (i.e., 'bitmask' is non-zero),
 wide the parent bitfield is). (If the FT_BOOLEAN 'bitmask' is zero, then
 'display' must be BASE_NONE).
 
-For integer fields a "field-width" is not needed since the type of integer itself
-(FT_UINT8, FT_UINT16, FT_UINT24, FT_UINT32, FT_UINT40, FT_UINT48, FT_UINT56,
-FT_UINT64, etc) tells the proto_tree how wide the parent bitfield is.
+For integer fields a "field-width" is not needed since the type of
+integer itself (FT_UINT8, FT_UINT16, FT_UINT24, FT_UINT32, FT_UINT40,
+FT_UINT48, FT_UINT56, FT_UINT64, etc) tells the proto_tree how wide the
+parent bitfield is.  The same is true of FT_CHAR, as it's an 8-bit
+character.
 
 For FT_ABSOLUTE_TIME fields, 'display' is used to indicate whether the
 time is to be displayed as a time in the time zone for the machine on
@@ -1125,7 +1137,7 @@ for protocols with variable-width header fields.
 
 Note that the formats used must all belong to the same group as defined below:
 - FT_INT8, FT_INT16, FT_INT24 and FT_INT32
-- FT_UINT8, FT_UINT16, FT_UINT24, FT_UINT32, FT_IPXNET and FT_FRAMENUM
+- FT_CHAR, FT_UINT8, FT_UINT16, FT_UINT24, FT_UINT32, FT_IPXNET and FT_FRAMENUM
 - FT_INT40, FT_INT48, FT_INT56 and FT_INT64
 - FT_UINT40, FT_UINT48, FT_UINT56, FT_UINT64 and FT_EUI64
 - FT_ABSOLUTE_TIME and FT_RELATIVE_TIME
@@ -3016,31 +3028,29 @@ Where: module - Returned by the prefs_register_protocol routine
 
 These functions are declared in <epan/prefs.h>.
 
-An example from packet-beep.c -
+An example from packet-rtpproxy.c -
 
-   proto_beep = proto_register_protocol("Blocks Extensible Exchange Protocol",
-                       "BEEP", "beep");
+    proto_rtpproxy = proto_register_protocol ( "Sippy RTPproxy Protocol", "RTPproxy", "rtpproxy");
 
     ...
 
-    /* Register our configuration options for BEEP, particularly our port */
+    rtpproxy_module = prefs_register_protocol(proto_rtpproxy, proto_reg_handoff_rtpproxy);
 
-    beep_module = prefs_register_protocol(proto_beep, proto_reg_handoff_beep);
+    prefs_register_bool_preference(rtpproxy_module, "establish_conversation",
+                                 "Establish Media Conversation",
+                                 "Specifies that RTP/RTCP/T.38/MSRP/etc streams are decoded based "
+                                 "upon port numbers found in RTPproxy answers",
+                                 &rtpproxy_establish_conversation);
 
-    prefs_register_uint_preference(beep_module, "tcp.port", "BEEP TCP Port",
-                 "Set the port for BEEP messages (if other"
-                 " than the default of 10288)",
-                 10, &global_beep_tcp_port);
+    prefs_register_uint_preference(rtpproxy_module, "reply.timeout",
+                                 "RTPproxy reply timeout", /* Title */
+                                 "Maximum timeout value in waiting for reply from RTPProxy (in milliseconds).", /* Descr */
+                                 10,
+                                 &rtpproxy_timeout);
 
-    prefs_register_bool_preference(beep_module, "strict_header_terminator",
-                 "BEEP Header Requires CRLF",
-                 "Specifies that BEEP requires CRLF as a "
-                 "terminator, and not just CR or LF",
-                 &global_beep_strict_term);
-
-This will create preferences "beep.tcp.port" and
-"beep.strict_header_terminator", the first of which is an unsigned
-integer and the second of which is a Boolean.
+This will create preferences "rtpproxy.establish_conversation" and
+"rtpproxy.reply.timeout", the first of which is an Boolean and the
+second of which is a unsigned integer.
 
 Note that a warning will pop up if you've saved such preference to the
 preference file and you subsequently take the code out. The way to make
@@ -3074,36 +3084,32 @@ example, stolen from packet-dns.c:
 
     #include "packet-tcp.h"
 
-    dissector_handle_t dns_udp_handle;
-    dissector_handle_t dns_tcp_handle;
-    dissector_handle_t mdns_udp_handle;
+    dissector_handle_t hartip_tcp_handle;
+    dissector_handle_t hartip_udp_handle;
 
-    dns_udp_handle = create_dissector_handle(dissect_dns_udp,
-        proto_dns);
-    dns_tcp_handle = create_dissector_handle(dissect_dns_tcp,
-        proto_dns);
-    mdns_udp_handle = create_dissector_handle(dissect_mdns_udp,
-        proto_dns);
+    hartip_tcp_handle = create_dissector_handle(dissect_hartip_tcp, proto_hartip);
+    hartip_udp_handle = create_dissector_handle(dissect_hartip_udp, proto_hartip);
 
-    dissector_add_uint("udp.port", UDP_PORT_DNS, dns_udp_handle);
-    dissector_add_uint("tcp.port", TCP_PORT_DNS, dns_tcp_handle);
-    dissector_add_uint("udp.port", UDP_PORT_MDNS, mdns_udp_handle);
-    dissector_add_uint("tcp.port", TCP_PORT_MDNS, dns_tcp_handle);
+    dissector_add_uint("udp.port", HARTIP_PORT, hartip_udp_handle);
+    dissector_add_uint_with_preference("tcp.port", HARTIP_PORT, hartip_tcp_handle);
 
-The dissect_dns_udp function does very little work and calls
-dissect_dns_common, while dissect_dns_tcp calls tcp_dissect_pdus with a
+The dissect_hartip_udp function does very little work and calls
+dissect_hartip_common, while dissect_hartip_tcp calls tcp_dissect_pdus with a
 reference to a callback which will be called with reassembled data:
 
     static int
-    dissect_dns_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
-                    void *data _U_)
+    dissect_hartip_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
+                   void *data)
     {
-        tcp_dissect_pdus(tvb, pinfo, tree, dns_desegment, 2,
-            get_dns_pdu_len, dissect_dns_tcp_pdu, data);
-        return tvb_captured_length(tvb);
+        if (!tvb_bytes_exist(tvb, 0, HARTIP_HEADER_LENGTH))
+            return 0;
+
+        tcp_dissect_pdus(tvb, pinfo, tree, hartip_desegment, HARTIP_HEADER_LENGTH,
+                   get_dissect_hartip_len, dissect_hartip_pdu, data);
+        return tvb_reported_length(tvb);
     }
 
-(The dissect_dns_tcp_pdu function acts similarly to dissect_dns_udp.)
+(The dissect_hartip_pdu function acts similarly to dissect_hartip_udp.)
 The arguments to tcp_dissect_pdus are:
 
     the tvbuff pointer, packet_info pointer, and proto_tree pointer
@@ -3317,7 +3323,7 @@ Consider the following example using IP dissection, stolen from packet-ip.c:
     static decode_as_t ip_da = {"ip", "Network", "ip.proto", 1, 0, &ip_da_values, NULL, NULL,
                               decode_as_default_populate_list, decode_as_default_reset, decode_as_default_change, NULL};
     ...
-    ip_dissector_table = register_dissector_table("ip.proto", "IP protocol", ip_proto, FT_UINT8, BASE_DEC, DISSECTOR_TABLE_ALLOW_DUPLICATE);
+    ip_dissector_table = register_dissector_table("ip.proto", "IP protocol", ip_proto, FT_UINT8, BASE_DEC);
     ...
     register_decode_as(&ip_da);
 

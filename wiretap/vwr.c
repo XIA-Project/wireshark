@@ -720,7 +720,7 @@ static gboolean vwr_read_rec_header(FILE_T fh, int *rec_size, int *IS_TX, int *e
                 return FALSE;
             }
             else if (v_type != VT_FRAME) {
-                if (!file_skip(fh, f_len, err))
+                if (!wtap_read_bytes(fh, NULL, f_len, err, err_info))
                     return FALSE;
             }
             else {
@@ -779,7 +779,7 @@ static int vwr_get_fpga_version(wtap *wth, int *err, gchar **err_info)
                 return UNKNOWN_FPGA;
             }
             else if (v_type != VT_FRAME) {
-                if (file_seek(wth->fh, f_len, SEEK_CUR, err) < 0) {
+                if (!wtap_read_bytes(wth->fh, NULL, f_len, err, err_info)) {
                     g_free(rec);
                     return -1;
                 }

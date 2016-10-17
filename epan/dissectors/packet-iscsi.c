@@ -37,9 +37,11 @@
 #include <epan/packet.h>
 #include <epan/prefs.h>
 #include <epan/conversation.h>
+#include <epan/expert.h>
 #include "packet-scsi.h"
 #include <epan/crc32-tvb.h>
 #include <wsutil/crc32.h>
+#include <wsutil/strtoi.h>
 
 void proto_register_iscsi(void);
 void proto_reg_handoff_iscsi(void);
@@ -200,6 +202,8 @@ static gint ett_iscsi_lun = -1;
 /* #ifndef DRAFT08 */
 static gint ett_iscsi_ISID = -1;
 /* #endif */
+
+static expert_field ei_iscsi_keyvalue_invalid = EI_INIT;
 
 enum iscsi_digest {
     ISCSI_DIGEST_AUTO,
@@ -521,10 +525,10 @@ typedef struct _iscsi_conv_data {
    (it starts to be common to use redirectors to point to non-3260 ports)
 */
 static void
-iscsi_dissect_TargetAddress(packet_info *pinfo, proto_tree *tree _U_,char *val)
+iscsi_dissect_TargetAddress(packet_info *pinfo, tvbuff_t* tvb, proto_tree *tree, char *val, guint offset)
 {
     address *addr = NULL;
-    int port;
+    guint16 port;
     char *value = wmem_strdup(wmem_packet_scope(), val);
     char *p = NULL, *pgt = NULL;
 
@@ -569,7 +573,10 @@ iscsi_dissect_TargetAddress(packet_info *pinfo, proto_tree *tree _U_,char *val)
                 addr->len  = 4;
                 addr->data = addr_data;
 
-                port = atoi(p);
+                if (!ws_strtou16(p, NULL, &port)) {
+                    proto_tree_add_expert_format(tree, pinfo, &ei_iscsi_keyvalue_invalid,
+                        tvb, offset + (guint)strlen(value), (guint)strlen(p), "Invalid port: %s", p);
+                }
             }
 
         }
@@ -613,11 +620,11 @@ addTextKeys(packet_info *pinfo, proto_tree *tt, tvbuff_t *tvb, gint offset, guin
         }
         *value++ = 0;
 
+        proto_tree_add_item(tt, hf_iscsi_KeyValue, tvb, offset, len, ENC_ASCII|ENC_NA);
         if (!strcmp(key, "TargetAddress")) {
-            iscsi_dissect_TargetAddress(pinfo, tt, value);
+            iscsi_dissect_TargetAddress(pinfo, tvb, tt, value, offset + (guint)strlen("TargetAddress") + 2);
         }
 
-        proto_tree_add_item(tt, hf_iscsi_KeyValue, tvb, offset, len, ENC_ASCII|ENC_NA);
         offset += len;
     }
     return offset;
@@ -2556,6 +2563,7 @@ void
 proto_register_iscsi(void)
 {
     module_t *iscsi_module;
+    expert_module_t* expert_iscsi;
 
     /* Setup list of header fields  See Section 1.6.1 for details*/
     static hf_register_info hf[] = {
@@ -3073,6 +3081,11 @@ proto_register_iscsi(void)
 /* #endif */
     };
 
+    static ei_register_info ei[] = {
+        { &ei_iscsi_keyvalue_invalid, { "iscsi.keyvalue.invalid", PI_MALFORMED, PI_ERROR,
+            "Invalid key/value pair", EXPFILL }}
+    };
+
     /* Register the protocol name and description */
     proto_iscsi = proto_register_protocol("iSCSI", "iSCSI", "iscsi");
     iscsi_handle = register_dissector("iscsi", dissect_iscsi_handle, proto_iscsi);
@@ -3151,6 +3164,9 @@ proto_register_iscsi(void)
                                        "data_digest_size");
     prefs_register_obsolete_preference(iscsi_module,
                                        "enable_data_digests");
+
+    expert_iscsi = expert_register_protocol(proto_iscsi);
+    expert_register_field_array(expert_iscsi, ei, array_length(ei));
 }
 
 
@@ -3168,7 +3184,7 @@ proto_reg_handoff_iscsi(void)
 {
     heur_dissector_add("tcp", dissect_iscsi_heur, "iSCSI over TCP", "iscsi_tcp", proto_iscsi, HEURISTIC_ENABLE);
 
-    dissector_add_for_decode_as("tcp.port", iscsi_handle);
+    dissector_add_for_decode_as_with_preference("tcp.port", iscsi_handle);
 }
 
 /*

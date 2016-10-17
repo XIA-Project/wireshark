@@ -1055,7 +1055,7 @@ Integers of 8, 16, 24 and 32 bits can be retrieved with these functions.
 @param length length of data in tvb (for strings can be -1 for remaining)
 @param encoding data encoding (e.g, ENC_LITTLE_ENDIAN, ENC_BIG_ENDIAN, ENC_ASCII|ENC_STRING, etc.)
 @param[out] retval points to a gint32 or guint32 which will be set to the value
-@return the newly created item, and *retval is set to the decoded value
+@return the newly created item, and *retval is set to the decoded value masked/shifted according to bitmask
 */
 WS_DLL_PUBLIC proto_item *
 proto_tree_add_item_ret_int(proto_tree *tree, int hfindex, tvbuff_t *tvb,
@@ -2333,6 +2333,14 @@ WS_DLL_PUBLIC gboolean proto_tracking_interesting_fields(const proto_tree *tree)
  @return GPtrArry pointer */
 WS_DLL_PUBLIC GPtrArray* proto_find_finfo(proto_tree *tree, const int hfindex);
 
+/** Return GPtrArray* of field_info pointer for first hfindex that appear in
+tree. Works with any tree, primed or unprimed, and is slower than
+proto_get_finfo_ptr_array because it has to search through the tree.
+@param tree tree of interest
+@param hfindex index of field info of interest
+@return GPtrArry pointer */
+WS_DLL_PUBLIC GPtrArray* proto_find_first_finfo(proto_tree *tree, const int hfindex);
+
 /** Return GPtrArray* of field_info pointers containg all hfindexes that appear
     in tree.
  @param tree tree of interest
@@ -2453,7 +2461,7 @@ proto_tree_add_bitmask(proto_tree *tree, tvbuff_t *tvb, const guint offset,
         matched string displayed on the expansion line.
  @param encoding big or little endian byte representation (ENC_BIG_ENDIAN/ENC_LITTLE_ENDIAN/ENC_HOST_ENDIAN)
  @param[out] retval points to a guint64 which will be set
- @return the newly created item, and *retval is set to the decoded value
+ @return the newly created item, and *retval is set to the decoded value masked/shifted according to bitmask
  */
 WS_DLL_PUBLIC proto_item *
 proto_tree_add_bitmask_ret_uint64(proto_tree *tree, tvbuff_t *tvb, const guint offset,
@@ -2512,7 +2520,7 @@ proto_tree_add_bitmask_with_flags(proto_tree *tree, tvbuff_t *tvb, const guint o
  @param encoding big or little endian byte representation (ENC_BIG_ENDIAN/ENC_LITTLE_ENDIAN/ENC_HOST_ENDIAN)
  @param flags bitmask field using BMT_NO_* flags to determine behavior
  @param[out] retval points to a guint64 which will be set
- @return the newly created item, and *retval is set to the decoded value
+ @return the newly created item, and *retval is set to the decoded value masked/shifted according to bitmask
  */
 WS_DLL_PUBLIC proto_item *
 proto_tree_add_bitmask_with_flags_ret_uint64(proto_tree *tree, tvbuff_t *tvb, const guint offset,
@@ -2862,7 +2870,7 @@ proto_tree_add_ascii_7bits_item(proto_tree *tree, const int hfindex, tvbuff_t *t
  exists, just pass -1
  @param bad_checksum_expert optional expert info for a bad checksum.  If
  none exists, just pass NULL
- @pinfo Packet info used for optional expert info.  If unused, NULL can
+ @param pinfo Packet info used for optional expert info.  If unused, NULL can
  be passed
  @param computed_checksum Checksum to verify against
  @param encoding data encoding of checksum from tvb
@@ -2886,7 +2894,7 @@ typedef enum
 #define PROTO_CHECKSUM_VERIFY		0x01	/**< Compare against computed checksum */
 #define PROTO_CHECKSUM_GENERATED	0x02	/**< Checksum is generated only */
 #define PROTO_CHECKSUM_IN_CKSUM		0x04	/**< Internet checksum routine used for computation */
-#define PROTO_CHECKSUM_ZERO			0x08	/**< Computed checksum must be zero (but correct checksum can't be calculated) */
+#define PROTO_CHECKSUM_ZERO		0x08	/**< Computed checksum must be zero (but correct checksum can't be calculated) */
 #define PROTO_CHECKSUM_NOT_PRESENT	0x10	/**< Checksum field is not present (Just populates status field) */
 
 WS_DLL_PUBLIC const value_string proto_checksum_vals[];

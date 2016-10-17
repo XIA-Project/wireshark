@@ -207,15 +207,12 @@ static gboolean try_heuristic_first = FALSE;
 #define V2_AS_1_6  0x2
 #define V2_AS_1_7  0x4
 static gint     handle_v2_as = V2_AS_ALL;
-static guint tipc_alternate_tcp_port = 0;
 static gboolean tipc_tcp_desegment = TRUE;
 
 static dissector_handle_t tipc_handle;
 
 /* IANA have assigned port 6118 port for TIPC UDP transport. */
-#define DEFAULT_TIPC_PORT_RANGE   "0"
-
-static range_t *global_tipc_udp_port_range;
+#define DEFAULT_TIPC_PORT_RANGE   "6118"
 
 /* this is used to find encapsulated protocols */
 static dissector_table_t tipc_user_dissector;
@@ -3012,8 +3009,7 @@ proto_register_tipc(void)
 	};
 
 	/* Register the protocol name and description */
-	proto_tipc = proto_register_protocol("Transparent Inter Process Communication(TIPC)",
-			"TIPC", "tipc");
+	proto_tipc = proto_register_protocol("Transparent Inter Process Communication(TIPC)", "TIPC", "tipc");
 
 	/* Required function calls to register the header fields and subtrees used */
 	proto_register_field_array(proto_tipc, hf, array_length(hf));
@@ -3026,12 +3022,12 @@ proto_register_tipc(void)
 
 	/* this allows e.g. to dissect everything which is TIPC Data */
 	tipc_user_dissector = register_dissector_table("tipc.usr",
-			"TIPC user", proto_tipc, FT_UINT8, BASE_DEC, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
+			"TIPC user", proto_tipc, FT_UINT8, BASE_DEC);
 	/* this allows to dissect everything which is TIPC Data and uses a specific
 	 * port name type it actually does not really work because the type is not
 	 * necessarily set in every data message */
 	tipc_type_dissector = register_dissector_table("tipcv2.port_name_type",
-			"TIPC port name type", proto_tipc, FT_UINT32, BASE_DEC, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
+			"TIPC port name type", proto_tipc, FT_UINT32, BASE_DEC);
 
 	/* make heuristic dissectors possible */
 	tipc_heur_subdissector_list = register_heur_dissector_list("tipc", proto_tipc);
@@ -3043,19 +3039,10 @@ proto_register_tipc(void)
 	register_cleanup_routine(tipc_defragment_cleanup);
 
 	/* Register configuration options */
-	tipc_module = prefs_register_protocol(proto_tipc, proto_reg_handoff_tipc);
+	tipc_module = prefs_register_protocol(proto_tipc, NULL);
 
 	tipc_address_type = address_type_dissector_register("AT_TIPC", "TIPC Address Zone,Subnetwork,Processor",
 														tipc_addr_to_str_buf, tipc_addr_str_len, NULL, NULL, NULL, NULL, NULL);
-
-	/* Set default ports */
-	range_convert_str(&global_tipc_udp_port_range, DEFAULT_TIPC_PORT_RANGE, MAX_TCP_PORT);
-
-	prefs_register_range_preference(tipc_module, "udp.ports", "TIPC UDP ports",
-								  "UDP ports to be decoded as TIPC (default: "
-								  DEFAULT_TIPC_PORT_RANGE ")"
-								  "IANA have assigned port 6118 port for TIPC UDP transport.",
-								  &global_tipc_udp_port_range, MAX_UDP_PORT);
 
 	prefs_register_bool_preference(tipc_module, "defragment",
 			"Reassemble TIPCv1 SEGMENTATION_MANAGER datagrams",
@@ -3079,10 +3066,6 @@ proto_register_tipc(void)
 			handle_v2_as_options,
 			TRUE);
 
-	prefs_register_uint_preference(tipc_module, "alternate_port",
-			"TIPC-over-TCP port", "Decode this TCP ports traffic as TIPC. Set to \"0\" to disable.", 10,
-			&tipc_alternate_tcp_port);
-
 	prefs_register_bool_preference(tipc_module, "desegment",
 			"Reassemble TIPC-over-TCP messages spanning multiple TCP segments",
 			"Whether the TIPC-over-TCP dissector should reassemble messages spanning multiple TCP segments. "
@@ -3093,33 +3076,14 @@ proto_register_tipc(void)
 void
 proto_reg_handoff_tipc(void)
 {
-	static gboolean inited = FALSE;
-	static dissector_handle_t tipc_tcp_handle;
-	static guint tipc_alternate_tcp_port_prev = 0;
-	static range_t *tipc_udp_port_range;
+	dissector_handle_t tipc_tcp_handle;
 
-	if (!inited) {
-		tipc_tcp_handle = create_dissector_handle(dissect_tipc_tcp, proto_tipc);
-		ip_handle = find_dissector("ip");
+	tipc_tcp_handle = create_dissector_handle(dissect_tipc_tcp, proto_tipc);
+	ip_handle = find_dissector("ip");
 
-		dissector_add_uint("ethertype", ETHERTYPE_TIPC, tipc_handle);
-
-		inited = TRUE;
-	} else {
-		/* change TIPC-over-TCP port if changed in the preferences */
-		if (tipc_alternate_tcp_port != tipc_alternate_tcp_port_prev) {
-			if (tipc_alternate_tcp_port_prev != 0)
-				dissector_delete_uint("tcp.port", tipc_alternate_tcp_port_prev, tipc_tcp_handle);
-			if (tipc_alternate_tcp_port != 0)
-				dissector_add_uint("tcp.port", tipc_alternate_tcp_port, tipc_tcp_handle);
-			tipc_alternate_tcp_port_prev = tipc_alternate_tcp_port;
-		}
-		dissector_add_uint_range("udp.port", tipc_udp_port_range, tipc_handle);
-		g_free(tipc_udp_port_range);
-	}
-
-	tipc_udp_port_range = range_copy(global_tipc_udp_port_range);
-	dissector_add_uint_range("udp.port", tipc_udp_port_range, tipc_handle);
+	dissector_add_uint("ethertype", ETHERTYPE_TIPC, tipc_handle);
+	dissector_add_for_decode_as_with_preference("tcp.port", tipc_tcp_handle);
+	dissector_add_uint_range_with_preference("udp.port", DEFAULT_TIPC_PORT_RANGE, tipc_handle);
 }
 
 /*

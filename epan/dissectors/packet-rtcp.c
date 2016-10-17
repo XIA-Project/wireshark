@@ -6531,9 +6531,9 @@ proto_register_rtcp(void)
         10, &global_rtcp_show_roundtrip_calculation_minimum);
 
     /* Register table for sub-dissetors */
-    rtcp_dissector_table = register_dissector_table("rtcp.app.name", "RTCP Application Name", proto_rtcp, FT_STRING, BASE_NONE, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
-    rtcp_psfb_dissector_table = register_dissector_table("rtcp.psfb.fmt", "RTCP Payload Specific Feedback Message Format", proto_rtcp, FT_UINT8, BASE_DEC, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
-    rtcp_rtpfb_dissector_table = register_dissector_table("rtcp.rtpfb.fmt", "RTCP Generic RTP Feedback Message Format", proto_rtcp, FT_UINT8, BASE_DEC, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
+    rtcp_dissector_table = register_dissector_table("rtcp.app.name", "RTCP Application Name", proto_rtcp, FT_STRING, BASE_NONE);
+    rtcp_psfb_dissector_table = register_dissector_table("rtcp.psfb.fmt", "RTCP Payload Specific Feedback Message Format", proto_rtcp, FT_UINT8, BASE_DEC);
+    rtcp_rtpfb_dissector_table = register_dissector_table("rtcp.rtpfb.fmt", "RTCP Generic RTP Feedback Message Format", proto_rtcp, FT_UINT8, BASE_DEC);
 }
 
 void
@@ -6544,7 +6544,7 @@ proto_reg_handoff_rtcp(void)
      * UDP port number.
      */
     rtcp_handle = find_dissector("rtcp");
-    dissector_add_for_decode_as("udp.port", rtcp_handle);
+    dissector_add_for_decode_as_with_preference("udp.port", rtcp_handle);
     dissector_add_for_decode_as("flip.payload", rtcp_handle );
 
     heur_dissector_add( "udp", dissect_rtcp_heur_udp, "RTCP over UDP", "rtcp_udp", proto_rtcp, HEURISTIC_ENABLE);

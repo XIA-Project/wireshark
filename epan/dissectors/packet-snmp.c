@@ -1000,7 +1000,7 @@ indexing_done:
 						int_val_offset++;
 					}
 				}
-				proto_tree_add_int64(pt_varbind, hf_snmp_integer32_value, tvb,value_offset,value_len, val);
+				pi_value = proto_tree_add_int64(pt_varbind, hf_snmp_integer32_value, tvb,value_offset,value_len, val);
 
 				goto already_added;
 			}
@@ -4064,7 +4064,7 @@ void proto_register_snmp(void) {
 				"MIB settings can be changed in the Name Resolution preferences");
 #endif
 
-	value_sub_dissectors_table = register_dissector_table("snmp.variable_oid","SNMP Variable OID", proto_snmp, FT_STRING, BASE_NONE, DISSECTOR_TABLE_ALLOW_DUPLICATE);
+	value_sub_dissectors_table = register_dissector_table("snmp.variable_oid","SNMP Variable OID", proto_snmp, FT_STRING, BASE_NONE);
 
 	register_init_routine(init_ue_cache);
 	register_cleanup_routine(cleanup_ue_cache);
@@ -4077,17 +4077,20 @@ void proto_register_snmp(void) {
 void proto_reg_handoff_snmp(void) {
 	dissector_handle_t snmp_tcp_handle;
 
-	dissector_add_uint("udp.port", UDP_PORT_SNMP, snmp_handle);
-	dissector_add_uint("udp.port", UDP_PORT_SNMP_TRAP, snmp_handle);
-	dissector_add_uint("udp.port", UDP_PORT_SNMP_PATROL, snmp_handle);
+	dissector_add_uint_with_preference("udp.port", UDP_PORT_SNMP, snmp_handle);
 	dissector_add_uint("ethertype", ETHERTYPE_SNMP, snmp_handle);
 	dissector_add_uint("ipx.socket", IPX_SOCKET_SNMP_AGENT, snmp_handle);
 	dissector_add_uint("ipx.socket", IPX_SOCKET_SNMP_SINK, snmp_handle);
 	dissector_add_uint("hpext.dxsap", HPEXT_SNMP, snmp_handle);
 
 	snmp_tcp_handle = create_dissector_handle(dissect_snmp_tcp, proto_snmp);
-	dissector_add_uint("tcp.port", TCP_PORT_SNMP, snmp_tcp_handle);
+	dissector_add_uint_with_preference("tcp.port", TCP_PORT_SNMP, snmp_tcp_handle);
+	/* Since "regular" SNMP port and "trap" SNMP port use the same handler,
+	   the "trap" port doesn't really need a separate preference.  Just register
+	   normally */
 	dissector_add_uint("tcp.port", TCP_PORT_SNMP_TRAP, snmp_tcp_handle);
+	dissector_add_uint("udp.port", UDP_PORT_SNMP_TRAP, snmp_handle);
+	dissector_add_uint("udp.port", UDP_PORT_SNMP_PATROL, snmp_handle);
 
 	data_handle = find_dissector("data");
 
@@ -4129,7 +4132,7 @@ proto_reg_handoff_smux(void)
 	dissector_handle_t smux_handle;
 
 	smux_handle = create_dissector_handle(dissect_smux, proto_smux);
-	dissector_add_uint("tcp.port", TCP_PORT_SMUX, smux_handle);
+	dissector_add_uint_with_preference("tcp.port", TCP_PORT_SMUX, smux_handle);
 }
 
 /*

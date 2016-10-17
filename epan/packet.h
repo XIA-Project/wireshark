@@ -103,11 +103,6 @@ typedef enum {
     HEURISTIC_ENABLE
 } heuristic_enable_e;
 
-typedef enum {
-    DISSECTOR_TABLE_ALLOW_DUPLICATE,
-    DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE
-} dissector_table_allow_e;
-
 typedef void (*DATFunc) (const gchar *table_name, ftenum_t selector_type,
     gpointer key, gpointer value, gpointer user_data);
 typedef void (*DATFunc_handle) (const gchar *table_name, gpointer value,
@@ -186,14 +181,14 @@ WS_DLL_PUBLIC void dissector_all_tables_foreach_table (DATFunc_table func,
  * case-sensitive)
  */
 WS_DLL_PUBLIC dissector_table_t register_dissector_table(const char *name,
-    const char *ui_name, const int proto, const ftenum_t type, const int param, dissector_table_allow_e allow_dup);
+    const char *ui_name, const int proto, const ftenum_t type, const int param);
 
 /*
  * Similar to register_dissector_table, but with a "custom" hash function
  * to store subdissectors.
  */
 WS_DLL_PUBLIC dissector_table_t register_custom_dissector_table(const char *name,
-    const char *ui_name, const int proto, GHashFunc hash_func, GEqualFunc key_equal_func, dissector_table_allow_e allow_dup);
+    const char *ui_name, const int proto, GHashFunc hash_func, GEqualFunc key_equal_func);
 
 /** Deregister the dissector table by table name. */
 void deregister_dissector_table(const char *name);
@@ -220,8 +215,16 @@ WS_DLL_PUBLIC void dissector_dump_dissector_tables(void);
 WS_DLL_PUBLIC void dissector_add_uint(const char *name, const guint32 pattern,
     dissector_handle_t handle);
 
+/* Add an entry to a uint dissector table with "preference" automatically added. */
+WS_DLL_PUBLIC void dissector_add_uint_with_preference(const char *name, const guint32 pattern,
+    dissector_handle_t handle);
+
 /* Add an range of entries to a uint dissector table. */
 WS_DLL_PUBLIC void dissector_add_uint_range(const char *abbrev, struct epan_range *range,
+    dissector_handle_t handle);
+
+/* Add an range of entries to a uint dissector table with "preference" automatically added. */
+WS_DLL_PUBLIC void dissector_add_uint_range_with_preference(const char *abbrev, const char* range_str,
     dissector_handle_t handle);
 
 /* Delete the entry for a dissector in a uint dissector table
@@ -371,17 +374,25 @@ WS_DLL_PUBLIC dissector_handle_t dissector_get_guid_handle(
 WS_DLL_PUBLIC void dissector_add_for_decode_as(const char *name,
     dissector_handle_t handle);
 
+/* Same as dissector_add_for_decode_as, but adds preference for dissector table value */
+WS_DLL_PUBLIC void dissector_add_for_decode_as_with_preference(const char *name,
+    dissector_handle_t handle);
+
 /** Get the list of handles for a dissector table
  */
 WS_DLL_PUBLIC GSList *dissector_table_get_dissector_handles(dissector_table_t dissector_table);
+
+/** Get a handle to dissector out of a dissector table
+ */
+WS_DLL_PUBLIC dissector_handle_t dissector_table_get_dissector_handle(dissector_table_t dissector_table, gchar* short_name);
 
 /** Get a dissector table's type
  */
 WS_DLL_PUBLIC ftenum_t dissector_table_get_type(dissector_table_t dissector_table);
 
-/** Get a dissector table's ability to allow duplicate protocols
+/** Mark a dissector table as allowing "Decode As"
  */
-WS_DLL_PUBLIC dissector_table_allow_e dissector_table_get_proto_allowed(dissector_table_t dissector_table);
+WS_DLL_PUBLIC void dissector_table_allow_decode_as(dissector_table_t dissector_table);
 
 /* List of "heuristic" dissectors (which get handed a packet, look at it,
    and either recognize it as being for their protocol, dissect it, and

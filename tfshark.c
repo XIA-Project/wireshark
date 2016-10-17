@@ -420,6 +420,8 @@ main(int argc, char *argv[])
          "\n"
          "%s",
       get_ws_vcs_version_info(), comp_info_str->str, runtime_info_str->str);
+  g_string_free(comp_info_str, TRUE);
+  g_string_free(runtime_info_str, TRUE);
 
   /*
    * In order to have the -X opts assigned before the wslua machine starts
@@ -509,7 +511,7 @@ main(int argc, char *argv[])
 
   /* Scan for plugins.  This does *not* call their registration routines;
      that's done later. */
-  scan_plugins();
+  scan_plugins(REPORT_LOAD_FAILURE);
 
 #endif
 
@@ -854,7 +856,8 @@ main(int argc, char *argv[])
       }
       break;
     case 'v':         /* Show version and exit */
-    {
+      comp_info_str = get_compiled_version_info(NULL, epan_get_compiled_version_info);
+      runtime_info_str = get_runtime_version_info(get_tfshark_runtime_version_info);
       show_version("TFShark (Wireshark)", comp_info_str, runtime_info_str);
       g_string_free(comp_info_str, TRUE);
       g_string_free(runtime_info_str, TRUE);
@@ -863,12 +866,11 @@ main(int argc, char *argv[])
        * cruft getting in the way. Makes the results of running
        * $ ./tools/valgrind-wireshark -n
        * much more useful. */
+      epan_cleanup();
 #ifdef HAVE_EXTCAP
       extcap_cleanup();
 #endif
-      epan_cleanup();
       return 0;
-    }
     case 'O':        /* Only output these protocols */
       /* already processed; just ignore it now */
       break;
@@ -994,10 +996,10 @@ main(int argc, char *argv[])
     if (!dfilter_compile(rfilter, &rfcode, &err_msg)) {
       cmdarg_err("%s", err_msg);
       g_free(err_msg);
+      epan_cleanup();
 #ifdef HAVE_EXTCAP
       extcap_cleanup();
 #endif
-      epan_cleanup();
       return 2;
     }
   }
@@ -1007,10 +1009,10 @@ main(int argc, char *argv[])
     if (!dfilter_compile(dfilter, &dfcode, &err_msg)) {
       cmdarg_err("%s", err_msg);
       g_free(err_msg);
+      epan_cleanup();
 #ifdef HAVE_EXTCAP
       extcap_cleanup();
 #endif
-      epan_cleanup();
       return 2;
     }
   }
@@ -1055,10 +1057,10 @@ main(int argc, char *argv[])
     /* TODO: if tfshark is ever changed to give the user a choice of which
        open_routine reader to use, then the following needs to change. */
     if (cf_open(&cfile, cf_name, WTAP_TYPE_AUTO, FALSE, &err) != CF_OK) {
+      epan_cleanup();
 #ifdef HAVE_EXTCAP
       extcap_cleanup();
 #endif
-      epan_cleanup();
       return 2;
     }
 
@@ -1096,10 +1098,10 @@ main(int argc, char *argv[])
   draw_tap_listeners(TRUE);
   funnel_dump_all_text_windows();
   epan_free(cfile.epan);
+  epan_cleanup();
 #ifdef HAVE_EXTCAP
   extcap_cleanup();
 #endif
-  epan_cleanup();
 
   output_fields_free(output_fields);
   output_fields = NULL;

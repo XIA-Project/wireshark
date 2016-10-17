@@ -451,7 +451,7 @@ void commandline_other_options(int argc, char *argv[], gboolean opt_reset)
                 global_commandline_info.jump_backwards = SD_BACKWARD;
                 break;
             case 'g':        /* Go to packet with the given packet number */
-                global_commandline_info.go_to_packet = get_positive_int(optarg, "go to packet");
+                global_commandline_info.go_to_packet = get_nonzero_guint32(optarg, "go to packet");
                 break;
             case 'J':        /* Jump to the first packet which matches the filter criteria */
                 global_commandline_info.jfilter = optarg;
@@ -471,10 +471,6 @@ void commandline_other_options(int argc, char *argv[], gboolean opt_reset)
                 capture_option_specified = TRUE;
                 arg_error = TRUE;
 #endif
-                break;
-            case 'm':        /* Fixed-width font for the display. GTK+ only. */
-                g_free(global_commandline_info.prefs_p->gui_gtk2_font_name);
-                global_commandline_info.prefs_p->gui_gtk2_font_name = g_strdup(optarg);
                 break;
             case 'n':        /* No name resolution */
                 disable_name_resolution();

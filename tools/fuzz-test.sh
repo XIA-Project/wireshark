@@ -28,6 +28,7 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
 TEST_TYPE="fuzz"
+# shellcheck source=tools/test-common.sh
 . `dirname $0`/test-common.sh || exit 1
 
 # Sanity check to make sure we can find our plugins. Zero or less disables.
@@ -46,7 +47,7 @@ CONFIG_PROFILE=
 VALGRIND=0
 
 # Run under AddressSanitizer ?
-ASAN=0
+ASAN=$CONFIGURED_WITH_ASAN
 
 # Don't skip any byte from being changed
 CHANGE_OFFSET=0
@@ -206,19 +207,25 @@ while [ \( $PASS -lt $MAX_PASSES -o $MAX_PASSES -lt 1 \) -a $DONE -ne 1 ] ; do
             echo -n "($ARGS) "
             echo -e "Command and args: $RUNNER $ARGS\n" > $TMP_DIR/$ERR_FILE
 
-            # Run in a child process with limits, e.g. stop it if it's running
-            # longer then MAX_CPU_TIME seconds. (ulimit may not be supported
-            # well on some platforms, particularly cygwin.)
+            # Run in a child process with limits.
             (
+                # Set some limits to the child processes, e.g. stop it if
+                # it's running longer than MAX_CPU_TIME seconds. (ulimit
+                # is not supported well on cygwin - it shows some warnings -
+                # and the features we use may not all be supported on some
+                # UN*X platforms.)
                 ulimit -S -t $MAX_CPU_TIME -s $MAX_STACK
+
+                # Allow core files to be generated
                 ulimit -c unlimited
-                SUBSHELL_PID=$($SHELL -c 'echo $PPID')
 
                 # Don't enable ulimit -v when using ASAN. See
                 # https://github.com/google/sanitizers/wiki/AddressSanitizer#ulimit--v
                 if [ $ASAN -eq 0 ]; then
-                    ulimit -v $MAX_VMEM
+                    ulimit -S -v $MAX_VMEM
                 fi
+
+                SUBSHELL_PID=$($SHELL -c 'echo $PPID')
 
                 "$RUNNER" $COMMON_ARGS $ARGS $TMP_DIR/$TMP_FILE \
                     > /dev/null 2>> $TMP_DIR/$ERR_FILE.$SUBSHELL_PID
@@ -230,7 +237,7 @@ while [ \( $PASS -lt $MAX_PASSES -o $MAX_PASSES -lt 1 \) -a $DONE -ne 1 ] ; do
 
         for RUNNER_PID in $RUNNER_PIDS ; do
             wait $RUNNER_PID
-            RETVAL=$?
+            RUNNER_RETVAL=$?
             mv $TMP_DIR/$ERR_FILE.$RUNNER_PID $TMP_DIR/$ERR_FILE
 
             # Uncomment the next two lines to enable dissector bug
@@ -243,7 +250,7 @@ while [ \( $PASS -lt $MAX_PASSES -o $MAX_PASSES -lt 1 \) -a $DONE -ne 1 ] ; do
                 VG_DEF_LEAKED=`grep "definitely lost:" $TMP_DIR/$ERR_FILE | cut -f7 -d' ' | tr -d ,`
                 VG_IND_LEAKED=`grep "indirectly lost:" $TMP_DIR/$ERR_FILE | cut -f7 -d' ' | tr -d ,`
                 VG_TOTAL_LEAKED=`expr $VG_DEF_LEAKED + $VG_IND_LEAKED`
-                if [ $? -ne 0 ] ; then
+                if [ $RUNNER_RETVAL -ne 0 ] ; then
                     echo "General Valgrind failure."
                     VG_ERR_CNT=1
                 elif [ "$VG_TOTAL_LEAKED" -gt "$MAX_LEAK" ] ; then
@@ -256,7 +263,7 @@ while [ \( $PASS -lt $MAX_PASSES -o $MAX_PASSES -lt 1 \) -a $DONE -ne 1 ] ; do
                 fi
             fi
 
-            if [ $DONE -ne 1 -a \( $RETVAL -ne 0 -o $DISSECTOR_BUG -ne 0 -o $VG_ERR_CNT -ne 0 \) ] ; then
+            if [ $DONE -ne 1 -a \( $RUNNER_RETVAL -ne 0 -o $DISSECTOR_BUG -ne 0 -o $VG_ERR_CNT -ne 0 \) ] ; then
                 rm -f $RUNNER_ERR_FILES
                 ws_exit_error
             fi

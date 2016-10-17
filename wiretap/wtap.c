@@ -751,8 +751,8 @@ static struct encap_type_info encap_table_base[] = {
 	/* WTAP_ENCAP_IPNET */
 	{ "Solaris IPNET", "ipnet" },
 
-	/* WTAP_ENCAP_SOCKETCAN_BIGENDIAN */
-	{ "SocketCAN with big-endian CAN ID", "socketcan-bigendian" },
+	/* WTAP_ENCAP_SOCKETCAN */
+	{ "SocketCAN", "socketcan" },
 
 	/* WTAP_ENCAP_IEEE_802_11_NETMON */
 	{ "IEEE 802.11 plus Network Monitor radio header", "ieee-802-11-netmon" },
@@ -921,9 +921,6 @@ static struct encap_type_info encap_table_base[] = {
 
 	/* WTAP_ENCAP_JUNIPER_VN */
 	{ "Juniper VN", "juniper-vn" },
-
-	/* WTAP_ENCAP_SOCKETCAN_HOSTENDIAN */
-	{ "SocketCAN with host-endian CAN ID", "socketcan-hostendian" },
 };
 
 WS_DLL_LOCAL
@@ -1271,7 +1268,8 @@ wtap_read(wtap *wth, int *err, gchar **err_info, gint64 *data_offset)
 }
 
 /*
- * Read a given number of bytes from a file.
+ * Read a given number of bytes from a file into a buffer or, if
+ * buf is NULL, just discard them.
  *
  * If we succeed, return TRUE.
  *
@@ -1302,7 +1300,8 @@ wtap_read_bytes_or_eof(FILE_T fh, void *buf, unsigned int count, int *err,
 }
 
 /*
- * Read a given number of bytes from a file.
+ * Read a given number of bytes from a file into a buffer or, if
+ * buf is NULL, just discard them.
  *
  * If we succeed, return TRUE.
  *

@@ -41,6 +41,7 @@
 #include <epan/proto.h>
 #include <epan/strutil.h>
 #include <epan/column.h>
+#include <epan/decode_as.h>
 #include "print.h"
 #include <wsutil/file_util.h>
 #include <wsutil/ws_printf.h> /* ws_g_warning */
@@ -248,6 +249,7 @@ free_pref(gpointer data, gpointer user_data _U_)
     case PREF_BOOL:
     case PREF_ENUM:
     case PREF_UINT:
+    case PREF_DECODE_AS_UINT:
     case PREF_STATIC_TEXT:
     case PREF_UAT:
     case PREF_COLOR:
@@ -261,6 +263,7 @@ free_pref(gpointer data, gpointer user_data _U_)
         pref->default_val.string = NULL;
         break;
     case PREF_RANGE:
+    case PREF_DECODE_AS_RANGE:
         g_free(*pref->varp.range);
         *pref->varp.range = NULL;
         g_free(pref->default_val.range);
@@ -1133,20 +1136,16 @@ DIAG_OFF(cast-qual)
 DIAG_ON(cast-qual)
 }
 
-/*
- * Register a preference with a ranged value.
- */
-void
-prefs_register_range_preference(module_t *module, const char *name,
+/* Refactoring to handle both PREF_RANGE and PREF_DECODE_AS_RANGE */
+static void
+prefs_register_range_preference_common(module_t *module, const char *name,
                                 const char *title, const char *description,
-                                range_t **var, guint32 max_value)
+                                range_t **var, guint32 max_value, int type)
 {
     pref_t *preference;
 
-    preference = register_preference(module, name, title, description,
-                                     PREF_RANGE);
+    preference = register_preference(module, name, title, description, type);
     preference->info.max_value = max_value;
-
 
     /*
      * Range preference values should be non-null (as you can't
@@ -1161,6 +1160,18 @@ prefs_register_range_preference(module_t *module, const char *name,
     preference->varp.range = var;
     preference->default_val.range = range_copy(*var);
     preference->stashed_val.range = NULL;
+}
+
+/*
+ * Register a preference with a ranged value.
+ */
+void
+prefs_register_range_preference(module_t *module, const char *name,
+                                const char *title, const char *description,
+                                range_t **var, guint32 max_value)
+{
+    prefs_register_range_preference_common(module, name, title,
+                description, var, max_value, PREF_RANGE);
 }
 
 static gboolean
@@ -1287,6 +1298,34 @@ prefs_register_custom_preference(module_t *module, const char *name,
     /* XXX - wait until we can handle void** pointers
     preference->custom_cbs.init_cb(preference, custom_data);
     */
+}
+
+/*
+ * Register a (internal) "Decode As" preference with a ranged value.
+ */
+void prefs_register_decode_as_range_preference(module_t *module, const char *name,
+    const char *title, const char *description, range_t **var,
+    guint32 max_value)
+{
+    prefs_register_range_preference_common(module, name, title,
+                description, var, max_value, PREF_DECODE_AS_RANGE);
+}
+
+/*
+ * Register a (internal) "Decode As" preference with an unsigned integral value
+ * for a dissector table.
+ */
+void prefs_register_decode_as_preference(module_t *module, const char *name,
+    const char *title, const char *description, guint *var)
+{
+    pref_t *preference;
+
+    preference = register_preference(module, name, title, description,
+                                     PREF_DECODE_AS_UINT);
+    preference->varp.uint = var;
+    preference->default_val.uint = *var;
+    /* XXX - Presume base 10 for now */
+    preference->info.base = 10;
 }
 
 /*
@@ -2456,6 +2495,10 @@ prefs_register_modules(void)
                                    "Show the intelligent scroll bar (a minimap of packet list colors in the scrollbar)",
                                    &prefs.gui_packet_list_show_minimap);
 
+    register_string_like_preference(gui_module, "interfaces_hidden_types", "Hide interface types in list",
+        "Hide the given interface types in the startup list",
+        &prefs.gui_interfaces_hide_types, PREF_STRING, NULL, TRUE);
+
     /* Console
      * These are preferences that can be read/written using the
      * preference module API.  These preferences still use their own
@@ -2474,6 +2517,11 @@ prefs_register_modules(void)
     custom_cbs.to_str_cb = console_log_level_to_str_cb;
     prefs_register_uint_custom_preference(console_module, "log.level", "logging level",
         "A bitmask of GLib log levels", &custom_cbs, &prefs.console_log_level);
+
+    prefs_register_bool_preference(console_module, "incomplete_dissectors_check_debug",
+                                   "Print debug line for incomplete dissectors",
+                                   "Look for dissectors that left some bytes undecoded (debug)",
+                                   &prefs.incomplete_dissectors_check_debug);
 
     /* Capture
      * These are preferences that can be read/written using the
@@ -3119,6 +3167,8 @@ pre_init_prefs(void)
     prefs.gui_packet_list_elide_mode = ELIDE_RIGHT;
     prefs.gui_packet_list_show_related = TRUE;
     prefs.gui_packet_list_show_minimap = TRUE;
+    if (prefs.gui_interfaces_hide_types) g_free (prefs.gui_interfaces_hide_types);
+    prefs.gui_interfaces_hide_types = g_strdup("");
 
     prefs.gui_qt_packet_list_separator = FALSE;
 
@@ -3202,6 +3252,7 @@ reset_pref(pref_t *pref)
     switch (type) {
 
     case PREF_UINT:
+    case PREF_DECODE_AS_UINT:
         *pref->varp.uint = pref->default_val.uint;
         break;
 
@@ -3227,6 +3278,7 @@ reset_pref(pref_t *pref)
         break;
 
     case PREF_RANGE:
+    case PREF_DECODE_AS_RANGE:
         g_free(*pref->varp.range);
         *pref->varp.range = range_copy(pref->default_val.range);
         break;
@@ -4018,6 +4070,260 @@ deprecated_heur_dissector_pref(gchar *pref_name, const gchar *value)
     return FALSE;
 }
 
+static gboolean
+deprecated_port_pref(gchar *pref_name, const gchar *value)
+{
+    struct port_pref_name
+    {
+        const char* pref_name;
+        const char* module_name;
+        const char* table_name;
+        guint base;
+    };
+
+    struct obsolete_pref_name
+    {
+        const char* pref_name;
+    };
+
+    /* For now this is only supporting TCP/UDP port dissector preferences
+       which are assumed to be decimal */
+    struct port_pref_name port_prefs[] = {
+        /* TCP */
+        {"cmp.tcp_alternate_port", "CMP", "tcp.port", 10},
+        {"h248.tcp_port", "H248", "tcp.port", 10},
+        {"cops.tcp.cops_port", "COPS", "tcp.port", 10},
+        {"dhcpfo.tcp_port", "DHCPFO", "tcp.port", 10},
+        {"enttec.tcp_port", "ENTTEC", "tcp.port", 10},
+        {"forces.tcp_alternate_port", "ForCES", "tcp.port", 10},
+        {"ged125.tcp_port", "GED125", "tcp.port", 10},
+        {"hpfeeds.dissector_port", "HPFEEDS", "tcp.port", 10},
+        {"lsc.port", "LSC", "tcp.port", 10},
+        {"megaco.tcp.txt_port", "MEGACO", "tcp.port", 10},
+        {"netsync.tcp_port", "Netsync", "tcp.port", 10},
+        {"osi.tpkt_port", "OSI", "tcp.port", 10},
+        {"rsync.tcp_port", "RSYNC", "tcp.port", 10},
+        {"sametime.tcp_port", "SAMETIME", "tcp.port", 10},
+        {"sigcomp.tcp.port2", "SIGCOMP", "tcp.port", 10},
+        {"synphasor.tcp_port", "SYNCHROPHASOR", "tcp.port", 10},
+        {"tipc.alternate_port", "TIPC", "tcp.port", 10},
+        {"vnc.alternate_port", "VNC", "tcp.port", 10},
+        {"scop.port", "SCoP", "tcp.port", 10},
+        {"scop.port_secure", "SCoP", "tcp.port", 10},
+        /* UDP */
+        {"h248.udp_port", "H248", "udp.port", 10},
+        {"actrace.udp_port", "ACtrace", "udp.port", 10},
+        {"brp.port", "BRP", "udp.port", 10},
+        {"bvlc.additional_udp_port", "BVLC", "udp.port", 10},
+        {"capwap.udp.port.control", "CAPWAP-CONTROL", "udp.port", 10},
+        {"capwap.udp.port.data", "CAPWAP-CONTROL", "udp.port", 10},
+        {"coap.udp_port", "CoAP", "udp.port", 10},
+        {"enttec.udp_port", "ENTTEC", "udp.port", 10},
+        {"forces.udp_alternate_port", "ForCES", "udp.port", 10},
+        {"ldss.udp_port", "LDSS", "udp.port", 10},
+        {"lmp.udp_port", "LMP", "udp.port", 10},
+        {"ltp.port", "LTP", "udp.port", 10},
+        {"lwres.udp.lwres_port", "LWRES", "udp.port", 10},
+        {"megaco.udp.txt_port", "MEGACO", "udp.port", 10},
+        {"pgm.udp.encap_ucast_port", "PGM", "udp.port", 10},
+        {"pgm.udp.encap_mcast_port", "PGM", "udp.port", 10},
+        {"quic.udp.quic.port", "QUIC", "udp.port", 10},
+        {"quic.udp.quics.port", "QUIC", "udp.port", 10},
+        {"radius.alternate_port", "RADIUS", "udp.port", 10},
+        {"rdt.default_udp_port", "RDT", "udp.port", 10},
+        {"alc.default.udp_port", "ALC", "udp.port", 10},
+        {"sigcomp.udp.port2", "SIGCOMP", "udp.port", 10},
+        {"synphasor.udp_port", "SYNCHROPHASOR", "udp.port", 10},
+        {"tdmop.udpport", "TDMoP", "udp.port", 10},
+        {"uaudp.port1", "UAUDP", "udp.port", 10},
+        {"uaudp.port2", "UAUDP", "udp.port", 10},
+        {"uaudp.port3", "UAUDP", "udp.port", 10},
+        {"uaudp.port4", "UAUDP", "udp.port", 10},
+        {"uhd.dissector_port", "UHD", "udp.port", 10},
+        {"vrt.dissector_port", "VITA 49", "udp.port", 10},
+        {"vuze-dht.udp_port", "Vuze-DHT", "udp.port", 10},
+        {"wimaxasncp.udp.wimax_port", "WiMAX ASN CP", "udp.port", 10},
+    };
+
+    struct port_pref_name port_range_prefs[] = {
+        /* TCP */
+        {"couchbase.tcp.ports", "Couchbase", "tcp.port", 10},
+        {"gsm_ipa.tcp_ports", "GSM over IP", "tcp.port", 10},
+        {"kafka.tcp.ports", "Kafka", "tcp.port", 10},
+        {"kt.tcp.ports", "Kyoto Tycoon", "tcp.port", 10},
+        {"memcache.tcp.ports", "MEMCACHE", "tcp.port", 10},
+        {"mrcpv2.tcp.port_range", "MRCPv2", "tcp.port", 10},
+        {"rtsp.tcp.port_range", "RTSP", "tcp.port", 10},
+        {"sip.tcp.ports", "SIP", "tcp.port", 10},
+        {"tds.tcp_ports", "TDS", "tcp.port", 10},
+        {"uma.tcp.ports", "UMA", "tcp.port", 10},
+        /* UDP */
+        {"aruba_erm.udp.ports", "ARUBA_ERM", "udp.port", 10},
+        {"diameter.udp.ports", "DIAMETER", "udp.port", 10},
+        {"dmp.udp_ports", "DMP", "udp.port", 10},
+        {"dns.udp.ports", "DNS", "udp.port", 10},
+        {"gsm_ipa.udp_ports", "GSM over IP", "udp.port", 10},
+        {"hcrt.dissector_udp_port", "HCrt", "udp.port", 10},
+        {"memcache.udp.ports", "MEMCACHE", "udp.port", 10},
+        {"nb_rtpmux.udp_ports", "NB_RTPMUX", "udp.port", 10},
+        {"gprs-ns.udp.ports", "GPRS-NS", "udp.port", 10},
+        {"p_mul.udp_ports", "P_MUL", "udp.port", 10},
+        {"radius.ports", "RADIUS", "udp.port", 10},
+        {"sflow.ports", "sFlow", "udp.port", 10},
+        {"sscop.udp.ports", "SSCOP", "udp.port", 10},
+        {"tftp.udp_ports", "TFTP", "udp.port", 10},
+        {"tipc.udp.ports", "TIPC", "udp.port", 10},
+    };
+
+    /* These are subdissectors of TPKT/OSITP that used to have a
+       TCP port preference even though they were never
+       directly on TCP.  Convert them to use Decode As
+       with the TPKT dissector handle */
+    struct port_pref_name tpkt_subdissector_port_prefs[] = {
+        {"dap.tcp.port", "DAP", "tcp.port", 10},
+        {"disp.tcp.port", "DISP", "tcp.port", 10},
+        {"dop.tcp.port", "DOP", "tcp.port", 10},
+        {"dsp.tcp.port", "DSP", "tcp.port", 10},
+        {"p1.tcp.port", "P1", "tcp.port", 10},
+        {"p7.tcp.port", "P7", "tcp.port", 10},
+        {"rdp.tcp.port", "RDP", "tcp.port", 10},
+    };
+
+    /* These are obsolete preferences from the dissectors' view,
+       (typically because of a switch from a single value to a
+       range value) but the name of the preference conflicts
+       with the generated preference name from the dissector table.
+       Don't allow the obsolete preference through to be handled */
+    struct obsolete_pref_name obsolete_prefs[] = {
+        {"diameter.tcp.port"},
+        {"kafka.tcp.port"},
+        {"mrcpv2.tcp.port"},
+        {"rtsp.tcp.port"},
+        {"sip.tcp.port"},
+        {"t38.tcp.port"},
+    };
+
+    unsigned int i;
+    char     *p;
+    guint    uval;
+    dissector_table_t sub_dissectors;
+    dissector_handle_t handle, tpkt_handle;
+
+    for (i = 0; i < sizeof(port_prefs)/sizeof(struct port_pref_name); i++)
+    {
+        if (strcmp(pref_name, port_prefs[i].pref_name) == 0)
+        {
+            /* XXX - give an error if it doesn't fit in a guint? */
+            uval = (guint)strtoul(value, &p, port_prefs[i].base);
+            if (p == value || *p != '\0')
+                return FALSE;        /* number was bad */
+
+            /* If the value is zero, it wouldn't add to the Decode As tables */
+            if (uval != 0)
+            {
+                sub_dissectors = find_dissector_table(port_prefs[i].table_name);
+                if (sub_dissectors != NULL) {
+                    handle = dissector_table_get_dissector_handle(sub_dissectors, (gchar*)port_prefs[i].module_name);
+                    if (handle != NULL) {
+                        dissector_change_uint(port_prefs[i].table_name, uval, handle);
+                        decode_build_reset_list(port_prefs[i].table_name, dissector_table_get_type(sub_dissectors), GUINT_TO_POINTER(uval), NULL, NULL);
+                    }
+                }
+            }
+
+            return TRUE;
+        }
+    }
+
+    for (i = 0; i < sizeof(port_range_prefs)/sizeof(struct port_pref_name); i++)
+    {
+        if (strcmp(pref_name, port_range_prefs[i].pref_name) == 0)
+        {
+            range_t *newrange;
+            guint32 range_i, range_j;
+            guint32 max_value = 0;
+
+            sub_dissectors = find_dissector_table(port_range_prefs[i].table_name);
+            if (sub_dissectors != NULL) {
+                /* Max value is based on datatype of dissector table */
+                switch (dissector_table_get_type(sub_dissectors)) {
+                case FT_UINT8:
+                    max_value = 0xFF;
+                    break;
+                case FT_UINT16:
+                    max_value = 0xFFFF;
+                    break;
+                case FT_UINT24:
+                    max_value = 0xFFFFFF;
+                    break;
+                case FT_UINT32:
+                    max_value = 0xFFFFFFFF;
+                    break;
+
+                default:
+                    g_error("The dissector table %s (%s) is not an integer type - are you using a buggy plugin?", port_range_prefs[i].table_name, get_dissector_table_ui_name(port_range_prefs[i].table_name));
+                    g_assert_not_reached();
+                }
+
+                if (range_convert_str_work(&newrange, value, max_value,
+                                           TRUE) != CVT_NO_ERROR) {
+                    return FALSE;        /* number was bad */
+                }
+
+                handle = dissector_table_get_dissector_handle(sub_dissectors, (gchar*)port_range_prefs[i].module_name);
+                if (handle != NULL) {
+
+                    for (range_i = 0; range_i < newrange->nranges; range_i++) {
+                        for (range_j = newrange->ranges[range_i].low; range_j < newrange->ranges[range_i].high; range_j++) {
+                            dissector_change_uint(port_range_prefs[i].table_name, range_j, handle);
+                            decode_build_reset_list(port_range_prefs[i].table_name, dissector_table_get_type(sub_dissectors), GUINT_TO_POINTER(range_j), NULL, NULL);
+                        }
+
+                        dissector_change_uint(port_range_prefs[i].table_name, newrange->ranges[range_i].high, handle);
+                        decode_build_reset_list(port_range_prefs[i].table_name, dissector_table_get_type(sub_dissectors), GUINT_TO_POINTER(newrange->ranges[range_i].high), NULL, NULL);
+                    }
+                }
+
+                g_free(newrange);
+            }
+
+            return TRUE;
+        }
+    }
+
+    for (i = 0; i < sizeof(tpkt_subdissector_port_prefs)/sizeof(struct port_pref_name); i++)
+    {
+        if (strcmp(pref_name, tpkt_subdissector_port_prefs[i].pref_name) == 0)
+        {
+            /* XXX - give an error if it doesn't fit in a guint? */
+            uval = (guint)strtoul(value, &p, tpkt_subdissector_port_prefs[i].base);
+            if (p == value || *p != '\0')
+                return FALSE;        /* number was bad */
+
+            /* If the value is 0 or 102 (default TPKT port), don't add to the Decode As tables */
+            if ((uval != 0) && (uval != 102))
+            {
+                tpkt_handle = find_dissector("tpkt");
+                if (tpkt_handle != NULL) {
+                    dissector_change_uint(tpkt_subdissector_port_prefs[i].table_name, uval, tpkt_handle);
+                }
+            }
+
+            return TRUE;
+        }
+    }
+
+    for (i = 0; i < sizeof(obsolete_prefs)/sizeof(struct obsolete_pref_name); i++)
+    {
+        if (strcmp(pref_name, obsolete_prefs[i].pref_name) == 0)
+        {
+            /* Just ignore the preference */
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
 static prefs_set_pref_e
 set_pref(gchar *pref_name, const gchar *value, void *private_data _U_,
          gboolean return_range_errors)
@@ -4077,6 +4383,8 @@ set_pref(gchar *pref_name, const gchar *value, void *private_data _U_,
         }
     } else if (deprecated_heur_dissector_pref(pref_name, value)) {
          /* Handled within deprecated_heur_dissector_pref() if found */
+    } else if (deprecated_port_pref(pref_name, value)) {
+         /* Handled within deprecated_port_pref() if found */
     } else {
         /* Handle deprecated "global" options that don't have a module
          * associated with them
@@ -4454,7 +4762,43 @@ set_pref(gchar *pref_name, const gchar *value, void *private_data _U_,
                 *pref->varp.uint = uval;
             }
             break;
+        case PREF_DECODE_AS_UINT:
+        {
+            /* This is for backwards compatibility in case any of the preferences
+               that shared the "Decode As" preference name and used to be PREF_UINT
+               are now applied directly to the Decode As funtionality */
 
+            dissector_table_t sub_dissectors;
+            dissector_handle_t handle;
+
+            /* XXX - give an error if it doesn't fit in a guint? */
+            uval = (guint)strtoul(value, &p, pref->info.base);
+            if (p == value || *p != '\0')
+                return PREFS_SET_SYNTAX_ERR;        /* number was bad */
+
+            if (*pref->varp.uint != uval) {
+                containing_module->prefs_changed = TRUE;
+                *pref->varp.uint = uval;
+
+                /* Name of preference is the dissector table */
+                sub_dissectors = find_dissector_table(pref->name);
+                if (sub_dissectors != NULL) {
+                    handle = dissector_table_get_dissector_handle(sub_dissectors, (gchar*)module->title);
+                    if (handle != NULL) {
+                        if (uval != 0) {
+                            dissector_change_uint(pref->name, uval, handle);
+                            decode_build_reset_list(pref->name, dissector_table_get_type(sub_dissectors), GUINT_TO_POINTER(uval), NULL, NULL);
+                        } else {
+                            dissector_delete_uint(pref->name, *pref->varp.uint, handle);
+                            decode_build_reset_list(pref->name, dissector_table_get_type(sub_dissectors), pref->varp.uint, NULL, NULL);
+                        }
+
+                        /* XXX - Do we save the decode_as_entries file here? */
+                    }
+                }
+            }
+            break;
+        }
         case PREF_BOOL:
             /* XXX - give an error if it's neither "true" nor "false"? */
             if (g_ascii_strcasecmp(value, "true") == 0)
@@ -4488,6 +4832,61 @@ set_pref(gchar *pref_name, const gchar *value, void *private_data _U_,
             if (!prefs_set_range_value_work(pref, value, return_range_errors,
                                             &containing_module->prefs_changed))
                 return PREFS_SET_SYNTAX_ERR;        /* number was bad */
+            break;
+        }
+        case PREF_DECODE_AS_RANGE:
+        {
+            /* This is for backwards compatibility in case any of the preferences
+               that shared the "Decode As" preference name and used to be PREF_RANGE
+               are now applied directly to the Decode As funtionality */
+            range_t *newrange;
+            dissector_table_t sub_dissectors;
+            dissector_handle_t handle;
+            guint32 i, j;
+
+            if (range_convert_str_work(&newrange, value, pref->info.max_value,
+                                       return_range_errors) != CVT_NO_ERROR) {
+                return PREFS_SET_SYNTAX_ERR;        /* number was bad */
+            }
+
+            if (!ranges_are_equal(*pref->varp.range, newrange)) {
+                g_free(*pref->varp.range);
+                *pref->varp.range = newrange;
+                containing_module->prefs_changed = TRUE;
+
+                /* Name of preference is the dissector table */
+                sub_dissectors = find_dissector_table(pref->name);
+                if (sub_dissectors != NULL) {
+                    handle = dissector_table_get_dissector_handle(sub_dissectors, (gchar*)module->title);
+                    if (handle != NULL) {
+                        /* Delete all of the old values from the dissector table */
+		                for (i = 0; i < (*pref->varp.range)->nranges; i++) {
+			                for (j = (*pref->varp.range)->ranges[i].low; j < (*pref->varp.range)->ranges[i].high; j++) {
+                                dissector_delete_uint(pref->name, j, handle);
+                                decode_build_reset_list(pref->name, dissector_table_get_type(sub_dissectors), GUINT_TO_POINTER(j), NULL, NULL);
+                            }
+
+                            dissector_delete_uint(pref->name, (*pref->varp.range)->ranges[i].high, handle);
+                            decode_build_reset_list(pref->name, dissector_table_get_type(sub_dissectors), GUINT_TO_POINTER((*pref->varp.range)->ranges[i].high), NULL, NULL);
+		                }
+
+                        /* Add new values to the dissector table */
+		                for (i = 0; i < newrange->nranges; i++) {
+			                for (j = newrange->ranges[i].low; j < newrange->ranges[i].high; j++) {
+                                dissector_change_uint(pref->name, j, handle);
+                                decode_build_reset_list(pref->name, dissector_table_get_type(sub_dissectors), GUINT_TO_POINTER(j), NULL, NULL);
+                            }
+
+                            dissector_change_uint(pref->name, newrange->ranges[i].high, handle);
+                            decode_build_reset_list(pref->name, dissector_table_get_type(sub_dissectors), GUINT_TO_POINTER(newrange->ranges[i].high), NULL, NULL);
+		                }
+
+                        /* XXX - Do we save the decode_as_entries file here? */
+                    }
+                }
+            } else {
+                g_free(newrange);
+            }
             break;
         }
 
@@ -4595,6 +4994,14 @@ prefs_pref_type_name(pref_t *pref)
         type_name = "Custom";
         break;
 
+    case PREF_DECODE_AS_UINT:
+        type_name = "Decode As value";
+        break;
+
+    case PREF_DECODE_AS_RANGE:
+        type_name = "Range (for Decode As)";
+        break;
+
     case PREF_STATIC_TEXT:
         type_name = "Static text";
         break;
@@ -4692,6 +5099,14 @@ prefs_pref_type_description(pref_t *pref)
         type_desc = "A custom value";
         break;
 
+    case PREF_DECODE_AS_UINT:
+        type_desc = "An integer value used in Decode As";
+        break;
+
+    case PREF_DECODE_AS_RANGE:
+        type_desc = "A string denoting an positive integer range for Decode As";
+        break;
+
     case PREF_STATIC_TEXT:
         type_desc = "[Static text]";
         break;
@@ -4721,6 +5136,11 @@ prefs_pref_is_default(pref_t *pref)
 
     switch (type) {
 
+    case PREF_DECODE_AS_UINT:
+        if (pref->default_val.uint == *pref->varp.uint)
+            return TRUE;
+        break;
+
     case PREF_UINT:
         if (pref->default_val.uint == *pref->varp.uint)
             return TRUE;
@@ -4743,6 +5163,7 @@ prefs_pref_is_default(pref_t *pref)
             return TRUE;
         break;
 
+    case PREF_DECODE_AS_RANGE:
     case PREF_RANGE:
     {
         if ((ranges_are_equal(pref->default_val.range, *pref->varp.range)))
@@ -4812,6 +5233,7 @@ prefs_pref_to_str(pref_t *pref, pref_source_t source) {
 
     switch (type) {
 
+    case PREF_DECODE_AS_UINT:
     case PREF_UINT:
     {
         guint pref_uint = *(guint *) valp;
@@ -4856,6 +5278,7 @@ prefs_pref_to_str(pref_t *pref, pref_source_t source) {
     case PREF_DIRNAME:
         return g_strdup(*(const char **) valp);
 
+    case PREF_DECODE_AS_RANGE:
     case PREF_RANGE:
         /* Convert wmem to g_alloc memory */
         tmp_value = range_convert_range(NULL, *(range_t **) valp);
@@ -4925,6 +5348,10 @@ write_pref(gpointer data, gpointer user_data)
     case PREF_STATIC_TEXT:
     case PREF_UAT:
         /* Nothing to do; don't bother printing the description */
+        return;
+    case PREF_DECODE_AS_UINT:
+    case PREF_DECODE_AS_RANGE:
+        /* Data is saved through Decode As mechanism and not part of preferences file */
         return;
     default:
         break;

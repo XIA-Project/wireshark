@@ -212,7 +212,7 @@ extern "C" {
 #define WTAP_ENCAP_FIBRE_CHANNEL_FC2_WITH_FRAME_DELIMS 122
 #define WTAP_ENCAP_JPEG_JFIF                    123 /* obsoleted by WTAP_ENCAP_MIME*/
 #define WTAP_ENCAP_IPNET                        124
-#define WTAP_ENCAP_SOCKETCAN_BIGENDIAN          125
+#define WTAP_ENCAP_SOCKETCAN                    125
 #define WTAP_ENCAP_IEEE_802_11_NETMON           126
 #define WTAP_ENCAP_IEEE802_15_4_NOFCS           127
 #define WTAP_ENCAP_RAW_IPFIX                    128
@@ -269,7 +269,6 @@ extern "C" {
 #define WTAP_ENCAP_GFP_F                        179
 #define WTAP_ENCAP_IP_OVER_IB_PCAP              180
 #define WTAP_ENCAP_JUNIPER_VN                   181
-#define WTAP_ENCAP_SOCKETCAN_HOSTENDIAN         182
 /* After adding new item here, please also add new item to encap_table_base array */
 
 #define WTAP_NUM_ENCAP_TYPES                    wtap_get_num_encap_types()
@@ -1360,22 +1359,28 @@ typedef struct wtap_wslua_file_info {
 } wtap_wslua_file_info_t;
 
 /*
- * For registering extensions used for capture file formats.
+ * For registering extensions used for file formats.
  *
  * These items are used in dialogs for opening files, so that
  * the user can ask to see all capture files (as identified
  * by file extension) or particular types of capture files.
  *
- * Each file type has a description and a list of extensions the file
- * might have.  Some file types aren't real file types, they're
- * just generic types, such as "text file" or "XML file", that can
- * be used for, among other things, captures we can read, or for
- * extensions such as ".cap" that were unimaginatively chosen by
- * several different sniffers for their file formats.
+ * Each file type has a description, a flag indicating whether it's
+ * a capture file or just some file whose contents we can dissect,
+ * and a list of extensions the file might have.
+ *
+ * Some file types aren't real file types, they're just generic types,
+ * such as "text file" or "XML file", that can be used for, among other
+ * things, captures we can read, or for extensions such as ".cap" that
+ * were unimaginatively chosen by several different sniffers for their
+ * file formats.
  */
 struct file_extension_info {
     /* the file type name */
     const char *name;
+
+    /* TRUE if this is a capture file type */
+    gboolean is_capture_file;
 
     /* a semicolon-separated list of file extensions used for this type */
     const char *extensions;
@@ -1708,9 +1713,11 @@ void wtap_fdclose(wtap *wth);
 WS_DLL_PUBLIC
 gboolean wtap_fdreopen(wtap *wth, const char *filename, int *err);
 
-/*** close the current file ***/
+/** Close only the sequential side, freeing up memory it uses. */
 WS_DLL_PUBLIC
 void wtap_sequential_close(wtap *wth);
+
+/** Closes any open file handles and frees the memory associated with wth. */
 WS_DLL_PUBLIC
 void wtap_close(wtap *wth);
 
@@ -1869,8 +1876,13 @@ void wtap_set_bytes_dumped(wtap_dumper *wdh, gint64 bytes_dumped);
 struct addrinfo;
 WS_DLL_PUBLIC
 gboolean wtap_dump_set_addrinfo_list(wtap_dumper *wdh, addrinfo_lists_t *addrinfo_lists);
+
+/**
+ * Closes open file handles and frees memory associated with wdh. Note that
+ * shb_hdr, idb_inf and nrb_hdr are not freed by this routine.
+ */
 WS_DLL_PUBLIC
-gboolean wtap_dump_close(wtap_dumper *, int *);
+gboolean wtap_dump_close(wtap_dumper *wdh, int *err);
 
 /**
  * Return TRUE if we can write a file out with the given GArray of file
@@ -1898,7 +1910,7 @@ int wtap_short_string_to_file_type_subtype(const char *short_name);
 
 /*** various file extension functions ***/
 WS_DLL_PUBLIC
-GSList *wtap_get_all_file_extensions_list(void);
+GSList *wtap_get_all_capture_file_extensions_list(void);
 WS_DLL_PUBLIC
 const char *wtap_default_file_extension(int filetype);
 WS_DLL_PUBLIC

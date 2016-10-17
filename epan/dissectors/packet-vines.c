@@ -414,7 +414,7 @@ proto_register_vines_frp(void)
 
 	proto_vines_frp = proto_register_protocol(
 	    "Banyan Vines Fragmentation Protocol", "Vines FRP", "vines_frp");
-	proto_register_field_array(proto_vines_ip, hf, array_length(hf));
+	proto_register_field_array(proto_vines_frp, hf, array_length(hf));
 	proto_register_subtree_array(ett, array_length(ett));
 }
 
@@ -429,7 +429,7 @@ proto_reg_handoff_vines_frp(void)
 
 	vines_frp_new_handle = create_dissector_handle(dissect_vines_frp_new,
 	    proto_vines_frp);
-	dissector_add_uint("udp.port", UDP_PORT_VINES, vines_frp_new_handle);
+	dissector_add_uint_with_preference("udp.port", UDP_PORT_VINES, vines_frp_new_handle);
 }
 
 static dissector_table_t vines_llc_dissector_table;
@@ -489,12 +489,12 @@ proto_register_vines_llc(void)
 
 	proto_vines_llc = proto_register_protocol(
 	    "Banyan Vines LLC", "Vines LLC", "vines_llc");
-	proto_register_field_array(proto_vines_ip, hf, array_length(hf));
+	proto_register_field_array(proto_vines_llc, hf, array_length(hf));
 	proto_register_subtree_array(ett, array_length(ett));
 
 	/* subdissector code */
 	vines_llc_dissector_table = register_dissector_table("vines_llc.ptype",
-	    "Vines LLC protocol", proto_vines_llc, FT_UINT8, BASE_HEX, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
+	    "Vines LLC protocol", proto_vines_llc, FT_UINT8, BASE_HEX);
 }
 
 void
@@ -721,7 +721,7 @@ proto_register_vines_ip(void)
 
 	/* subdissector code */
 	vines_ip_dissector_table = register_dissector_table("vines_ip.protocol",
-	    "Vines protocol", proto_vines_ip, FT_UINT8, BASE_HEX, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
+	    "Vines protocol", proto_vines_ip, FT_UINT8, BASE_HEX);
 
 	vines_ip_handle = create_dissector_handle(dissect_vines_ip,
 	    proto_vines_ip);
@@ -1324,7 +1324,7 @@ proto_register_vines_arp(void)
 
 	proto_vines_arp = proto_register_protocol(
 	    "Banyan Vines ARP", "Vines ARP", "vines_arp");
-	proto_register_field_array(proto_vines_spp, hf, array_length(hf));
+	proto_register_field_array(proto_vines_arp, hf, array_length(hf));
 	proto_register_subtree_array(ett, array_length(ett));
 }
 

@@ -118,6 +118,10 @@ static int hf_control_master_session_key_diversifier = -1;
 static int hf_control_master_session_initialization_vector = -1;
 static int hf_control_slave_session_key_diversifier = -1;
 static int hf_control_slave_session_initialization_vector = -1;
+static int hf_control_max_rx_octets = -1;
+static int hf_control_max_rx_time = -1;
+static int hf_control_max_tx_octets = -1;
+static int hf_control_max_tx_time = -1;
 static int hf_btle_l2cap_msg_fragments = -1;
 static int hf_btle_l2cap_msg_fragment = -1;
 static int hf_btle_l2cap_msg_fragment_overlap = -1;
@@ -258,6 +262,8 @@ static const value_string control_opcode_vals[] = {
     { 0x11, "LL_REJECT_IND_EXT" },
     { 0x12, "LL_PING_REQ" },
     { 0x13, "LL_PING_RSP" },
+    { 0x14, "LL_LENGTH_REQ" },
+    { 0x15, "LL_LENGTH_RSP" },
     { 0, NULL }
 };
 static value_string_ext control_opcode_vals_ext = VALUE_STRING_EXT_INIT(control_opcode_vals);
@@ -1135,6 +1141,23 @@ dissect_btle(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
                 offset += 1;
 
                 break;
+            case 0x14: /* LL_LENGTH_REQ */
+            case 0x15: /* LL_LENGTH_RSP */
+                proto_tree_add_item(btle_tree, hf_control_max_rx_octets, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+                offset += 2;
+
+                sub_item = proto_tree_add_item(btle_tree, hf_control_max_rx_time, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+                proto_item_append_text (sub_item, " microseconds");
+                offset += 2;
+
+                proto_tree_add_item(btle_tree, hf_control_max_tx_octets, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+                offset += 2;
+
+                sub_item = proto_tree_add_item(btle_tree, hf_control_max_tx_time, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+                proto_item_append_text (sub_item, " microseconds");
+                offset += 2;
+
+                break;
             default:
                 if (tvb_reported_length_remaining(tvb, offset) > 3) {
                     proto_tree_add_expert(btle_tree, pinfo, &ei_unknown_data, tvb, offset, tvb_reported_length_remaining(tvb, offset) - 3);
@@ -1398,7 +1421,7 @@ proto_register_btle(void)
         },
         { &hf_control_subversion_number,
             { "Subversion Number",               "btle.control.subversion_number",
-            FT_UINT16, BASE_HEX, NULL, 0x1F,
+            FT_UINT16, BASE_HEX, NULL, 0x0,
             NULL, HFILL }
         },
         { &hf_control_feature_set,
@@ -1408,42 +1431,42 @@ proto_register_btle(void)
         },
         { &hf_control_feature_set_le_encryption,
             { "LE Encryption",                   "btle.control.feature_set.le_encryption",
-            FT_BOOLEAN, 8, NULL, 0x80,
+            FT_BOOLEAN, 8, NULL, 0x01,
             NULL, HFILL }
         },
         { &hf_control_feature_set_connection_parameters_request_procedure,
             { "Connection Parameters Request Procedure",   "btle.control.feature_set.connection_parameters_request_procedure",
-            FT_BOOLEAN, 8, NULL, 0x40,
+            FT_BOOLEAN, 8, NULL, 0x02,
             NULL, HFILL }
         },
         { &hf_control_feature_set_extended_reject_indication,
             { "Extended Reject Indication",           "btle.control.feature_set.extended_reject_indication",
-            FT_BOOLEAN, 8, NULL, 0x20,
+            FT_BOOLEAN, 8, NULL, 0x04,
             NULL, HFILL }
         },
         { &hf_control_feature_set_slave_initiated_features_exchange,
             { "Slave Initiated Features Exchange",    "btle.control.feature_set.slave_initiated_features_exchange",
-            FT_BOOLEAN, 8, NULL, 0x10,
+            FT_BOOLEAN, 8, NULL, 0x08,
             NULL, HFILL }
         },
         { &hf_control_feature_set_le_ping,
             { "LE Ping",                         "btle.control.feature_set.le_ping",
-            FT_BOOLEAN, 8, NULL, 0x08,
+            FT_BOOLEAN, 8, NULL, 0x10,
             NULL, HFILL }
         },
         { &hf_control_feature_set_le_pkt_len_ext,
         { "LE Data Packet Length Extension",          "btle.control.feature_set.le_pkt_len_ext",
-            FT_BOOLEAN, 8, NULL, 0x04,
+            FT_BOOLEAN, 8, NULL, 0x20,
             NULL, HFILL }
         },
         { &hf_control_feature_set_ll_privacy,
         { "LL Privacy",          "btle.control.feature_set.le_privacy",
-            FT_BOOLEAN, 8, NULL, 0x02,
+            FT_BOOLEAN, 8, NULL, 0x40,
             NULL, HFILL }
         },
         { &hf_control_feature_set_ext_scan_flt_pol,
         { "Extended Scanner Filter Policies",          "btle.control.feature_set.ext_scan_flt_pol",
-            FT_BOOLEAN, 8, NULL, 0x01,
+            FT_BOOLEAN, 8, NULL, 0x80,
             NULL, HFILL }
         },
         { &hf_control_feature_set_reserved,
@@ -1564,6 +1587,26 @@ proto_register_btle(void)
         { &hf_control_slave_session_initialization_vector,
             { "Slave Session Initialization Vector",       "btle.control.slave_session_initialization_vector",
             FT_UINT64, BASE_DEC_HEX, NULL, 0x0,
+            NULL, HFILL }
+        },
+        { &hf_control_max_rx_octets,
+            { "Max RX octets",   "btle.control.max_rx_octets",
+            FT_UINT16, BASE_DEC, NULL, 0x0,
+            NULL, HFILL }
+        },
+        { &hf_control_max_rx_time,
+            { "Max RX time",     "btle.control.max_rx_time",
+            FT_UINT16, BASE_DEC, NULL, 0x0,
+            NULL, HFILL }
+        },
+        { &hf_control_max_tx_octets,
+            { "Max TX octets",   "btle.control.max_tx_octets",
+            FT_UINT16, BASE_DEC, NULL, 0x0,
+            NULL, HFILL }
+        },
+        { &hf_control_max_tx_time,
+            { "Max TX time",     "btle.control.max_tx_time",
+            FT_UINT16, BASE_DEC, NULL, 0x0,
             NULL, HFILL }
         },
         { &hf_l2cap_fragment,

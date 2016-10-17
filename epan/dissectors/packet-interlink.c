@@ -219,7 +219,7 @@ proto_register_interlink(void)
 
 	/* Probably someone will write sub-dissectors. You can never know. */
 	subdissector_table = register_dissector_table("interlink.type_version",
-		"Interlink type_version", proto_interlink, FT_UINT16, BASE_HEX, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
+		"Interlink type_version", proto_interlink, FT_UINT16, BASE_HEX);
 }
 
 
@@ -230,7 +230,7 @@ proto_reg_handoff_interlink(void)
 	interlink_handle = find_dissector("interlink");
 
 	/* Allow "Decode As" with any UDP packet. */
-	dissector_add_for_decode_as("udp.port", interlink_handle);
+	dissector_add_for_decode_as_with_preference("udp.port", interlink_handle);
 
 	/* Add our heuristic packet finder. */
 	heur_dissector_add("udp", dissect_interlink_heur, "Interlink over UDP", "interlink_udp", proto_interlink, HEURISTIC_ENABLE);

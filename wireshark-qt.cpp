@@ -308,7 +308,7 @@ reset_library_path(void)
 #endif
 
 /* And now our feature presentation... [ fade to music ] */
-int main(int argc, char *argv[])
+int main(int argc, char *qt_argv[])
 {
     MainWindow *main_w;
 
@@ -316,7 +316,7 @@ int main(int argc, char *argv[])
     int                  opt;
 #endif
     int                  ret_val;
-    char               **ws_argv = argv;
+    char               **argv = qt_argv;
 
 #ifdef _WIN32
     WSADATA              wsaData;
@@ -357,11 +357,11 @@ int main(int argc, char *argv[])
 
 #ifdef _WIN32
     // QCoreApplication clobbers argv. Let's have a local copy.
-    ws_argv = (char **) g_malloc(sizeof(char *) * argc);
+    argv = (char **) g_malloc(sizeof(char *) * argc);
     for (opt = 0; opt < argc; opt++) {
-        ws_argv[opt] = argv[opt];
+        argv[opt] = qt_argv[opt];
     }
-    arg_list_utf_16to8(argc, ws_argv);
+    arg_list_utf_16to8(argc, argv);
     create_app_running_mutex();
 #endif /* _WIN32 */
 
@@ -376,7 +376,7 @@ int main(int argc, char *argv[])
     /*
      * Attempt to get the pathname of the executable file.
      */
-    /* init_progfile_dir_error = */ init_progfile_dir(ws_argv[0],
+    /* init_progfile_dir_error = */ init_progfile_dir(argv[0],
         (int (*)(int, char **)) get_gui_compiled_info);
     g_log(NULL, G_LOG_LEVEL_DEBUG, "progfile_dir: %s", get_progfile_dir());
 
@@ -450,14 +450,14 @@ int main(int argc, char *argv[])
         g_free(rf_path);
     }
 
-    commandline_early_options(argc, ws_argv, comp_info_str, runtime_info_str);
+    commandline_early_options(argc, argv, comp_info_str, runtime_info_str);
 
 #ifdef _WIN32
     reset_library_path();
 #endif
 
     /* Create The Wireshark app */
-    WiresharkApplication ws_app(argc, argv);
+    WiresharkApplication ws_app(argc, qt_argv);
 
     /* initialize the funnel mini-api */
     // xxx qtshark
@@ -475,6 +475,8 @@ int main(int argc, char *argv[])
            "\n"
            "%s",
         get_ws_vcs_version_info(), comp_info_str->str, runtime_info_str->str);
+    g_string_free(comp_info_str, TRUE);
+    g_string_free(runtime_info_str, TRUE);
 
 #ifdef _WIN32
     /* Start windows sockets */
@@ -542,7 +544,7 @@ int main(int argc, char *argv[])
 
     /* Scan for plugins.  This does *not* call their registration routines;
        that's done later. */
-    scan_plugins();
+    scan_plugins(REPORT_LOAD_FAILURE);
 
     /* Register all libwiretap plugin modules. */
     register_all_wiretap_modules();
@@ -559,6 +561,16 @@ int main(int argc, char *argv[])
                    splash_update, NULL)) {
         SimpleDialog::displayQueuedMessages(main_w);
         return 2;
+    }
+
+    // Read the dynamic part of the recent file. This determines whether or
+    // not the recent list appears in the main window so the earlier we can
+    // call this the better.
+    if (!recent_read_dynamic(&rf_path, &rf_open_errno)) {
+        simple_dialog(ESD_TYPE_WARN, ESD_BTN_OK,
+                      "Could not open recent file\n\"%s\": %s.",
+                      rf_path, g_strerror(rf_open_errno));
+        g_free(rf_path);
     }
 
     splash_update(RA_LISTENERS, NULL, NULL);
@@ -735,15 +747,6 @@ int main(int argc, char *argv[])
     main_w->setWSWindowTitle();
 ////////
 
-    /* Read the dynamic part of the recent file, as we have the gui now ready for
-       it. */
-    if (!recent_read_dynamic(&rf_path, &rf_open_errno)) {
-        simple_dialog(ESD_TYPE_WARN, ESD_BTN_OK,
-                      "Could not open recent file\n\"%s\": %s.",
-                      rf_path, g_strerror(rf_open_errno));
-        g_free(rf_path);
-    }
-
     packet_list_enable_color(recent.packet_list_colorize);
 
     g_log(NULL, G_LOG_LEVEL_DEBUG, "FIX: fetch recent color settings");
@@ -853,11 +856,11 @@ int main(int argc, char *argv[])
 
     ret_val = wsApp->exec();
 
+    epan_cleanup();
+
 #ifdef HAVE_EXTCAP
     extcap_cleanup();
 #endif
-
-    epan_cleanup();
 
     AirPDcapDestroyContext(&airpdcap_ctx);
 

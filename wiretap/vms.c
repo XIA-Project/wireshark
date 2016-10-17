@@ -30,6 +30,8 @@
 #include "vms.h"
 #include "file_wrappers.h"
 
+#include <wsutil/strtoi.h>
+
 #include <stdlib.h>
 #include <string.h>
 
@@ -318,17 +320,18 @@ isdumpline( gchar *line )
 static gboolean
 parse_vms_packet(FILE_T fh, struct wtap_pkthdr *phdr, Buffer *buf, int *err, gchar **err_info)
 {
-    char   line[VMS_LINE_LENGTH + 1];
-    int    num_items_scanned;
-    int    pkt_len = 0;
-    int    pktnum;
-    int    csec = 101;
+    char    line[VMS_LINE_LENGTH + 1];
+    int     num_items_scanned;
+    guint32 pkt_len = 0;
+    int     pktnum;
+    int     csec = 101;
     struct tm tm;
     char mon[4] = {'J', 'A', 'N', 0};
-    gchar *p;
+    gchar  *p;
+    const gchar *endp;
     static const gchar months[] = "JANFEBMARAPRMAYJUNJULAUGSEPOCTNOVDEC";
-    int    i;
-    int    offset = 0;
+    guint32 i;
+    int     offset = 0;
     guint8 *pd;
 
     tm.tm_year = 1970;
@@ -386,7 +389,11 @@ parse_vms_packet(FILE_T fh, struct wtap_pkthdr *phdr, Buffer *buf, int *err, gch
                 return FALSE;
             }
 
-            pkt_len = atoi(p);
+            if (!ws_strtou32(p, &endp, &pkt_len) || (*endp != '\0' && !g_ascii_isspace(*endp))) {
+                *err = WTAP_ERR_BAD_FILE;
+                *err_info = g_strdup_printf("vms: Length field '%s' not valid", p);
+                return FALSE;
+            }
             break;
         }
     } while (! isdumpline(line));

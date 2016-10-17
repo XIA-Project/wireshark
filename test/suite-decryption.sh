@@ -113,7 +113,7 @@ decryption_step_80211_wpa_psk_mfp() {
 	out=$($TESTS_DIR/run_and_catch_crashes env $TS_DC_ENV $TSHARK $TS_DC_ARGS \
 		-o "wlan.enable_decryption: TRUE" \
 		-r "$CAPTURE_DIR/wpa-test-decode-mgmt.pcap.gz" \
-		-Y "wlan_mgt.fixed.reason_code == 2 || wlan_mgt.fixed.category_code == 3" \
+		-Y "wlan.fixed.reason_code == 2 || wlan.fixed.category_code == 3" \
 		2>&1)
 	RETURNVALUE=$?
 	frames=$(echo "$out" | wc -l)
@@ -201,7 +201,7 @@ decryption_step_ssl_rsa_pq() {
 		TEST_KEYS_FILE="`cygpath -w $TEST_KEYS_FILE`"
 	fi
 	$TESTS_DIR/run_and_catch_crashes env $TS_DC_ENV $TSHARK $TS_DC_ARGS -Tfields -e http.request.uri \
-		-o ssl.keys_list:"0.0.0.0,443,http-over-ssl,$TEST_KEYS_FILE" \
+		-o ssl.keys_list:"0.0.0.0,443,http,$TEST_KEYS_FILE" \
 		-r "$CAPTURE_DIR/rsa-p-lt-q.pcap" -Y http \
 		| grep / > /dev/null 2>&1
 	RETURNVALUE=$?
@@ -240,6 +240,22 @@ decryption_step_ssl_master_secret() {
 	RETURNVALUE=$?
 	if [ ! $RETURNVALUE -eq $EXIT_OK ]; then
 		test_step_failed "Failed to decrypt SSL using the master secret"
+		return
+	fi
+	test_step_ok
+}
+
+# TLS 1.2 with renegotiation
+decryption_step_ssl_renegotiation() {
+	TEST_KEYS_FILE="$TESTS_DIR/keys/rsasnakeoil2.key"
+	if [ "$WS_SYSTEM" == "Windows" ] ; then
+		TEST_KEYS_FILE="`cygpath -w $TEST_KEYS_FILE`"
+	fi
+	output=$($TESTS_DIR/run_and_catch_crashes env $TS_DC_ENV $TSHARK $TS_DC_ARGS -Tfields -e http.content_length \
+		-o ssl.keys_list:"0.0.0.0,4433,http,$TEST_KEYS_FILE" \
+		-r "$CAPTURE_DIR/tls-renegotiation.pcap" -Y http)
+	if [[ "$output" != 0*2151* ]]; then
+		test_step_failed "Failed to decrypt SSL with renegotiation"
 		return
 	fi
 	test_step_ok
@@ -455,6 +471,10 @@ decryption_step_ikev2_aes256gcm8() {
 
 # HTTP2 (HPACK)
 decryption_step_http2() {
+	if [ $HAVE_NGHTTP2 -ne 0 ]; then
+		test_step_skipped
+		return
+	fi
 	env $TS_DC_ENV $TSHARK $TS_DC_ARGS \
 		-Tfields -e http2.header.value \
 		-d tcp.port==3000,http2 \
@@ -492,6 +512,7 @@ tshark_decryption_suite() {
 	test_step_add "SSL Decryption (RSA private key with p smaller than q)" decryption_step_ssl_rsa_pq
 	test_step_add "SSL Decryption (private key with password)" decryption_step_ssl_with_password
 	test_step_add "SSL Decryption (master secret)" decryption_step_ssl_master_secret
+	test_step_add "SSL Decryption (renegotiation)" decryption_step_ssl_renegotiation
 	test_step_add "ZigBee Decryption" decryption_step_zigbee
 	test_step_add "ANSI C12.22 Decryption" decryption_step_c1222
 	test_step_add "DVB-CI Decryption" decryption_step_dvb_ci

@@ -999,7 +999,7 @@ dissect_zbee_aps_no_endpt:
     if ((payload_tvb) && (packet.fragmentation != ZBEE_APS_EXT_FCF_FRAGMENT_NONE)) {
         guint32         msg_id;
         guint32         block_num;
-        guint32         num_blocks = -1;
+        guint32         num_blocks;
         fragment_head   *frag_msg = NULL;
         tvbuff_t        *new_tvb;
 
@@ -1022,6 +1022,7 @@ dissect_zbee_aps_no_endpt:
         }
         else {
             block_num = packet.block_number;
+            num_blocks = 0;
         }
 
         /* Add this fragment to the reassembly handler. */
@@ -2149,7 +2150,7 @@ void proto_register_zbee_aps(void)
     expert_register_field_array(expert_zbee_aps, ei, array_length(ei));
 
     /* Register the APS dissector and subdissector list. */
-    zbee_aps_dissector_table = register_dissector_table("zbee.profile", "ZigBee Profile ID", proto_zbee_aps, FT_UINT16, BASE_HEX, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
+    zbee_aps_dissector_table = register_dissector_table("zbee.profile", "ZigBee Profile ID", proto_zbee_aps, FT_UINT16, BASE_HEX);
     zbee_aps_handle = register_dissector(ZBEE_PROTOABBREV_APS, dissect_zbee_aps, proto_zbee_aps);
 
     /* Register the init routine. */

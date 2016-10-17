@@ -22,29 +22,36 @@ T-StatusProhibit
 WLAN-backhaulRate-r12
 
 #.EXPORTS
-HandoverCommand
 HandoverCommand_PDU
-HandoverPreparationInformation
 HandoverPreparationInformation_PDU
-HandoverPreparationInformation-NB
 HandoverPreparationInformation-NB_PDU
-UERadioAccessCapabilityInformation
+RLF-Report-r9_PDU
+RLF-Report-v9e0_PDU
+SCG-ConfigInfo-r12_PDU
+UEPagingCoverageInformation_PDU
+UEPagingCoverageInformation-NB_PDU
 UERadioAccessCapabilityInformation_PDU
-UERadioAccessCapabilityInformation-NB
 UERadioAccessCapabilityInformation-NB_PDU
-UE-EUTRA-Capability
 UE-EUTRA-Capability_PDU
-UERadioPagingInformation
 UERadioPagingInformation_PDU
+UERadioPagingInformation-NB_PDU
+VisitedCellInfoList-r12_PDU
 #.END
 
 #.PDU
 HandoverCommand
 HandoverPreparationInformation
 HandoverPreparationInformation-NB
+RLF-Report-r9
+RLF-Report-v9e0
+SCG-ConfigInfo-r12
+UEPagingCoverageInformation
+UEPagingCoverageInformation-NB
 UERadioAccessCapabilityInformation
 UERadioAccessCapabilityInformation-NB
 UERadioPagingInformation
+UERadioPagingInformation-NB
+VisitedCellInfoList-r12
 BCCH-BCH-Message             @bcch.bch
 BCCH-DL-SCH-Message          @bcch.dl.sch
 BCCH-DL-SCH-Message-BR       @bcch.dl.sch.br
@@ -69,22 +76,10 @@ UL-DCCH-Message-NB           @ul.dcch.nb
 
 #.OMIT_ASSIGNMENT
 # Get rid of unused code warnings
-Cell-ToAddMod-r12
 CellsTriggeredList
 CSI-RS-TriggeredList-r12
-DRB-InfoListSCG-r12
-DRB-InfoSCG-r12
 LogMeasInfoList2-r10
-MeasResultServCellListSCG-r12
-MeasResultServCellListSCG-Ext-r13
-MeasResultServCellSCG-r12
 RSRP-RangeSL3-r12
-SCellToAddModListSCG-r12
-SCellToAddModListSCG-Ext-r13
-SCG-ConfigInfo-r12
-SCG-ConfigInfo-r12-IEs
-SCG-ConfigInfo-v1310-IEs
-SCG-ConfigRestrictInfo-r12
 SL-PreconfigCommPool-r12
 SL-PreconfigCommPoolList4-r12
 SL-PreconfigCommRxPoolList-r13
@@ -97,12 +92,6 @@ SL-PreconfigRelay-r13
 SL-PreconfigSync-r12
 SL-Preconfiguration-r12
 SL-TxPoolIdentity-r13
-UEPagingCoverageInformation
-UEPagingCoverageInformation-NB
-UEPagingCoverageInformation-NB-IEs
-UEPagingCoverageInformation-r13-IEs
-UERadioPagingInformation-NB
-UERadioPagingInformation-NB-IEs
 VarConnEstFailReport-r11
 VarLogMeasConfig-r10
 VarLogMeasConfig-r11

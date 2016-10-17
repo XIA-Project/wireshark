@@ -144,9 +144,6 @@ static int hf_forces_unknown_tlv = -1;
   For other type TMLs,no need to add these 2 bytes.*/
 #define TCP_UDP_TML_FOCES_MESSAGE_OFFSET_TCP    2
 
-/*TCP+UDP TML*/
-static guint forces_alternate_tcp_port = 0;
-static guint forces_alternate_udp_port = 0;
 /*SCTP TML*/
 static guint forces_alternate_sctp_high_prio_channel_port = 0;
 static guint forces_alternate_sctp_med_prio_channel_port  = 0;
@@ -833,16 +830,6 @@ proto_register_forces(void)
 
     forces_module = prefs_register_protocol(proto_forces,proto_reg_handoff_forces);
 
-    prefs_register_uint_preference(forces_module, "tcp_alternate_port",
-                                   "TCP port",
-                                   "Decode packets on this TCP port as ForCES",
-                                   10, &forces_alternate_tcp_port);
-
-    prefs_register_uint_preference(forces_module, "udp_alternate_port",
-                                   "UDP port",
-                                   "Decode packets on this UDP port as ForCES",
-                                   10, &forces_alternate_udp_port);
-
     prefs_register_uint_preference(forces_module, "sctp_high_prio_port",
                                    "SCTP High Priority channel port",
                                    "Decode packets on this sctp port as ForCES",
@@ -864,8 +851,6 @@ proto_reg_handoff_forces(void)
 {
     static gboolean inited = FALSE;
 
-    static guint alternate_tcp_port = 0; /* 3000 */
-    static guint alternate_udp_port = 0;
     static guint alternate_sctp_high_prio_channel_port = 0; /* 6700 */
     static guint alternate_sctp_med_prio_channel_port  = 0;
     static guint alternate_sctp_low_prio_channel_port  = 0;
@@ -876,22 +861,13 @@ proto_reg_handoff_forces(void)
         forces_handle_tcp = create_dissector_handle(dissect_forces_tcp,     proto_forces);
         forces_handle     = create_dissector_handle(dissect_forces_not_tcp, proto_forces);
         ip_handle = find_dissector_add_dependency("ip", proto_forces);
+        /* Register TCP port for dissection */
+        dissector_add_for_decode_as_with_preference("tcp.port", forces_handle_tcp);
+        /* Register UDP port for dissection */
+        dissector_add_for_decode_as_with_preference("udp.port", forces_handle);
+
         inited = TRUE;
     }
-
-    /* Register TCP port for dissection */
-    if ((alternate_tcp_port != 0) && (alternate_tcp_port != forces_alternate_tcp_port))
-        dissector_delete_uint("tcp.port", alternate_tcp_port, forces_handle_tcp);
-    if ((forces_alternate_tcp_port != 0) && (alternate_tcp_port != forces_alternate_tcp_port))
-        dissector_add_uint("tcp.port", forces_alternate_tcp_port, forces_handle_tcp);
-    alternate_tcp_port = forces_alternate_tcp_port;
-
-    /* Register UDP port for dissection */
-    if ((alternate_udp_port != 0) && (alternate_udp_port != forces_alternate_udp_port))
-        dissector_delete_uint("udp.port", alternate_udp_port, forces_handle);
-    if ((forces_alternate_udp_port != 0) && (alternate_udp_port != forces_alternate_udp_port))
-        dissector_add_uint("udp.port", forces_alternate_udp_port, forces_handle);
-    alternate_udp_port = forces_alternate_udp_port;
 
     /* Register SCTP port for high priority dissection */
     if ((alternate_sctp_high_prio_channel_port != 0) &&

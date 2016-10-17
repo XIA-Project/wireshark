@@ -27,9 +27,10 @@
 class QListWidget;
 class QListWidgetItem;
 class QTreeWidgetItem;
+class QMenu;
 
 #include "splash_overlay.h"
-#include "interface_tree.h"
+#include "interface_frame.h"
 
 namespace Ui {
     class MainWelcome;
@@ -41,7 +42,7 @@ class MainWelcome : public QFrame
 public:
     explicit MainWelcome(QWidget *parent = 0);
     virtual ~MainWelcome();
-    InterfaceTree *getInterfaceTree();
+    InterfaceFrame *getInterfaceFrame();
     const QString captureFilter();
     void setCaptureFilter(const QString capture_filter);
 
@@ -77,17 +78,20 @@ public slots:
 
 private slots:
     void appInitialized();
+    void interfaceListChanged();
     void captureFilterTextEdited(const QString capture_filter);
-#ifdef HAVE_EXTCAP
-    void interfaceClicked(QTreeWidgetItem *item, int column);
-#endif
-    void interfaceDoubleClicked(QTreeWidgetItem *item, int column);
     void updateRecentFiles();
     void openRecentItem(QListWidgetItem *item);
     void changeEvent(QEvent* event);
     void showRecentContextMenu(QPoint pos);
     void showRecentFolder();
     void copyRecentPath();
+    void removeRecentPath();
+
+#ifdef HAVE_EXTCAP
+    void on_interfaceFrame_showExtcapOptions(QString device_name);
+#endif
+    void on_interfaceFrame_startCapture();
 };
 
 #endif // MAIN_WELCOME_H

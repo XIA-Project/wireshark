@@ -27,6 +27,8 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <wsutil/clopts_common.h>
+#include <wsutil/cmdarg_err.h>
 #include <wsutil/unicode-utils.h>
 #include <wsutil/file_util.h>
 #include <wsutil/filesystem.h>
@@ -47,18 +49,26 @@
 
 #include "randpkt_core/randpkt_core.h"
 
-#ifdef HAVE_PLUGINS
 /*
- *  Don't report failures to load plugins because most (non-wiretap) plugins
- *  *should* fail to load (because we're not linked against libwireshark and
- *  dissector plugins need libwireshark).
+ * General errors are reported with an console message in randpkt.
  */
 static void
-failure_message(const char *msg_format _U_, va_list ap _U_)
+failure_message(const char *msg_format, va_list ap)
 {
-  return;
+	fprintf(stderr, "randpkt: ");
+	vfprintf(stderr, msg_format, ap);
+	fprintf(stderr, "\n");
 }
-#endif
+
+/*
+ * Report additional information for an error in command-line arguments.
+ */
+static void
+failure_message_cont(const char *msg_format, va_list ap)
+{
+	vfprintf(stderr, msg_format, ap);
+	fprintf(stderr, "\n");
+}
 
 /* Print usage statement and exit program */
 static void
@@ -118,11 +128,13 @@ main(int argc, char **argv)
 	char  *init_progfile_dir_error;
 #endif
 
-  /*
-   * Get credential information for later use.
-   */
-  init_process_policies();
-  init_open_routines();
+	/*
+	 * Get credential information for later use.
+	 */
+	init_process_policies();
+	init_open_routines();
+
+	cmdarg_err_init(failure_message, failure_message_cont);
 
 #ifdef _WIN32
 	arg_list_utf_16to8(argc, argv);
@@ -141,8 +153,13 @@ main(int argc, char **argv)
 		init_report_err(failure_message,NULL,NULL,NULL);
 
 		/* Scan for plugins.  This does *not* call their registration routines;
-		   that's done later. */
-		scan_plugins();
+		   that's done later.
+
+		   Don't report failures to load plugins because most
+		   (non-wiretap) plugins *should* fail to load (because
+		   we're not linked against libwireshark and dissector
+		   plugins need libwireshark). */
+		scan_plugins(DONT_REPORT_LOAD_FAILURE);
 
 		/* Register all libwiretap plugin modules. */
 		register_all_wiretap_modules();
@@ -152,15 +169,15 @@ main(int argc, char **argv)
 	while ((opt = getopt_long(argc, argv, "b:c:ht:r", long_options, NULL)) != -1) {
 		switch (opt) {
 			case 'b':	/* max bytes */
-				produce_max_bytes = atoi(optarg);
+				produce_max_bytes = get_positive_int(optarg, "max bytes");
 				if (produce_max_bytes > 65536) {
-					fprintf(stderr, "randpkt: Max bytes is 65536\n");
+					cmdarg_err("max bytes is > 65536");
 					return 1;
 				}
 				break;
 
 			case 'c':	/* count */
-				produce_count = atoi(optarg);
+				produce_count = get_positive_int(optarg, "count");
 				break;
 
 			case 't':	/* type of packet to produce */

@@ -22,7 +22,6 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
@@ -1889,7 +1888,7 @@ dissect_disconnrequestresponse(tvbuff_t *tvb, int offset, packet_info *pinfo,
             service_name = val_to_str_ext_const(uuid.bt_uuid, &bluetooth_uuid_vals_ext, "Unknown");
         }
 
-        if (memcmp(service_name, "Unknown", 7) == 0) {
+        if (strcmp(service_name, "Unknown") == 0) {
             service_name = val_to_str_const(psm, psm_vals, "Unknown");
         }
 
@@ -3360,8 +3359,8 @@ proto_register_btl2cap(void)
     register_dissector("btl2cap", dissect_btl2cap, proto_btl2cap);
 
     /* subdissector code */
-    l2cap_psm_dissector_table = register_dissector_table("btl2cap.psm", "BT L2CAP PSM", proto_btl2cap, FT_UINT16, BASE_HEX, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
-    l2cap_cid_dissector_table = register_dissector_table("btl2cap.cid", "BT L2CAP CID", proto_btl2cap, FT_UINT16, BASE_HEX, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
+    l2cap_psm_dissector_table = register_dissector_table("btl2cap.psm", "BT L2CAP PSM", proto_btl2cap, FT_UINT16, BASE_HEX);
+    l2cap_cid_dissector_table = register_dissector_table("btl2cap.cid", "BT L2CAP CID", proto_btl2cap, FT_UINT16, BASE_HEX);
 
     /* Required function calls to register the header fields and subtrees used */
     proto_register_field_array(proto_btl2cap, hf, array_length(hf));

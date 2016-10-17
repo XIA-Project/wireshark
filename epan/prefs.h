@@ -191,6 +191,7 @@ typedef struct _e_prefs {
   layout_pane_content_e gui_layout_content_1;
   layout_pane_content_e gui_layout_content_2;
   layout_pane_content_e gui_layout_content_3;
+  gchar       *gui_interfaces_hide_types;
   gint         console_log_level;
   gchar       *capture_device;
   gchar       *capture_devices_linktypes;
@@ -214,13 +215,14 @@ typedef struct _e_prefs {
   gboolean     display_hidden_proto_items;
   gboolean     display_byte_fields_with_spaces;
   gboolean     enable_incomplete_dissectors_check;
+  gboolean     incomplete_dissectors_check_debug;
   gpointer     filter_expressions;/* Actually points to &head */
   gboolean     gui_update_enabled;
   software_update_channel_e gui_update_channel;
   gint         gui_update_interval;
   gchar       *saved_at_version;
   gboolean     unknown_prefs; /* unknown or obsolete pref(s) */
-  gboolean     unknown_colorfilters; /* unknown or obsolete color filter(s) */
+  gboolean     unknown_colorfilters; /* Warn when saving unknown or obsolete color filters. */
   gboolean     gui_qt_packet_list_separator;
   gboolean     gui_packet_editor; /* Enable Packet Editor */
   elide_mode_e gui_packet_list_elide_mode;
@@ -501,6 +503,20 @@ void prefs_register_color_preference(module_t *module, const char *name,
 void prefs_register_custom_preference(module_t *module, const char *name,
     const char *title, const char *description, struct pref_custom_cbs* custom_cbs,
     void** custom_data);
+
+/*
+ * Register a (internal) "Decode As" preference with a ranged value.
+ */
+void prefs_register_decode_as_range_preference(module_t *module, const char *name,
+    const char *title, const char *description, range_t **var,
+    guint32 max_value);
+
+/*
+ * Register a (internal) "Decode As" preference with an unsigned integral value
+ * for a dissector table.
+ */
+void prefs_register_decode_as_preference(module_t *module, const char *name,
+    const char *title, const char *description, guint *var);
 
 /*
  * Register a preference that used to be supported but no longer is.

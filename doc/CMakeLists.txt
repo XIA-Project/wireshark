@@ -71,6 +71,7 @@ endif()
 
 pod2manhtml(${CMAKE_CURRENT_SOURCE_DIR}/androiddump 1)
 pod2manhtml(${CMAKE_CURRENT_SOURCE_DIR}/asn2deb     1)
+pod2manhtml(${CMAKE_CURRENT_SOURCE_DIR}/udpdump     1)
 pod2manhtml(${CMAKE_CURRENT_SOURCE_DIR}/capinfos    1)
 pod2manhtml(${CMAKE_CURRENT_SOURCE_DIR}/captype     1)
 pod2manhtml(${CMAKE_CURRENT_SOURCE_DIR}/dftest      1)
@@ -95,6 +96,7 @@ pod2manhtml(${CMAKE_CURRENT_SOURCE_DIR}/wireshark-filter 4)
 set(MAN1_INSTALL_FILES
 	${CMAKE_CURRENT_BINARY_DIR}/asn2deb.1
 	${CMAKE_CURRENT_BINARY_DIR}/androiddump.1
+	${CMAKE_CURRENT_BINARY_DIR}/udpdump.1
 	${CMAKE_CURRENT_BINARY_DIR}/capinfos.1
 	${CMAKE_CURRENT_BINARY_DIR}/captype.1
 	${CMAKE_CURRENT_BINARY_DIR}/ciscodump.1
@@ -120,9 +122,13 @@ set(MAN4_INSTALL_FILES
 	${CMAKE_CURRENT_BINARY_DIR}/wireshark-filter.4
 )
 
+set(BUNDLE_RESOURCE_SHARE_MAN1_FILES ${MAN1_INSTALL_FILES} PARENT_SCOPE)
+set(BUNDLE_RESOURCE_SHARE_MAN4_FILES ${MAN4_INSTALL_FILES} PARENT_SCOPE)
+
 set(HTML_INSTALL_FILES
 	${CMAKE_CURRENT_BINARY_DIR}/asn2deb.html
 	${CMAKE_CURRENT_BINARY_DIR}/androiddump.html
+	${CMAKE_CURRENT_BINARY_DIR}/udpdump.html
 	${CMAKE_CURRENT_BINARY_DIR}/capinfos.html
 	${CMAKE_CURRENT_BINARY_DIR}/captype.html
 	${CMAKE_CURRENT_BINARY_DIR}/ciscodump.html

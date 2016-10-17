@@ -31,7 +31,6 @@ add_subdirectory(crypt)
 add_subdirectory(dfilter)
 add_subdirectory(dissectors)
 add_subdirectory(ftypes)
-add_subdirectory(nghttp2)
 add_subdirectory(wmem)
 if (HAVE_LIBLUA)
 	add_subdirectory(wslua)
@@ -199,6 +198,7 @@ set(epan_LIBS
 	${GNUTLS_LIBRARIES}
 	${SMI_LIBRARIES}
 	${M_LIBRARIES}
+	${NGHTTP2_LIBRARIES}
 	${LUA_LIBRARIES}
 	${WIN_PSAPI_LIBRARY}
 )
@@ -209,13 +209,11 @@ set(CLEAN_FILES
 	${LIBWIRESHARK_ASM_FILES}
 )
 
-if (WERROR_COMMON_FLAGS)
-	set_source_files_properties(
-		${CLEAN_FILES}
-		PROPERTIES
-		COMPILE_FLAGS ${WERROR_COMMON_FLAGS}
-	)
-endif()
+set_source_files_properties(
+	${CLEAN_FILES}
+	PROPERTIES
+	COMPILE_FLAGS "${WERROR_COMMON_FLAGS}"
+)
 
 # Cannot use $<$<BOOL:${HAVE_LIBLUA}>:$<TARGET_OBJECTS:wslua>> as that breaks
 # get_target_property(_libwireshark_location epan LOCATION).
@@ -234,7 +232,6 @@ add_library(epan ${LINK_MODE_LIB}
 	$<TARGET_OBJECTS:dissectors>
 	$<TARGET_OBJECTS:dissectors-corba>
 	$<TARGET_OBJECTS:ftypes>
-	$<TARGET_OBJECTS:nghttp2>
 	$<TARGET_OBJECTS:wmem>
 	${wslua_sources}
 	${CMAKE_BINARY_DIR}/image/libwireshark.rc
@@ -264,7 +261,6 @@ file(GLOB DFILTER_HEADERS dfilter/*.h ../tools/lemon/cppmagic.h)
 file(GLOB D_HEADERS dissectors/*.h)
 file(GLOB FTYPES_HEADERS ftypes/*.h)
 file(GLOB WMEM_HEADERS wmem/*.h)
-file(GLOB NGHTTP2_HEADERS nghttp2/*.h)
 
 add_custom_command(OUTPUT libwireshark.abi.tar.gz
 	COMMAND ${CMAKE_COMMAND} -E remove_directory ${ABICHECK_TMPDIR}
@@ -276,7 +272,6 @@ add_custom_command(OUTPUT libwireshark.abi.tar.gz
 	COMMAND ${CMAKE_COMMAND} -E make_directory ${ABICHECK_TMPDIR}/dissectors
 	COMMAND ${CMAKE_COMMAND} -E make_directory ${ABICHECK_TMPDIR}/ftypes
 	COMMAND ${CMAKE_COMMAND} -E make_directory ${ABICHECK_TMPDIR}/wmem
-	COMMAND ${CMAKE_COMMAND} -E make_directory ${ABICHECK_TMPDIR}/nghttp2
 	COMMAND ${ABI_COPY_COMMAND} ${TOP_LEVEL_HEADERS} ${ABICHECK_TMPDIR} ${ABI_COPY_FLAGS}
 	COMMAND ${ABI_COPY_COMMAND} ${ABICHECK_HEADERS} ${ABICHECK_TMPDIR}/epan ${ABI_COPY_FLAGS}
 	COMMAND ${ABI_COPY_COMMAND} ${CRYPT_HEADERS} ${ABICHECK_TMPDIR}/crypt ${ABI_COPY_FLAGS}
@@ -285,7 +280,6 @@ add_custom_command(OUTPUT libwireshark.abi.tar.gz
 	COMMAND ${ABI_COPY_COMMAND} ${D_HEADERS} ${ABICHECK_TMPDIR}/dissectors ${ABI_COPY_FLAGS}
 	COMMAND ${ABI_COPY_COMMAND} ${FTYPES_HEADERS} ${ABICHECK_TMPDIR}/ftypes ${ABI_COPY_FLAGS}
 	COMMAND ${ABI_COPY_COMMAND} ${WMEM_HEADERS} ${ABICHECK_TMPDIR}/wmem ${ABI_COPY_FLAGS}
-	COMMAND ${ABI_COPY_COMMAND} ${NGHTTP2_HEADERS} ${ABICHECK_TMPDIR}/nghttp2 ${ABI_COPY_FLAGS}
 	COMMAND rm -f ${ABICHECK_TMPDIR}/dissectors/x11-extension-implementation.h
 		${ABICHECK_TMPDIR}/dissectors/packet-rtps.h
 		${ABICHECK_TMPDIR}/dissectors/x11-glx-render-enum.h
@@ -299,10 +293,9 @@ add_custom_command(OUTPUT libwireshark.abi.tar.gz
 #		${ABICHECK_TMPDIR}/epan/* ${ABICHECK_TMPDIR}/compress/*
 #		${ABICHECK_TMPDIR}/dfilter/* ${ABICHECK_TMPDIR}/dissectors/*
 #		${ABICHECK_TMPDIR}/ftypes/* ${ABICHECK_TMPDIR}/wmem/*
-#		${ABICHECK_TMPDIR}/nghttp2/*
 	DEPENDS ${HEADERS}
 		${CRYPT_HEADERS} ${COMPRESS_HEADERS} ${DFILTER_HEADERS} ${D_HEADERS}
-		${FTYPES_HEADERS} ${WMEM_HEADERS} ${NGHTTP2_HEADERS} epan)
+		${FTYPES_HEADERS} ${WMEM_HEADERS} epan)
 
 # By default the name for a library with target name epan will be libepan,
 # but Ethereal is now named Wireshark

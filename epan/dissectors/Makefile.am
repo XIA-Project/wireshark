@@ -76,10 +76,10 @@ PIDL_DISSECTOR_SRC = \
 #
 PIDL_DISSECTOR_INCLUDES = \
 	packet-dcerpc-atsvc.h		\
-	packet-dcerpc-clusapi.h	\
+	packet-dcerpc-clusapi.h		\
 	packet-dcerpc-dfs.h		\
 	packet-dcerpc-dssetup.h		\
-	packet-dcerpc-drsuapi.h	\
+	packet-dcerpc-drsuapi.h		\
 	packet-dcerpc-efs.h		\
 	packet-dcerpc-eventlog.h	\
 	packet-dcerpc-initshutdown.h	\
@@ -138,6 +138,7 @@ ASN1_DISSECTOR_SRC = \
 	packet-h460.c		\
 	packet-h501.c		\
 	packet-hnbap.c		\
+	packet-hl7.c		\
 	packet-idmp.c		\
 	packet-ilp.c		\
 	packet-inap.c		\
@@ -150,6 +151,7 @@ ASN1_DISSECTOR_SRC = \
 	packet-lppa.c		\
 	packet-lppe.c		\
 	packet-lte-rrc.c	\
+	packet-m2ap.c		\
 	packet-m3ap.c		\
 	packet-mms.c		\
 	packet-mpeg-audio.c	\
@@ -594,6 +596,7 @@ DISSECTOR_SRC = \
 	packet-exec.c		\
 	packet-exported_pdu.c	\
 	packet-extreme.c	\
+	packet-fc00.c		\
 	packet-fc.c		\
 	packet-fcct.c		\
 	packet-fcdns.c		\
@@ -616,7 +619,7 @@ DISSECTOR_SRC = \
 	packet-fip.c		\
 	packet-fix.c		\
 	packet-flexnet.c	\
-	packet-flexray.c\
+	packet-flexray.c	\
 	packet-flip.c		\
 	packet-fmp.c		\
 	packet-fmp_notify.c	\
@@ -674,6 +677,7 @@ DISSECTOR_SRC = \
 	packet-gsm_bssmap_le.c	\
 	packet-gsm_cbch.c	\
 	packet-gsm_ipa.c	\
+	packet-gsm_osmux.c	\
 	packet-gsm_rlcmac.c	\
 	packet-gsm_sim.c	\
 	packet-gsm_sms.c	\
@@ -723,6 +727,7 @@ DISSECTOR_SRC = \
 	packet-hpfeeds.c	\
 	packet-hpsw.c		\
 	packet-hpteam.c		\
+	packet-hsms.c		\
 	packet-hsr-prp-supervision.c	\
 	packet-hsr.c		\
 	packet-hsrp.c		\
@@ -883,6 +888,7 @@ DISSECTOR_SRC = \
 	packet-loop.c		\
 	packet-lpd.c		\
 	packet-lsc.c		\
+	packet-lsd.c		\
 	packet-ltp.c		\
 	packet-lwapp.c		\
 	packet-lwm.c		\
@@ -960,7 +966,7 @@ DISSECTOR_SRC = \
 	packet-msproxy.c	\
 	packet-msrp.c		\
 	packet-mstp.c		\
-	packet-mswsp.c \
+	packet-mswsp.c		\
 	packet-mtp2.c		\
 	packet-mtp3.c		\
 	packet-mtp3mg.c		\
@@ -1128,6 +1134,7 @@ DISSECTOR_SRC = \
 	packet-rfid-mifare.c	\
 	packet-rfid-pn532.c	\
 	packet-rfid-pn532-hci.c	\
+	packet-rftap.c		\
 	packet-rgmp.c		\
 	packet-riemann.c	\
 	packet-rip.c		\
@@ -1161,7 +1168,7 @@ DISSECTOR_SRC = \
 	packet-rtacser.c	\
 	packet-rtcdc.c		\
 	packet-rtcp.c		\
-	packet-rtitcp.c         \
+	packet-rtitcp.c		\
 	packet-rtls.c		\
 	packet-rtmpt.c		\
 	packet-rtnet.c		\
@@ -1531,6 +1538,7 @@ DISSECTOR_INCLUDES = \
 	packet-e164.h		\
 	packet-e212.h		\
 	packet-edonkey.h	\
+	packet-eigrp.h		\
 	packet-epmd.h		\
 	packet-ess.h		\
 	packet-eth.h		\
@@ -1559,6 +1567,7 @@ DISSECTOR_INCLUDES = \
 	packet-gsm_a_common.h	\
 	packet-gsm_a_rr.h	\
 	packet-gsm_map.h	\
+	packet-gsm_osmux.h	\
 	packet-gsm_rlcmac.h	\
 	packet-gsm_sms.h	\
 	packet-gssapi.h		\
@@ -1683,6 +1692,7 @@ DISSECTOR_INCLUDES = \
 	packet-q932.h		\
 	packet-qsig.h		\
 	packet-radius.h		\
+	packet-raknet.h		\
 	packet-ranap.h		\
 	packet-rdm.h		\
 	packet-rdt.h		\

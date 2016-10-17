@@ -76,6 +76,8 @@
 #endif
 
 #include <wsutil/crash_info.h>
+#include <wsutil/clopts_common.h>
+#include <wsutil/cmdarg_err.h>
 #include <wsutil/filesystem.h>
 #include <wsutil/file_util.h>
 #include <wsutil/md5.h>
@@ -86,6 +88,7 @@
 #include <wsutil/str_util.h>
 #include <ws_version_info.h>
 #include <wsutil/pint.h>
+#include <wsutil/strtoi.h>
 #include <wiretap/wtap_opttypes.h>
 #include <wiretap/pcapng.h>
 
@@ -116,7 +119,7 @@ static fd_hash_t fd_hash[MAX_DUP_DEPTH];
 static int       dup_window    = DEFAULT_DUP_DEPTH;
 static int       cur_dup_entry = 0;
 
-static int       ignored_bytes  = 0;  /* Used with -I */
+static guint32   ignored_bytes  = 0;  /* Used with -I */
 
 #define ONE_BILLION 1000000000
 
@@ -283,7 +286,7 @@ add_selection(char *sel, guint* max_selection)
             fprintf(stderr, "Not inclusive ...");
 
         selectfrm[max_selected].inclusive = FALSE;
-        selectfrm[max_selected].first = (guint)strtoul(sel, NULL, 10);
+        selectfrm[max_selected].first = get_guint32(sel, "packet number");
         if (selectfrm[max_selected].first > *max_selection)
             *max_selection = selectfrm[max_selected].first;
 
@@ -295,8 +298,8 @@ add_selection(char *sel, guint* max_selection)
 
         next = locn + 1;
         selectfrm[max_selected].inclusive = TRUE;
-        selectfrm[max_selected].first = (guint)strtoul(sel, NULL, 10);
-        selectfrm[max_selected].second = (guint)strtoul(next, NULL, 10);
+        selectfrm[max_selected].first = get_guint32(sel, "beginning of packet range");
+        selectfrm[max_selected].second = get_guint32(next, "end of packet range");
 
         if (selectfrm[max_selected].second == 0)
         {
@@ -892,17 +895,26 @@ framenum_compare(gconstpointer a, gconstpointer b, gpointer user_data _U_)
     return 0;
 }
 
-#ifdef HAVE_PLUGINS
 /*
- *  Don't report failures to load plugins because most (non-wiretap) plugins
- *  *should* fail to load (because we're not linked against libwireshark and
- *  dissector plugins need libwireshark).
+ * General errors are reported with an console message in editcap.
  */
 static void
-failure_message(const char *msg_format _U_, va_list ap _U_)
+failure_message(const char *msg_format, va_list ap)
 {
+  fprintf(stderr, "editcap: ");
+  vfprintf(stderr, msg_format, ap);
+  fprintf(stderr, "\n");
 }
-#endif
+
+/*
+ * Report additional information for an error in command-line arguments.
+ */
+static void
+failure_message_cont(const char *msg_format, va_list ap)
+{
+    vfprintf(stderr, msg_format, ap);
+    fprintf(stderr, "\n");
+}
 
 static wtap_dumper *
 editcap_dump_open(const char *filename, guint32 snaplen,
@@ -952,11 +964,11 @@ main(int argc, char *argv[])
     int           err_type;
     guint8       *buf;
     guint32       read_count         = 0;
-    int           split_packet_count = 0;
+    guint32       split_packet_count = 0;
     int           written_count      = 0;
     char         *filename           = NULL;
     gboolean      ts_okay;
-    int           secs_per_block     = 0;
+    guint32       secs_per_block     = 0;
     int           block_cnt          = 0;
     nstime_t      block_start;
     gchar        *fprefix            = NULL;
@@ -973,6 +985,8 @@ main(int argc, char *argv[])
 #ifdef HAVE_PLUGINS
     char* init_progfile_dir_error;
 #endif
+
+    cmdarg_err_init(failure_message, failure_message_cont);
 
 #ifdef _WIN32
     arg_list_utf_16to8(argc, argv);
@@ -992,6 +1006,8 @@ main(int argc, char *argv[])
          "\n"
          "%s",
       get_ws_vcs_version_info(), comp_info_str->str, runtime_info_str->str);
+    g_string_free(comp_info_str, TRUE);
+    g_string_free(runtime_info_str, TRUE);
 
     /*
      * Get credential information for later use.
@@ -1011,8 +1027,12 @@ main(int argc, char *argv[])
         init_report_err(failure_message,NULL,NULL,NULL);
 
         /* Scan for plugins.  This does *not* call their registration routines;
-           that's done later. */
-        scan_plugins();
+           that's done later.
+
+           Don't report failures to load plugins because most (non-wiretap)
+           plugins *should* fail to load (because we're not linked against
+           libwireshark and dissector plugins need libwireshark). */
+        scan_plugins(DONT_REPORT_LOAD_FAILURE);
 
         /* Register all libwiretap plugin modules. */
         register_all_wiretap_modules();
@@ -1086,17 +1106,7 @@ main(int argc, char *argv[])
         }
 
         case 'c':
-            split_packet_count = (int)strtol(optarg, &p, 10);
-            if (p == optarg || *p != '\0') {
-                fprintf(stderr, "editcap: \"%s\" isn't a valid packet count\n",
-                        optarg);
-                exit(1);
-            }
-            if (split_packet_count <= 0) {
-                fprintf(stderr, "editcap: \"%d\" packet count must be larger than zero\n",
-                        split_packet_count);
-                exit(1);
-            }
+            split_packet_count = get_nonzero_guint32(optarg, "packet count");
             break;
 
         case 'C':
@@ -1144,13 +1154,8 @@ main(int argc, char *argv[])
         case 'D':
             dup_detect = TRUE;
             dup_detect_by_time = FALSE;
-            dup_window = (int)strtol(optarg, &p, 10);
-            if (p == optarg || *p != '\0') {
-                fprintf(stderr, "editcap: \"%s\" isn't a valid duplicate window value\n",
-                        optarg);
-                exit(1);
-            }
-            if (dup_window < 0 || dup_window > MAX_DUP_DEPTH) {
+            dup_window = get_guint32(optarg, "duplicate window");
+            if (dup_window > MAX_DUP_DEPTH) {
                 fprintf(stderr, "editcap: \"%d\" duplicate window value must be between 0 and %d inclusive.\n",
                         dup_window, MAX_DUP_DEPTH);
                 exit(1);
@@ -1187,20 +1192,11 @@ main(int argc, char *argv[])
             break;
 
         case 'i': /* break capture file based on time interval */
-            secs_per_block = atoi(optarg);
-            if (secs_per_block <= 0) {
-                fprintf(stderr, "editcap: \"%s\" isn't a valid time interval\n\n",
-                        optarg);
-                exit(1);
-            }
+            secs_per_block = get_nonzero_guint32(optarg, "time interval");
             break;
 
         case 'I': /* ignored_bytes at the beginning of the frame for duplications removal */
-            ignored_bytes = atoi(optarg);
-            if(ignored_bytes <= 0) {
-                fprintf(stderr, "editcap: \"%s\" isn't a valid number of bytes to ignore\n", optarg);
-                exit(1);
-            }
+            ignored_bytes = get_guint32(optarg, "number of bytes to ignore");
             break;
 
         case 'L':
@@ -1208,7 +1204,7 @@ main(int argc, char *argv[])
             break;
 
         case 'o':
-            change_offset = (guint32)strtol(optarg, &p, 10);
+            change_offset = get_guint32(optarg, "change offset");
             break;
 
         case 'r':
@@ -1216,12 +1212,7 @@ main(int argc, char *argv[])
             break;
 
         case 's':
-            snaplen = (guint32)strtol(optarg, &p, 10);
-            if (p == optarg || *p != '\0') {
-                fprintf(stderr, "editcap: \"%s\" isn't a valid snapshot length\n",
-                        optarg);
-                exit(1);
-            }
+            snaplen = get_nonzero_guint32(optarg, "snapshot length");
             break;
 
         case 'S':
@@ -1248,6 +1239,8 @@ main(int argc, char *argv[])
             break;
 
         case 'V':
+            comp_info_str = get_compiled_version_info(NULL, NULL);
+            runtime_info_str = get_runtime_version_info(NULL);
             show_version("Editcap (Wireshark)", comp_info_str, runtime_info_str);
             g_string_free(comp_info_str, TRUE);
             g_string_free(runtime_info_str, TRUE);
@@ -1306,7 +1299,7 @@ main(int argc, char *argv[])
         exit(1);
     }
 
-    if (split_packet_count > 0 && secs_per_block > 0) {
+    if (split_packet_count != 0 && secs_per_block != 0) {
         fprintf(stderr, "editcap: can't split on both packet count and time interval\n");
         fprintf(stderr, "editcap: at the same time\n");
         exit(1);
@@ -1368,7 +1361,7 @@ main(int argc, char *argv[])
 
             /* Extra actions for the first packet */
             if (read_count == 1) {
-                if (split_packet_count > 0 || secs_per_block > 0) {
+                if (split_packet_count != 0 || secs_per_block != 0) {
                     if (!fileset_extract_prefix_suffix(argv[optind+1], &fprefix, &fsuffix))
                         goto error_on_exit;
 
@@ -1405,10 +1398,9 @@ main(int argc, char *argv[])
                 if (nstime_is_unset(&block_start)) {
                     block_start = phdr->ts;
                 }
-
-                if (secs_per_block > 0) {
-                    while ((phdr->ts.secs - block_start.secs >  secs_per_block)
-                           || (phdr->ts.secs - block_start.secs == secs_per_block
+                if (secs_per_block != 0) {
+                    while (((guint32)(phdr->ts.secs - block_start.secs) >  secs_per_block)
+                           || ((guint32)(phdr->ts.secs - block_start.secs) == secs_per_block
                                && phdr->ts.nsecs >= block_start.nsecs )) { /* time for the next file */
 
                         if (!wtap_dump_close(pdh, &write_err)) {
@@ -1437,9 +1429,9 @@ main(int argc, char *argv[])
                 }
             }  /* time stamp handling */
 
-            if (split_packet_count > 0) {
+            if (split_packet_count != 0) {
                 /* time for the next file? */
-                if (written_count > 0 && written_count % split_packet_count == 0) {
+                if (written_count > 0 && (written_count % split_packet_count) == 0) {
                     if (!wtap_dump_close(pdh, &write_err)) {
                         fprintf(stderr, "editcap: Error writing to %s: %s\n",
                                 filename, wtap_strerror(write_err));
@@ -1834,18 +1826,11 @@ main(int argc, char *argv[])
             }
         }
 
-        g_free(idb_inf);
-        idb_inf = NULL;
-
         if (!wtap_dump_close(pdh, &write_err)) {
             fprintf(stderr, "editcap: Error writing to %s: %s\n", filename,
                     wtap_strerror(write_err));
             goto error_on_exit;
         }
-        wtap_block_array_free(shb_hdrs);
-        shb_hdrs = NULL;
-        wtap_block_array_free(nrb_hdrs);
-        nrb_hdrs = NULL;
         g_free(filename);
 
         if (frames_user_comments) {
@@ -1864,6 +1849,11 @@ main(int argc, char *argv[])
                 (long)relative_time_window.secs,
                 (long int)relative_time_window.nsecs);
     }
+
+    wtap_block_array_free(shb_hdrs);
+    wtap_block_array_free(nrb_hdrs);
+    g_free(idb_inf);
+    wtap_close(wth);
 
     return 0;
 

@@ -1471,7 +1471,7 @@ void proto_register_mip(void)
   expert_register_field_array(expert_mip, ei, array_length(ei));
 
   mip_nvse_ext_dissector_table = register_dissector_table("mip.nvse_ext",
-    "MIP Normal Vendor/Organization Specific Extension", proto_mip, FT_UINT32, BASE_DEC, DISSECTOR_TABLE_ALLOW_DUPLICATE);
+    "MIP Normal Vendor/Organization Specific Extension", proto_mip, FT_UINT32, BASE_DEC);
 }
 
 void
@@ -1481,7 +1481,7 @@ proto_reg_handoff_mip(void)
 
   mip_handle = find_dissector("mip");
   ip_handle = find_dissector_add_dependency("ip", proto_mip);
-  dissector_add_uint("udp.port", UDP_PORT_MIP, mip_handle);
+  dissector_add_uint_with_preference("udp.port", UDP_PORT_MIP, mip_handle);
 
   /* Register as dissector for 3GPP2 NVSE */
   dissector_add_uint("mip.nvse_ext", VENDOR_THE3GPP2,

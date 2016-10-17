@@ -47,6 +47,7 @@
 #include <wsutil/str_util.h>
 #include <wsutil/report_err.h>
 #include <wsutil/pint.h>
+#include <wsutil/strtoi.h>
 #include <ws_version_info.h>
 #include "packet-x509af.h"
 #include "packet-x509if.h"
@@ -64,10 +65,29 @@ const value_string ssl_version_short_names[] = {
     { TLSV1_VERSION,        "TLSv1" },
     { TLSV1DOT1_VERSION,    "TLSv1.1" },
     { TLSV1DOT2_VERSION,    "TLSv1.2" },
+    { TLSV1DOT3_VERSION,    "TLSv1.3" },
     { DTLSV1DOT0_VERSION,   "DTLSv1.0" },
     { DTLSV1DOT2_VERSION,   "DTLSv1.2" },
     { DTLSV1DOT0_OPENSSL_VERSION, "DTLS 1.0 (OpenSSL pre 0.9.8f)" },
     { PCT_VERSION,          "PCT" },
+    { 0x00, NULL }
+};
+
+const value_string ssl_versions[] = {
+    { SSLV2_VERSION,        "SSL 2.0" },
+    { SSLV3_VERSION,        "SSL 3.0" },
+    { TLSV1_VERSION,        "TLS 1.0" },
+    { TLSV1DOT1_VERSION,    "TLS 1.1" },
+    { TLSV1DOT2_VERSION,    "TLS 1.2" },
+    { TLSV1DOT3_VERSION,    "TLS 1.3" },
+    { 0x7F0E,               "TLS 1.3 (draft 14)" },
+    { 0x7F0F,               "TLS 1.3 (draft 15)" },
+    { 0x7F10,               "TLS 1.3 (draft 16)" },
+    { 0x7F11,               "TLS 1.3 (draft 17)" },
+    { 0x7F12,               "TLS 1.3 (draft 18)" },
+    { DTLSV1DOT0_OPENSSL_VERSION, "DTLS 1.0 (OpenSSL pre 0.9.8f)" },
+    { DTLSV1DOT0_VERSION,   "DTLS 1.0" },
+    { DTLSV1DOT2_VERSION,   "DTLS 1.2" },
     { 0x00, NULL }
 };
 
@@ -468,18 +488,6 @@ const value_string ssl_31_content_type[] = {
     { 0x00, NULL }
 };
 
-const value_string ssl_versions[] = {
-    { 0xfefd, "DTLS 1.2" },
-    { 0xfeff, "DTLS 1.0" },
-    { 0x0100, "DTLS 1.0 (OpenSSL pre 0.9.8f)" },
-    { 0x0303, "TLS 1.2" },
-    { 0x0302, "TLS 1.1" },
-    { 0x0301, "TLS 1.0" },
-    { 0x0300, "SSL 3.0" },
-    { 0x0002, "SSL 2.0" },
-    { 0x00, NULL }
-};
-
 #if 0
 /* XXX - would be used if we dissected the body of a Change Cipher Spec
    message. */
@@ -809,6 +817,12 @@ static const value_string ssl_31_ciphersuite[] = {
     /* 0x00,0xC6-FE Unassigned  */
     /* From RFC 5746 */
     { 0x00FF, "TLS_EMPTY_RENEGOTIATION_INFO_SCSV" },
+    /* https://tools.ietf.org/html/draft-ietf-tls-tls13 */
+    { 0x1301, "TLS_AES_128_GCM_SHA256" },
+    { 0x1302, "TLS_AES_256_GCM_SHA384" },
+    { 0x1303, "TLS_CHACHA20_POLY1305_SHA256" },
+    { 0x1304, "TLS_AES_128_CCM_SHA256" },
+    { 0x1305, "TLS_AES_128_CCM_8_SHA256" },
     /* From RFC 7507 */
     { 0x5600, "TLS_FALLBACK_SCSV" },
     /* From RFC 4492 */
@@ -1122,45 +1136,75 @@ const value_string pct_error_code[] = {
 
 /* http://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml#tls-extensiontype-values-1 */
 const value_string tls_hello_extension_types[] = {
-    { SSL_HND_HELLO_EXT_SERVER_NAME, "server_name" }, /* RFC 3546 */
-    { 1, "max_fragment_length" },
-    { 2, "client_certificate_url" },
-    { 3, "trusted_ca_keys" },
-    { 4, "truncated_hmac" },
+    { SSL_HND_HELLO_EXT_SERVER_NAME, "server_name" }, /* RFC 6066 */
+    { SSL_HND_HELLO_EXT_MAX_FRAGMENT_LENGTH, "max_fragment_length" },/* RFC 6066 */
+    { SSL_HND_HELLO_EXT_CLIENT_CERTIFICATE_URL, "client_certificate_url" }, /* RFC 6066 */
+    { SSL_HND_HELLO_EXT_TRUSTED_CA_KEYS, "trusted_ca_keys" }, /* RFC 6066 */
+    { SSL_HND_HELLO_EXT_TRUNCATED_HMAC, "truncated_hmac" }, /* RFC 6066 */
     { SSL_HND_HELLO_EXT_STATUS_REQUEST, "status_request" }, /* RFC 6066 */
-    { 6, "user_mapping" },  /* RFC 4681 */
-    { 7, "client_authz" },
-    { 8, "server_authz" },
-    { SSL_HND_HELLO_EXT_CERT_TYPE, "cert_type" },  /* RFC 5081 */
-    { SSL_HND_HELLO_EXT_ELLIPTIC_CURVES, "elliptic_curves" },  /* RFC 4492 */
-    { SSL_HND_HELLO_EXT_EC_POINT_FORMATS, "ec_point_formats" },  /* RFC 4492 */
-    { 12, "srp" },  /* RFC 5054 */
-    { 13, "signature_algorithms" },  /* RFC 5246 */
-    { 14, "use_srtp" },
-    { SSL_HND_HELLO_EXT_HEARTBEAT, "Heartbeat" },  /* RFC 6520 */
-    { SSL_HND_HELLO_EXT_ALPN, "Application Layer Protocol Negotiation" }, /* RFC 7301 */
+    { SSL_HND_HELLO_EXT_USER_MAPPING, "user_mapping" }, /* RFC 4681 */
+    { SSL_HND_HELLO_EXT_CLIENT_AUTHZ, "client_authz" }, /* RFC 5878 */
+    { SSL_HND_HELLO_EXT_SERVER_AUTHZ, "server_authz" }, /* RFC 5878 */
+    { SSL_HND_HELLO_EXT_CERT_TYPE, "cert_type" }, /* RFC 6091 */
+    { SSL_HND_HELLO_EXT_SUPPORTED_GROUPS, "elliptic_curves" }, /* RFC 4492 */
+    { SSL_HND_HELLO_EXT_EC_POINT_FORMATS, "ec_point_formats" }, /* RFC 4492 */
+    { SSL_HND_HELLO_EXT_SRP, "srp" }, /* RFC 5054 */
+    { SSL_HND_HELLO_EXT_SIGNATURE_ALGORITHMS, "signature_algorithms" }, /* RFC 5246 */
+    { SSL_HND_HELLO_EXT_USE_SRTP, "use_srtp" }, /* RFC 5764 */
+    { SSL_HND_HELLO_EXT_HEARTBEAT, "heartbeat" }, /* RFC 6520 */
+    { SSL_HND_HELLO_EXT_ALPN, "application_layer_protocol_negotiation" }, /* RFC 7301 */
     { SSL_HND_HELLO_EXT_STATUS_REQUEST_V2, "status_request_v2" }, /* RFC 6961 */
-    { 18, "signed_certificate_timestamp" }, /* RFC 6962 */
+    { SSL_HND_HELLO_EXT_SIGNED_CERTIFICATE_TIMESTAMP, "signed_certificate_timestamp" }, /* RFC 6962 */
     { SSL_HND_HELLO_EXT_CLIENT_CERT_TYPE, "client_certificate_type" }, /* RFC 7250 */
     { SSL_HND_HELLO_EXT_SERVER_CERT_TYPE, "server_certificate_type" }, /* RFC 7250 */
-    { SSL_HND_HELLO_EXT_PADDING, "Padding" }, /* RFC7685 */
-    { 22, "encrypt then mac" }, /* RFC7366 */
-    { SSL_HND_HELLO_EXT_EXTENDED_MASTER_SECRET_TYPE, "Extended Master Secret" }, /* RFC7627 */
-    { 24, "token binding" }, /* https://tools.ietf.org/html/draft-ietf-tokbind-negotiation */
-    { SSL_HND_HELLO_EXT_SESSION_TICKET, "SessionTicket TLS" },  /* RFC 4507 */
+    { SSL_HND_HELLO_EXT_PADDING, "padding" }, /* RFC 7685 */
+    { SSL_HND_HELLO_EXT_ENCRYPT_THEN_MAC, "encrypt_then_mac" }, /* RFC 7366 */
+    { SSL_HND_HELLO_EXT_EXTENDED_MASTER_SECRET, "extended_master_secret" }, /* RFC 7627 */
+    { SSL_HND_HELLO_EXT_TOKEN_BINDING, "token_binding" }, /* https://tools.ietf.org/html/draft-ietf-tokbind-negotiation */
+    { SSL_HND_HELLO_EXT_CACHED_INFO, "cached_info" }, /* RFC 7924 */
+    { SSL_HND_HELLO_EXT_SESSION_TICKET_TLS, "SessionTicket TLS" }, /* RFC 4507 */
+    { SSL_HND_HELLO_EXT_KEY_SHARE, "key_share" }, /* TLS 1.3 https://tools.ietf.org/html/draft-ietf-tls-tls13 */
+    { SSL_HND_HELLO_EXT_PRE_SHARED_KEY, "pre_shared_key" }, /* TLS 1.3 https://tools.ietf.org/html/draft-ietf-tls-tls13 */
+    { SSL_HND_HELLO_EXT_EARLY_DATA, "early_data" }, /* TLS 1.3 https://tools.ietf.org/html/draft-ietf-tls-tls13 */
+    { SSL_HND_HELLO_EXT_SUPPORTED_VERSIONS, "supported_versions" }, /* TLS 1.3 https://tools.ietf.org/html/draft-ietf-tls-tls13 */
+    { SSL_HND_HELLO_EXT_COOKIE, "cookie" }, /* TLS 1.3 https://tools.ietf.org/html/draft-ietf-tls-tls13 */
     { SSL_HND_HELLO_EXT_NPN, "next_protocol_negotiation"}, /* http://technotes.googlecode.com/git/nextprotoneg.html */
-    { SSL_HND_HELLO_EXT_RENEG_INFO, "renegotiation_info" }, /* RFC 5746 */
-    /* http://tools.ietf.org/html/draft-balfanz-tls-channelid-00
+    { SSL_HND_HELLO_EXT_CHANNEL_ID_OLD, "channel_id_old" }, /* http://tools.ietf.org/html/draft-balfanz-tls-channelid-00
        https://twitter.com/ericlaw/status/274237352531083264 */
-    { SSL_HND_HELLO_EXT_CHANNEL_ID_OLD, "channel_id_old" },
-    /* http://tools.ietf.org/html/draft-balfanz-tls-channelid-01
+    { SSL_HND_HELLO_EXT_CHANNEL_ID, "channel_id" }, /* http://tools.ietf.org/html/draft-balfanz-tls-channelid-01
        https://code.google.com/p/chromium/codesearch#chromium/src/net/third_party/nss/ssl/sslt.h&l=209 */
-    { SSL_HND_HELLO_EXT_CHANNEL_ID, "channel_id" },
+    { SSL_HND_HELLO_EXT_RENEGOTIATION_INFO, "renegotiation_info" }, /* RFC 5746 */
+    { SSL_HND_HELLO_EXT_DRAFT_VERSION_TLS13, "Draft version of TLS 1.3" }, /* for experimentation only  https://www.ietf.org/mail-archive/web/tls/current/msg20853.html */
     { 0, NULL }
 };
 
 const value_string tls_hello_ext_server_name_type_vs[] = {
     { 0, "host_name" },
+    { 0, NULL }
+};
+
+/* draft-ietf-tls-tls13-15 4.2.5 */
+const value_string tls_hello_ext_psk_ke_mode[] = {
+    { 0, "PSK-only key establishment (psk_ke)" },
+    { 1, "PSK key establishment with (EC)DHE key establishment (psk_dhe_ke)" },
+    { 0, NULL }
+};
+
+static const value_string tls_hello_ext_psk_ke_mode_short[] = {
+    { 0, "psk_ke" },
+    { 1, "psk_dhe_ke" },
+    { 0, NULL }
+};
+
+const value_string tls_hello_ext_psk_auth_mode[] = {
+    { 0, "PSK-only authentication (psk_auth)" },
+    { 1, "PSK authentication plus digital signature (psk_sign_auth)" },
+    { 0, NULL }
+};
+
+static const value_string tls_hello_ext_psk_auth_mode_short[] = {
+    { 0, "psk_auth" },
+    { 1, "psk_sign_auth" },
     { 0, NULL }
 };
 
@@ -1207,21 +1251,21 @@ const value_string tls_cert_status_type[] = {
 /* string_string is inappropriate as it compares strings while
  * "byte strings MUST NOT be truncated" (RFC 7301) */
 typedef struct ssl_alpn_protocol {
-    const guint8    *proto_name;
-    size_t           proto_name_len;
+    const char      *proto_name;
+    gboolean         match_exact;
     const char      *dissector_name;
 } ssl_alpn_protocol_t;
 /* http://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml#alpn-protocol-ids */
 static const ssl_alpn_protocol_t ssl_alpn_protocols[] = {
-    { "http/1.1",   sizeof("http/1.1"),     "http" },
+    { "http/1.1",           TRUE,   "http" },
     /* SPDY moves so fast, just 1, 2 and 3 are registered with IANA but there
      * already exists 3.1 as of this writing... match the prefix. */
-    { "spdy/",      sizeof("spdy/") - 1,    "spdy" },
-    { "stun.turn",  sizeof("stun.turn"),    "turnchannel" },
-    { "stun.nat-discovery", sizeof("stun.nat-discovery"), "stun" },
+    { "spdy/",              FALSE,  "spdy" },
+    { "stun.turn",          TRUE,   "turnchannel" },
+    { "stun.nat-discovery", TRUE,   "stun" },
     /* draft-ietf-httpbis-http2-16 */
-    { "h2-",         sizeof("h2-") - 1,     "http2" }, /* draft versions */
-    { "h2",          sizeof("h2"),          "http2" }, /* final version */
+    { "h2-",                FALSE,  "http2" }, /* draft versions */
+    { "h2",                 TRUE,   "http2" }, /* final version */
 };
 
 /* Lookup tables }}} */
@@ -1824,9 +1868,12 @@ ssl_cipher_init(gcry_cipher_hd_t *cipher, gint algo, guchar* sk,
     err = gcry_cipher_setkey(*(cipher), sk, gcry_cipher_get_algo_keylen (algo));
     if (err != 0)
         return -1;
-    err = gcry_cipher_setiv(*(cipher), iv, gcry_cipher_get_algo_blklen (algo));
-    if (err != 0)
-        return -1;
+    /* AEAD cipher suites will set the nonce later. */
+    if (mode == MODE_CBC) {
+        err = gcry_cipher_setiv(*(cipher), iv, gcry_cipher_get_algo_blklen(algo));
+        if (err != 0)
+            return -1;
+    }
     return 0;
 }
 static inline gint
@@ -2001,253 +2048,253 @@ static const gchar *ciphers[]={
 };
 
 static const SslCipherSuite cipher_suites[]={
-    {0x0001,KEX_RSA,         ENC_NULL,        1,  0,  0,DIG_MD5,    MODE_STREAM},   /* TLS_RSA_WITH_NULL_MD5 */
-    {0x0002,KEX_RSA,         ENC_NULL,        1,  0,  0,DIG_SHA,    MODE_STREAM},   /* TLS_RSA_WITH_NULL_SHA */
-    {0x0003,KEX_RSA,         ENC_RC4,         1,128, 40,DIG_MD5,    MODE_STREAM},   /* TLS_RSA_EXPORT_WITH_RC4_40_MD5 */
-    {0x0004,KEX_RSA,         ENC_RC4,         1,128,128,DIG_MD5,    MODE_STREAM},   /* TLS_RSA_WITH_RC4_128_MD5 */
-    {0x0005,KEX_RSA,         ENC_RC4,         1,128,128,DIG_SHA,    MODE_STREAM},   /* TLS_RSA_WITH_RC4_128_SHA */
-    {0x0006,KEX_RSA,         ENC_RC2,         8,128, 40,DIG_MD5,    MODE_CBC   },   /* TLS_RSA_EXPORT_WITH_RC2_CBC_40_MD5 */
-    {0x0007,KEX_RSA,         ENC_IDEA,        8,128,128,DIG_SHA,    MODE_CBC   },   /* TLS_RSA_WITH_IDEA_CBC_SHA */
-    {0x0008,KEX_RSA,         ENC_DES,         8, 64, 40,DIG_SHA,    MODE_CBC   },   /* TLS_RSA_EXPORT_WITH_DES40_CBC_SHA */
-    {0x0009,KEX_RSA,         ENC_DES,         8, 64, 64,DIG_SHA,    MODE_CBC   },   /* TLS_RSA_WITH_DES_CBC_SHA */
-    {0x000A,KEX_RSA,         ENC_3DES,        8,192,192,DIG_SHA,    MODE_CBC   },   /* TLS_RSA_WITH_3DES_EDE_CBC_SHA */
-    {0x000B,KEX_DH_DSS,      ENC_DES,         8, 64, 40,DIG_SHA,    MODE_CBC   },   /* TLS_DH_DSS_EXPORT_WITH_DES40_CBC_SHA */
-    {0x000C,KEX_DH_DSS,      ENC_DES,         8, 64, 64,DIG_SHA,    MODE_CBC   },   /* TLS_DH_DSS_WITH_DES_CBC_SHA */
-    {0x000D,KEX_DH_DSS,      ENC_3DES,        8,192,192,DIG_SHA,    MODE_CBC   },   /* TLS_DH_DSS_WITH_3DES_EDE_CBC_SHA */
-    {0x000E,KEX_DH_RSA,      ENC_DES,         8, 64, 40,DIG_SHA,    MODE_CBC   },   /* TLS_DH_RSA_EXPORT_WITH_DES40_CBC_SHA */
-    {0x000F,KEX_DH_RSA,      ENC_DES,         8, 64, 64,DIG_SHA,    MODE_CBC   },   /* TLS_DH_RSA_WITH_DES_CBC_SHA */
-    {0x0010,KEX_DH_RSA,      ENC_3DES,        8,192,192,DIG_SHA,    MODE_CBC   },   /* TLS_DH_RSA_WITH_3DES_EDE_CBC_SHA */
-    {0x0011,KEX_DHE_DSS,     ENC_DES,         8, 64, 40,DIG_SHA,    MODE_CBC   },   /* TLS_DHE_DSS_EXPORT_WITH_DES40_CBC_SHA */
-    {0x0012,KEX_DHE_DSS,     ENC_DES,         8, 64, 64,DIG_SHA,    MODE_CBC   },   /* TLS_DHE_DSS_WITH_DES_CBC_SHA */
-    {0x0013,KEX_DHE_DSS,     ENC_3DES,        8,192,192,DIG_SHA,    MODE_CBC   },   /* TLS_DHE_DSS_WITH_3DES_EDE_CBC_SHA */
-    {0x0014,KEX_DHE_RSA,     ENC_DES,         8, 64, 40,DIG_SHA,    MODE_CBC   },   /* TLS_DHE_RSA_EXPORT_WITH_DES40_CBC_SHA */
-    {0x0015,KEX_DHE_RSA,     ENC_DES,         8, 64, 64,DIG_SHA,    MODE_CBC   },   /* TLS_DHE_RSA_WITH_DES_CBC_SHA */
-    {0x0016,KEX_DHE_RSA,     ENC_3DES,        8,192,192,DIG_SHA,    MODE_CBC   },   /* TLS_DHE_RSA_WITH_3DES_EDE_CBC_SHA */
-    {0x0017,KEX_DH_ANON,     ENC_RC4,         1,128, 40,DIG_MD5,    MODE_STREAM},   /* TLS_DH_anon_EXPORT_WITH_RC4_40_MD5 */
-    {0x0018,KEX_DH_ANON,     ENC_RC4,         1,128,128,DIG_MD5,    MODE_STREAM},   /* TLS_DH_anon_WITH_RC4_128_MD5 */
-    {0x0019,KEX_DH_ANON,     ENC_DES,         8, 64, 40,DIG_SHA,    MODE_CBC   },   /* TLS_DH_anon_EXPORT_WITH_DES40_CBC_SHA */
-    {0x001A,KEX_DH_ANON,     ENC_DES,         8, 64, 64,DIG_SHA,    MODE_CBC   },   /* TLS_DH_anon_WITH_DES_CBC_SHA */
-    {0x001B,KEX_DH_ANON,     ENC_3DES,        8,192,192,DIG_SHA,    MODE_CBC   },   /* TLS_DH_anon_WITH_3DES_EDE_CBC_SHA */
-    {0x002C,KEX_PSK,         ENC_NULL,        1,  0,  0,DIG_SHA,    MODE_STREAM},   /* TLS_PSK_WITH_NULL_SHA */
-    {0x002D,KEX_DHE_PSK,     ENC_NULL,        1,  0,  0,DIG_SHA,    MODE_STREAM},   /* TLS_DHE_PSK_WITH_NULL_SHA */
-    {0x002E,KEX_RSA_PSK,     ENC_NULL,        1,  0,  0,DIG_SHA,    MODE_STREAM},   /* TLS_RSA_PSK_WITH_NULL_SHA */
-    {0x002F,KEX_RSA,         ENC_AES,        16,128,128,DIG_SHA,    MODE_CBC   },   /* TLS_RSA_WITH_AES_128_CBC_SHA */
-    {0x0030,KEX_DH_DSS,      ENC_AES,        16,128,128,DIG_SHA,    MODE_CBC   },   /* TLS_DH_DSS_WITH_AES_128_CBC_SHA */
-    {0x0031,KEX_DH_RSA,      ENC_AES,        16,128,128,DIG_SHA,    MODE_CBC   },   /* TLS_DH_RSA_WITH_AES_128_CBC_SHA */
-    {0x0032,KEX_DHE_DSS,     ENC_AES,        16,128,128,DIG_SHA,    MODE_CBC   },   /* TLS_DHE_DSS_WITH_AES_128_CBC_SHA */
-    {0x0033,KEX_DHE_RSA,     ENC_AES,        16,128,128,DIG_SHA,    MODE_CBC   },   /* TLS_DHE_RSA_WITH_AES_128_CBC_SHA */
-    {0x0034,KEX_DH_ANON,     ENC_AES,        16,128,128,DIG_SHA,    MODE_CBC   },   /* TLS_DH_anon_WITH_AES_128_CBC_SHA */
-    {0x0035,KEX_RSA,         ENC_AES256,     16,256,256,DIG_SHA,    MODE_CBC   },   /* TLS_RSA_WITH_AES_256_CBC_SHA */
-    {0x0036,KEX_DH_DSS,      ENC_AES256,     16,256,256,DIG_SHA,    MODE_CBC   },   /* TLS_DH_DSS_WITH_AES_256_CBC_SHA */
-    {0x0037,KEX_DH_RSA,      ENC_AES256,     16,256,256,DIG_SHA,    MODE_CBC   },   /* TLS_DH_RSA_WITH_AES_256_CBC_SHA */
-    {0x0038,KEX_DHE_DSS,     ENC_AES256,     16,256,256,DIG_SHA,    MODE_CBC   },   /* TLS_DHE_DSS_WITH_AES_256_CBC_SHA */
-    {0x0039,KEX_DHE_RSA,     ENC_AES256,     16,256,256,DIG_SHA,    MODE_CBC   },   /* TLS_DHE_RSA_WITH_AES_256_CBC_SHA */
-    {0x003A,KEX_DH_ANON,     ENC_AES256,     16,256,256,DIG_SHA,    MODE_CBC   },   /* TLS_DH_anon_WITH_AES_256_CBC_SHA */
-    {0x003B,KEX_RSA,         ENC_NULL,        1,  0,  0,DIG_SHA256, MODE_STREAM},   /* TLS_RSA_WITH_NULL_SHA256 */
-    {0x003C,KEX_RSA,         ENC_AES,        16,128,128,DIG_SHA256, MODE_CBC   },   /* TLS_RSA_WITH_AES_128_CBC_SHA256 */
-    {0x003D,KEX_RSA,         ENC_AES256,     16,256,256,DIG_SHA256, MODE_CBC   },   /* TLS_RSA_WITH_AES_256_CBC_SHA256 */
-    {0x003E,KEX_DH_DSS,      ENC_AES,        16,128,128,DIG_SHA256, MODE_CBC   },   /* TLS_DH_DSS_WITH_AES_128_CBC_SHA256 */
-    {0x003F,KEX_DH_RSA,      ENC_AES,        16,128,128,DIG_SHA256, MODE_CBC   },   /* TLS_DH_RSA_WITH_AES_128_CBC_SHA256 */
-    {0x0040,KEX_DHE_DSS,     ENC_AES,        16,128,128,DIG_SHA256, MODE_CBC   },   /* TLS_DHE_DSS_WITH_AES_128_CBC_SHA256 */
-    {0x0041,KEX_RSA,         ENC_CAMELLIA128,16,128,128,DIG_SHA,    MODE_CBC   },   /* TLS_RSA_WITH_CAMELLIA_128_CBC_SHA */
-    {0x0042,KEX_DH_DSS,      ENC_CAMELLIA128,16,128,128,DIG_SHA,    MODE_CBC   },   /* TLS_DH_DSS_WITH_CAMELLIA_128_CBC_SHA */
-    {0x0043,KEX_DH_RSA,      ENC_CAMELLIA128,16,128,128,DIG_SHA,    MODE_CBC   },   /* TLS_DH_RSA_WITH_CAMELLIA_128_CBC_SHA */
-    {0x0044,KEX_DHE_DSS,     ENC_CAMELLIA128,16,128,128,DIG_SHA,    MODE_CBC   },   /* TLS_DHE_DSS_WITH_CAMELLIA_128_CBC_SHA */
-    {0x0045,KEX_DHE_RSA,     ENC_CAMELLIA128,16,128,128,DIG_SHA,    MODE_CBC   },   /* TLS_DHE_RSA_WITH_CAMELLIA_128_CBC_SHA */
-    {0x0046,KEX_DH_ANON,     ENC_CAMELLIA128,16,128,128,DIG_SHA,    MODE_CBC   },   /* TLS_DH_anon_WITH_CAMELLIA_128_CBC_SHA */
-    {0x0060,KEX_RSA,         ENC_RC4,         1,128, 56,DIG_MD5,    MODE_STREAM},   /* TLS_RSA_EXPORT1024_WITH_RC4_56_MD5 */
-    {0x0061,KEX_RSA,         ENC_RC2,         1,128, 56,DIG_MD5,    MODE_STREAM},   /* TLS_RSA_EXPORT1024_WITH_RC2_CBC_56_MD5 */
-    {0x0062,KEX_RSA,         ENC_DES,         8, 64, 56,DIG_SHA,    MODE_CBC   },   /* TLS_RSA_EXPORT1024_WITH_DES_CBC_SHA */
-    {0x0063,KEX_DHE_DSS,     ENC_DES,         8, 64, 56,DIG_SHA,    MODE_CBC   },   /* TLS_DHE_DSS_EXPORT1024_WITH_DES_CBC_SHA */
-    {0x0064,KEX_RSA,         ENC_RC4,         1,128, 56,DIG_SHA,    MODE_STREAM},   /* TLS_RSA_EXPORT1024_WITH_RC4_56_SHA */
-    {0x0065,KEX_DHE_DSS,     ENC_RC4,         1,128, 56,DIG_SHA,    MODE_STREAM},   /* TLS_DHE_DSS_EXPORT1024_WITH_RC4_56_SHA */
-    {0x0066,KEX_DHE_DSS,     ENC_RC4,         1,128,128,DIG_SHA,    MODE_STREAM},   /* TLS_DHE_DSS_WITH_RC4_128_SHA */
-    {0x0067,KEX_DHE_RSA,     ENC_AES,        16,128,128,DIG_SHA256, MODE_CBC   },   /* TLS_DHE_RSA_WITH_AES_128_CBC_SHA256 */
-    {0x0068,KEX_DH_DSS,      ENC_AES256,     16,256,256,DIG_SHA256, MODE_CBC   },   /* TLS_DH_DSS_WITH_AES_256_CBC_SHA256 */
-    {0x0069,KEX_DH_RSA,      ENC_AES256,     16,256,256,DIG_SHA256, MODE_CBC   },   /* TLS_DH_RSA_WITH_AES_256_CBC_SHA256 */
-    {0x006A,KEX_DHE_DSS,     ENC_AES256,     16,256,256,DIG_SHA256, MODE_CBC   },   /* TLS_DHE_DSS_WITH_AES_256_CBC_SHA256 */
-    {0x006B,KEX_DHE_RSA,     ENC_AES256,     16,256,256,DIG_SHA256, MODE_CBC   },   /* TLS_DHE_RSA_WITH_AES_256_CBC_SHA256 */
-    {0x006C,KEX_DH_ANON,     ENC_AES,        16,128,128,DIG_SHA256, MODE_CBC   },   /* TLS_DH_anon_WITH_AES_128_CBC_SHA256 */
-    {0x006D,KEX_DH_ANON,     ENC_AES256,     16,256,256,DIG_SHA256, MODE_CBC   },   /* TLS_DH_anon_WITH_AES_256_CBC_SHA256 */
-    {0x0084,KEX_RSA,         ENC_CAMELLIA256,16,256,256,DIG_SHA,    MODE_CBC   },   /* TLS_RSA_WITH_CAMELLIA_256_CBC_SHA */
-    {0x0085,KEX_DH_DSS,      ENC_CAMELLIA256,16,256,256,DIG_SHA,    MODE_CBC   },   /* TLS_DH_DSS_WITH_CAMELLIA_256_CBC_SHA */
-    {0x0086,KEX_DH_RSA,      ENC_CAMELLIA256,16,256,256,DIG_SHA,    MODE_CBC   },   /* TLS_DH_RSA_WITH_CAMELLIA_256_CBC_SHA */
-    {0x0087,KEX_DHE_DSS,     ENC_CAMELLIA256,16,256,256,DIG_SHA,    MODE_CBC   },   /* TLS_DHE_DSS_WITH_CAMELLIA_256_CBC_SHA */
-    {0x0088,KEX_DHE_RSA,     ENC_CAMELLIA256,16,256,256,DIG_SHA,    MODE_CBC   },   /* TLS_DHE_RSA_WITH_CAMELLIA_256_CBC_SHA */
-    {0x0089,KEX_DH_ANON,     ENC_CAMELLIA256,16,256,256,DIG_SHA,    MODE_CBC   },   /* TLS_DH_anon_WITH_CAMELLIA_256_CBC_SHA */
-    {0x008A,KEX_PSK,         ENC_RC4,         1,128,128,DIG_SHA,    MODE_STREAM},   /* TLS_PSK_WITH_RC4_128_SHA */
-    {0x008B,KEX_PSK,         ENC_3DES,        8,192,192,DIG_SHA,    MODE_CBC   },   /* TLS_PSK_WITH_3DES_EDE_CBC_SHA */
-    {0x008C,KEX_PSK,         ENC_AES,        16,128,128,DIG_SHA,    MODE_CBC   },   /* TLS_PSK_WITH_AES_128_CBC_SHA */
-    {0x008D,KEX_PSK,         ENC_AES256,     16,256,256,DIG_SHA,    MODE_CBC   },   /* TLS_PSK_WITH_AES_256_CBC_SHA */
-    {0x008E,KEX_DHE_PSK,     ENC_RC4,         1,128,128,DIG_SHA,    MODE_STREAM},   /* TLS_DHE_PSK_WITH_RC4_128_SHA */
-    {0x008F,KEX_DHE_PSK,     ENC_3DES,        8,192,192,DIG_SHA,    MODE_CBC   },   /* TLS_DHE_PSK_WITH_3DES_EDE_CBC_SHA */
-    {0x0090,KEX_DHE_PSK,     ENC_AES,        16,128,128,DIG_SHA,    MODE_CBC   },   /* TLS_DHE_PSK_WITH_AES_128_CBC_SHA */
-    {0x0091,KEX_DHE_PSK,     ENC_AES256,     16,256,256,DIG_SHA,    MODE_CBC   },   /* TLS_DHE_PSK_WITH_AES_256_CBC_SHA */
-    {0x0092,KEX_RSA_PSK,     ENC_RC4,         1,128,128,DIG_SHA,    MODE_STREAM},   /* TLS_RSA_PSK_WITH_RC4_128_SHA */
-    {0x0093,KEX_RSA_PSK,     ENC_3DES,        8,192,192,DIG_SHA,    MODE_CBC   },   /* TLS_RSA_PSK_WITH_3DES_EDE_CBC_SHA */
-    {0x0094,KEX_RSA_PSK,     ENC_AES,        16,128,128,DIG_SHA,    MODE_CBC   },   /* TLS_RSA_PSK_WITH_AES_128_CBC_SHA */
-    {0x0095,KEX_RSA_PSK,     ENC_AES256,     16,256,256,DIG_SHA,    MODE_CBC   },   /* TLS_RSA_PSK_WITH_AES_256_CBC_SHA */
-    {0x0096,KEX_RSA,         ENC_SEED,       16,128,128,DIG_SHA,    MODE_CBC   },   /* TLS_RSA_WITH_SEED_CBC_SHA */
-    {0x0097,KEX_DH_DSS,      ENC_SEED,       16,128,128,DIG_SHA,    MODE_CBC   },   /* TLS_DH_DSS_WITH_SEED_CBC_SHA */
-    {0x0098,KEX_DH_RSA,      ENC_SEED,       16,128,128,DIG_SHA,    MODE_CBC   },   /* TLS_DH_RSA_WITH_SEED_CBC_SHA */
-    {0x0099,KEX_DHE_DSS,     ENC_SEED,       16,128,128,DIG_SHA,    MODE_CBC   },   /* TLS_DHE_DSS_WITH_SEED_CBC_SHA */
-    {0x009A,KEX_DHE_RSA,     ENC_SEED,       16,128,128,DIG_SHA,    MODE_CBC   },   /* TLS_DHE_RSA_WITH_SEED_CBC_SHA */
-    {0x009B,KEX_DH_ANON,     ENC_SEED,       16,128,128,DIG_SHA,    MODE_CBC   },   /* TLS_DH_anon_WITH_SEED_CBC_SHA */
-    {0x009C,KEX_RSA,         ENC_AES,         4,128,128,DIG_SHA256, MODE_GCM   },   /* TLS_RSA_WITH_AES_128_GCM_SHA256 */
-    {0x009D,KEX_RSA,         ENC_AES256,      4,256,256,DIG_SHA384, MODE_GCM   },   /* TLS_RSA_WITH_AES_256_GCM_SHA384 */
-    {0x009E,KEX_DHE_RSA,     ENC_AES,         4,128,128,DIG_SHA256, MODE_GCM   },   /* TLS_DHE_RSA_WITH_AES_128_GCM_SHA256 */
-    {0x009F,KEX_DHE_RSA,     ENC_AES256,      4,256,256,DIG_SHA384, MODE_GCM   },   /* TLS_DHE_RSA_WITH_AES_256_GCM_SHA384 */
-    {0x00A0,KEX_DH_RSA,      ENC_AES,         4,128,128,DIG_SHA256, MODE_GCM   },   /* TLS_DH_RSA_WITH_AES_128_GCM_SHA256 */
-    {0x00A1,KEX_DH_RSA,      ENC_AES256,      4,256,256,DIG_SHA384, MODE_GCM   },   /* TLS_DH_RSA_WITH_AES_256_GCM_SHA384 */
-    {0x00A2,KEX_DHE_DSS,     ENC_AES,         4,128,128,DIG_SHA256, MODE_GCM   },   /* TLS_DHE_DSS_WITH_AES_128_GCM_SHA256 */
-    {0x00A3,KEX_DHE_DSS,     ENC_AES256,      4,256,256,DIG_SHA384, MODE_GCM   },   /* TLS_DHE_DSS_WITH_AES_256_GCM_SHA384 */
-    {0x00A4,KEX_DH_DSS,      ENC_AES,         4,128,128,DIG_SHA256, MODE_GCM   },   /* TLS_DH_DSS_WITH_AES_128_GCM_SHA256 */
-    {0x00A5,KEX_DH_DSS,      ENC_AES256,      4,256,256,DIG_SHA384, MODE_GCM   },   /* TLS_DH_DSS_WITH_AES_256_GCM_SHA384 */
-    {0x00A6,KEX_DH_ANON,     ENC_AES,         4,128,128,DIG_SHA256, MODE_GCM   },   /* TLS_DH_anon_WITH_AES_128_GCM_SHA256 */
-    {0x00A7,KEX_DH_ANON,     ENC_AES256,      4,256,256,DIG_SHA384, MODE_GCM   },   /* TLS_DH_anon_WITH_AES_256_GCM_SHA384 */
-    {0x00A8,KEX_PSK,         ENC_AES,         4,128,128,DIG_SHA256, MODE_GCM   },   /* TLS_PSK_WITH_AES_128_GCM_SHA256 */
-    {0x00A9,KEX_PSK,         ENC_AES256,      4,256,256,DIG_SHA384, MODE_GCM   },   /* TLS_PSK_WITH_AES_256_GCM_SHA384 */
-    {0x00AA,KEX_DHE_PSK,     ENC_AES,         4,128,128,DIG_SHA256, MODE_GCM   },   /* TLS_DHE_PSK_WITH_AES_128_GCM_SHA256 */
-    {0x00AB,KEX_DHE_PSK,     ENC_AES256,      4,256,256,DIG_SHA384, MODE_GCM   },   /* TLS_DHE_PSK_WITH_AES_256_GCM_SHA384 */
-    {0x00AC,KEX_RSA_PSK,     ENC_AES,         4,128,128,DIG_SHA256, MODE_GCM   },   /* TLS_RSA_PSK_WITH_AES_128_GCM_SHA256 */
-    {0x00AD,KEX_RSA_PSK,     ENC_AES256,      4,256,256,DIG_SHA384, MODE_GCM   },   /* TLS_RSA_PSK_WITH_AES_256_GCM_SHA384 */
-    {0x00AE,KEX_PSK,         ENC_AES,        16,128,128,DIG_SHA256, MODE_CBC   },   /* TLS_PSK_WITH_AES_128_CBC_SHA256 */
-    {0x00AF,KEX_PSK,         ENC_AES256,     16,256,256,DIG_SHA384, MODE_CBC   },   /* TLS_PSK_WITH_AES_256_CBC_SHA384 */
-    {0x00B0,KEX_PSK,         ENC_NULL,        1,  0,  0,DIG_SHA256, MODE_STREAM},   /* TLS_PSK_WITH_NULL_SHA256 */
-    {0x00B1,KEX_PSK,         ENC_NULL,        1,  0,  0,DIG_SHA384, MODE_STREAM},   /* TLS_PSK_WITH_NULL_SHA384 */
-    {0x00B2,KEX_DHE_PSK,     ENC_AES,        16,128,128,DIG_SHA256, MODE_CBC   },   /* TLS_DHE_PSK_WITH_AES_128_CBC_SHA256 */
-    {0x00B3,KEX_DHE_PSK,     ENC_AES256,     16,256,256,DIG_SHA384, MODE_CBC   },   /* TLS_DHE_PSK_WITH_AES_256_CBC_SHA384 */
-    {0x00B4,KEX_DHE_PSK,     ENC_NULL,        1,  0,  0,DIG_SHA256, MODE_STREAM},   /* TLS_DHE_PSK_WITH_NULL_SHA256 */
-    {0x00B5,KEX_DHE_PSK,     ENC_NULL,        1,  0,  0,DIG_SHA384, MODE_STREAM},   /* TLS_DHE_PSK_WITH_NULL_SHA384 */
-    {0x00B6,KEX_RSA_PSK,     ENC_AES,        16,128,128,DIG_SHA256, MODE_CBC   },   /* TLS_RSA_PSK_WITH_AES_128_CBC_SHA256 */
-    {0x00B7,KEX_RSA_PSK,     ENC_AES256,     16,256,256,DIG_SHA384, MODE_CBC   },   /* TLS_RSA_PSK_WITH_AES_256_CBC_SHA384 */
-    {0x00B8,KEX_RSA_PSK,     ENC_NULL,        1,  0,  0,DIG_SHA256, MODE_STREAM},   /* TLS_RSA_PSK_WITH_NULL_SHA256 */
-    {0x00B9,KEX_RSA_PSK,     ENC_NULL,        1,  0,  0,DIG_SHA384, MODE_STREAM},   /* TLS_RSA_PSK_WITH_NULL_SHA384 */
-    {0x00BA,KEX_RSA,         ENC_CAMELLIA128,16,128,128,DIG_SHA256, MODE_CBC   },   /* TLS_RSA_WITH_CAMELLIA_128_CBC_SHA256 */
-    {0x00BB,KEX_DH_DSS,      ENC_CAMELLIA128,16,128,128,DIG_SHA256, MODE_CBC   },   /* TLS_DH_DSS_WITH_CAMELLIA_128_CBC_SHA256 */
-    {0x00BC,KEX_DH_RSA,      ENC_CAMELLIA128,16,128,128,DIG_SHA256, MODE_CBC   },   /* TLS_DH_RSA_WITH_CAMELLIA_128_CBC_SHA256 */
-    {0x00BD,KEX_DHE_DSS,     ENC_CAMELLIA128,16,128,128,DIG_SHA256, MODE_CBC   },   /* TLS_DHE_DSS_WITH_CAMELLIA_128_CBC_SHA256 */
-    {0x00BE,KEX_DHE_RSA,     ENC_CAMELLIA128,16,128,128,DIG_SHA256, MODE_CBC   },   /* TLS_DHE_RSA_WITH_CAMELLIA_128_CBC_SHA256 */
-    {0x00BF,KEX_DH_ANON,     ENC_CAMELLIA128,16,128,128,DIG_SHA256, MODE_CBC   },   /* TLS_DH_anon_WITH_CAMELLIA_128_CBC_SHA256 */
-    {0x00C0,KEX_RSA,         ENC_CAMELLIA256,16,256,256,DIG_SHA256, MODE_CBC   },   /* TLS_RSA_WITH_CAMELLIA_256_CBC_SHA256 */
-    {0x00C1,KEX_DH_DSS,      ENC_CAMELLIA256,16,256,256,DIG_SHA256, MODE_CBC   },   /* TLS_DH_DSS_WITH_CAMELLIA_256_CBC_SHA256 */
-    {0x00C2,KEX_DH_RSA,      ENC_CAMELLIA256,16,256,256,DIG_SHA256, MODE_CBC   },   /* TLS_DH_RSA_WITH_CAMELLIA_256_CBC_SHA256 */
-    {0x00C3,KEX_DHE_DSS,     ENC_CAMELLIA256,16,256,256,DIG_SHA256, MODE_CBC   },   /* TLS_DHE_DSS_WITH_CAMELLIA_256_CBC_SHA256 */
-    {0x00C4,KEX_DHE_RSA,     ENC_CAMELLIA256,16,256,256,DIG_SHA256, MODE_CBC   },   /* TLS_DHE_RSA_WITH_CAMELLIA_256_CBC_SHA256 */
-    {0x00C5,KEX_DH_ANON,     ENC_CAMELLIA256,16,256,256,DIG_SHA256, MODE_CBC   },   /* TLS_DH_anon_WITH_CAMELLIA_256_CBC_SHA256 */
-    {0xC001,KEX_ECDH_ECDSA,  ENC_NULL,        1,  0,  0,DIG_SHA,    MODE_STREAM},   /* TLS_ECDH_ECDSA_WITH_NULL_SHA */
-    {0xC002,KEX_ECDH_ECDSA,  ENC_RC4,         1,128,128,DIG_SHA,    MODE_STREAM},   /* TLS_ECDH_ECDSA_WITH_RC4_128_SHA */
-    {0xC003,KEX_ECDH_ECDSA,  ENC_3DES,        8,192,192,DIG_SHA,    MODE_CBC   },   /* TLS_ECDH_ECDSA_WITH_3DES_EDE_CBC_SHA */
-    {0xC004,KEX_ECDH_ECDSA,  ENC_AES,        16,128,128,DIG_SHA,    MODE_CBC   },   /* TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA */
-    {0xC005,KEX_ECDH_ECDSA,  ENC_AES256,     16,256,256,DIG_SHA,    MODE_CBC   },   /* TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA */
-    {0xC006,KEX_ECDHE_ECDSA, ENC_NULL,        1,  0,  0,DIG_SHA,    MODE_STREAM},   /* TLS_ECDHE_ECDSA_WITH_NULL_SHA */
-    {0xC007,KEX_ECDHE_ECDSA, ENC_RC4,         1,128,128,DIG_SHA,    MODE_STREAM},   /* TLS_ECDHE_ECDSA_WITH_RC4_128_SHA */
-    {0xC008,KEX_ECDHE_ECDSA, ENC_3DES,        8,192,192,DIG_SHA,    MODE_CBC   },   /* TLS_ECDHE_ECDSA_WITH_3DES_EDE_CBC_SHA */
-    {0xC009,KEX_ECDHE_ECDSA, ENC_AES,        16,128,128,DIG_SHA,    MODE_CBC   },   /* TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA */
-    {0xC00A,KEX_ECDHE_ECDSA, ENC_AES256,     16,256,256,DIG_SHA,    MODE_CBC   },   /* TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA */
-    {0xC00B,KEX_ECDH_RSA,    ENC_NULL,        1,  0,  0,DIG_SHA,    MODE_STREAM},   /* TLS_ECDH_RSA_WITH_NULL_SHA */
-    {0xC00C,KEX_ECDH_RSA,    ENC_RC4,         1,128,128,DIG_SHA,    MODE_STREAM},   /* TLS_ECDH_RSA_WITH_RC4_128_SHA */
-    {0xC00D,KEX_ECDH_RSA,    ENC_3DES,        8,192,192,DIG_SHA,    MODE_CBC   },   /* TLS_ECDH_RSA_WITH_3DES_EDE_CBC_SHA */
-    {0xC00E,KEX_ECDH_RSA,    ENC_AES,        16,128,128,DIG_SHA,    MODE_CBC   },   /* TLS_ECDH_RSA_WITH_AES_128_CBC_SHA */
-    {0xC00F,KEX_ECDH_RSA,    ENC_AES256,     16,256,256,DIG_SHA,    MODE_CBC   },   /* TLS_ECDH_RSA_WITH_AES_256_CBC_SHA */
-    {0xC010,KEX_ECDHE_RSA,   ENC_NULL,        1,  0,  0,DIG_SHA,    MODE_STREAM},   /* TLS_ECDHE_RSA_WITH_NULL_SHA */
-    {0xC011,KEX_ECDHE_RSA,   ENC_RC4,         1,128,128,DIG_SHA,    MODE_STREAM},   /* TLS_ECDHE_RSA_WITH_RC4_128_SHA */
-    {0xC012,KEX_ECDHE_RSA,   ENC_3DES,        8,192,192,DIG_SHA,    MODE_CBC   },   /* TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA */
-    {0xC013,KEX_ECDHE_RSA,   ENC_AES,        16,128,128,DIG_SHA,    MODE_CBC   },   /* TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA */
-    {0xC014,KEX_ECDHE_RSA,   ENC_AES256,     16,256,256,DIG_SHA,    MODE_CBC   },   /* TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA */
-    {0xC015,KEX_ECDH_ANON,   ENC_NULL,        1,  0,  0,DIG_SHA,    MODE_STREAM},   /* TLS_ECDH_anon_WITH_NULL_SHA */
-    {0xC016,KEX_ECDH_ANON,   ENC_RC4,         1,128,128,DIG_SHA,    MODE_STREAM},   /* TLS_ECDH_anon_WITH_RC4_128_SHA */
-    {0xC017,KEX_ECDH_ANON,   ENC_3DES,        8,192,192,DIG_SHA,    MODE_CBC   },   /* TLS_ECDH_anon_WITH_3DES_EDE_CBC_SHA */
-    {0xC018,KEX_ECDH_ANON,   ENC_AES,        16,128,128,DIG_SHA,    MODE_CBC   },   /* TLS_ECDH_anon_WITH_AES_128_CBC_SHA */
-    {0xC019,KEX_ECDH_ANON,   ENC_AES256,     16,256,256,DIG_SHA,    MODE_CBC   },   /* TLS_ECDH_anon_WITH_AES_256_CBC_SHA */
-    {0xC023,KEX_ECDHE_ECDSA, ENC_AES,        16,128,128,DIG_SHA256, MODE_CBC   },   /* TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256 */
-    {0xC024,KEX_ECDHE_ECDSA, ENC_AES256,     16,256,256,DIG_SHA384, MODE_CBC   },   /* TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384 */
-    {0xC025,KEX_ECDH_ECDSA,  ENC_AES,        16,128,128,DIG_SHA256, MODE_CBC   },   /* TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA256 */
-    {0xC026,KEX_ECDH_ECDSA,  ENC_AES256,     16,256,256,DIG_SHA384, MODE_CBC   },   /* TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA384 */
-    {0xC027,KEX_ECDHE_RSA,   ENC_AES,        16,128,128,DIG_SHA256, MODE_CBC   },   /* TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256 */
-    {0xC028,KEX_ECDHE_RSA,   ENC_AES256,     16,256,256,DIG_SHA384, MODE_CBC   },   /* TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384 */
-    {0xC029,KEX_ECDH_RSA,    ENC_AES,        16,128,128,DIG_SHA256, MODE_CBC   },   /* TLS_ECDH_RSA_WITH_AES_128_CBC_SHA256 */
-    {0xC02A,KEX_ECDH_RSA,    ENC_AES256,     16,256,256,DIG_SHA384, MODE_CBC   },   /* TLS_ECDH_RSA_WITH_AES_256_CBC_SHA384 */
-    {0xC02B,KEX_ECDHE_ECDSA, ENC_AES,         4,128,128,DIG_SHA256, MODE_GCM   },   /* TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 */
-    {0xC02C,KEX_ECDHE_ECDSA, ENC_AES256,      4,256,256,DIG_SHA384, MODE_GCM   },   /* TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384 */
-    {0xC02D,KEX_ECDH_ECDSA,  ENC_AES,         4,128,128,DIG_SHA256, MODE_GCM   },   /* TLS_ECDH_ECDSA_WITH_AES_128_GCM_SHA256 */
-    {0xC02E,KEX_ECDH_ECDSA,  ENC_AES256,      4,256,256,DIG_SHA384, MODE_GCM   },   /* TLS_ECDH_ECDSA_WITH_AES_256_GCM_SHA384 */
-    {0xC02F,KEX_ECDHE_RSA,   ENC_AES,         4,128,128,DIG_SHA256, MODE_GCM   },   /* TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 */
-    {0xC030,KEX_ECDHE_RSA,   ENC_AES256,      4,256,256,DIG_SHA384, MODE_GCM   },   /* TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 */
-    {0xC031,KEX_ECDH_RSA,    ENC_AES,         4,128,128,DIG_SHA256, MODE_GCM   },   /* TLS_ECDH_RSA_WITH_AES_128_GCM_SHA256 */
-    {0xC032,KEX_ECDH_RSA,    ENC_AES256,      4,256,256,DIG_SHA384, MODE_GCM   },   /* TLS_ECDH_RSA_WITH_AES_256_GCM_SHA384 */
-    {0xC033,KEX_ECDHE_PSK,   ENC_RC4,         1,128,128,DIG_SHA,    MODE_STREAM},   /* TLS_ECDHE_PSK_WITH_RC4_128_SHA */
-    {0xC034,KEX_ECDHE_PSK,   ENC_3DES,        8,192,192,DIG_SHA,    MODE_CBC   },   /* TLS_ECDHE_PSK_WITH_3DES_EDE_CBC_SHA */
-    {0xC035,KEX_ECDHE_PSK,   ENC_AES,        16,128,128,DIG_SHA,    MODE_CBC   },   /* TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA */
-    {0xC036,KEX_ECDHE_PSK,   ENC_AES256,     16,256,256,DIG_SHA,    MODE_CBC   },   /* TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA */
-    {0xC037,KEX_ECDHE_PSK,   ENC_AES,        16,128,128,DIG_SHA256, MODE_CBC   },   /* TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA256 */
-    {0xC038,KEX_ECDHE_PSK,   ENC_AES256,     16,256,256,DIG_SHA384, MODE_CBC   },   /* TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA384 */
-    {0xC039,KEX_ECDHE_PSK,   ENC_NULL,        1,  0,  0,DIG_SHA,    MODE_STREAM},   /* TLS_ECDHE_PSK_WITH_NULL_SHA */
-    {0xC03A,KEX_ECDHE_PSK,   ENC_NULL,        1,  0,  0,DIG_SHA256, MODE_STREAM},   /* TLS_ECDHE_PSK_WITH_NULL_SHA256 */
-    {0xC03B,KEX_ECDHE_PSK,   ENC_NULL,        1,  0,  0,DIG_SHA384, MODE_STREAM},   /* TLS_ECDHE_PSK_WITH_NULL_SHA384 */
-    {0xC072,KEX_ECDHE_ECDSA, ENC_CAMELLIA128,16,128,128,DIG_SHA256, MODE_CBC   },   /* TLS_ECDHE_ECDSA_WITH_CAMELLIA_128_CBC_SHA256 */
-    {0xC073,KEX_ECDHE_ECDSA, ENC_CAMELLIA256,16,256,256,DIG_SHA384, MODE_CBC   },   /* TLS_ECDHE_ECDSA_WITH_CAMELLIA_256_CBC_SHA384 */
-    {0xC074,KEX_ECDH_ECDSA,  ENC_CAMELLIA128,16,128,128,DIG_SHA256, MODE_CBC   },   /* TLS_ECDH_ECDSA_WITH_CAMELLIA_128_CBC_SHA256 */
-    {0xC075,KEX_ECDH_ECDSA,  ENC_CAMELLIA256,16,256,256,DIG_SHA384, MODE_CBC   },   /* TLS_ECDH_ECDSA_WITH_CAMELLIA_256_CBC_SHA384 */
-    {0xC076,KEX_ECDHE_RSA,   ENC_CAMELLIA128,16,128,128,DIG_SHA256, MODE_CBC   },   /* TLS_ECDHE_RSA_WITH_CAMELLIA_128_CBC_SHA256 */
-    {0xC077,KEX_ECDHE_RSA,   ENC_CAMELLIA256,16,256,256,DIG_SHA384, MODE_CBC   },   /* TLS_ECDHE_RSA_WITH_CAMELLIA_256_CBC_SHA384 */
-    {0xC078,KEX_ECDH_RSA,    ENC_CAMELLIA128,16,128,128,DIG_SHA256, MODE_CBC   },   /* TLS_ECDH_RSA_WITH_CAMELLIA_128_CBC_SHA256 */
-    {0xC079,KEX_ECDH_RSA,    ENC_CAMELLIA256,16,256,256,DIG_SHA384, MODE_CBC   },   /* TLS_ECDH_RSA_WITH_CAMELLIA_256_CBC_SHA384 */
-    {0xC07A,KEX_RSA,         ENC_CAMELLIA128, 4,128,128,DIG_SHA256, MODE_GCM   },   /* TLS_RSA_WITH_CAMELLIA_128_GCM_SHA256 */
-    {0xC07B,KEX_RSA,         ENC_CAMELLIA256, 4,256,256,DIG_SHA384, MODE_GCM   },   /* TLS_RSA_WITH_CAMELLIA_256_GCM_SHA384 */
-    {0xC07C,KEX_DHE_RSA,     ENC_CAMELLIA128, 4,128,128,DIG_SHA256, MODE_GCM   },   /* TLS_DHE_RSA_WITH_CAMELLIA_128_GCM_SHA256 */
-    {0xC07D,KEX_DHE_RSA,     ENC_CAMELLIA256, 4,256,256,DIG_SHA384, MODE_GCM   },   /* TLS_DHE_RSA_WITH_CAMELLIA_256_GCM_SHA384 */
-    {0xC07E,KEX_DH_RSA,      ENC_CAMELLIA128, 4,128,128,DIG_SHA256, MODE_GCM   },   /* TLS_DH_RSA_WITH_CAMELLIA_128_GCM_SHA256 */
-    {0xC07F,KEX_DH_RSA,      ENC_CAMELLIA256, 4,256,256,DIG_SHA384, MODE_GCM   },   /* TLS_DH_RSA_WITH_CAMELLIA_256_GCM_SHA384 */
-    {0xC080,KEX_DHE_DSS,     ENC_CAMELLIA128, 4,128,128,DIG_SHA256, MODE_GCM   },   /* TLS_DHE_DSS_WITH_CAMELLIA_128_GCM_SHA256 */
-    {0xC081,KEX_DHE_DSS,     ENC_CAMELLIA256, 4,256,256,DIG_SHA384, MODE_GCM   },   /* TLS_DHE_DSS_WITH_CAMELLIA_256_GCM_SHA384 */
-    {0xC082,KEX_DH_DSS,      ENC_CAMELLIA128, 4,128,128,DIG_SHA256, MODE_GCM   },   /* TLS_DH_DSS_WITH_CAMELLIA_128_GCM_SHA256 */
-    {0xC083,KEX_DH_DSS,      ENC_CAMELLIA256, 4,256,256,DIG_SHA384, MODE_GCM   },   /* TLS_DH_DSS_WITH_CAMELLIA_256_GCM_SHA384 */
-    {0xC084,KEX_DH_ANON,     ENC_CAMELLIA128, 4,128,128,DIG_SHA256, MODE_GCM   },   /* TLS_DH_anon_WITH_CAMELLIA_128_GCM_SHA256 */
-    {0xC085,KEX_DH_ANON,     ENC_CAMELLIA256, 4,256,256,DIG_SHA384, MODE_GCM   },   /* TLS_DH_anon_WITH_CAMELLIA_256_GCM_SHA384 */
-    {0xC086,KEX_ECDHE_ECDSA, ENC_CAMELLIA128, 4,128,128,DIG_SHA256, MODE_GCM   },   /* TLS_ECDHE_ECDSA_WITH_CAMELLIA_128_GCM_SHA256 */
-    {0xC087,KEX_ECDHE_ECDSA, ENC_CAMELLIA256, 4,256,256,DIG_SHA384, MODE_GCM   },   /* TLS_ECDHE_ECDSA_WITH_CAMELLIA_256_GCM_SHA384 */
-    {0xC088,KEX_ECDH_ECDSA,  ENC_CAMELLIA128, 4,128,128,DIG_SHA256, MODE_GCM   },   /* TLS_ECDH_ECDSA_WITH_CAMELLIA_128_GCM_SHA256 */
-    {0xC089,KEX_ECDH_ECDSA,  ENC_CAMELLIA256, 4,256,256,DIG_SHA384, MODE_GCM   },   /* TLS_ECDH_ECDSA_WITH_CAMELLIA_256_GCM_SHA384 */
-    {0xC08A,KEX_ECDHE_RSA,   ENC_CAMELLIA128, 4,128,128,DIG_SHA256, MODE_GCM   },   /* TLS_ECDHE_RSA_WITH_CAMELLIA_128_GCM_SHA256 */
-    {0xC08B,KEX_ECDHE_RSA,   ENC_CAMELLIA256, 4,256,256,DIG_SHA384, MODE_GCM   },   /* TLS_ECDHE_RSA_WITH_CAMELLIA_256_GCM_SHA384 */
-    {0xC08C,KEX_ECDH_RSA,    ENC_CAMELLIA128, 4,128,128,DIG_SHA256, MODE_GCM   },   /* TLS_ECDH_RSA_WITH_CAMELLIA_128_GCM_SHA256 */
-    {0xC08D,KEX_ECDH_RSA,    ENC_CAMELLIA256, 4,256,256,DIG_SHA384, MODE_GCM   },   /* TLS_ECDH_RSA_WITH_CAMELLIA_256_GCM_SHA384 */
-    {0xC08E,KEX_PSK,         ENC_CAMELLIA128, 4,128,128,DIG_SHA256, MODE_GCM   },   /* TLS_PSK_WITH_CAMELLIA_128_GCM_SHA256 */
-    {0xC08F,KEX_PSK,         ENC_CAMELLIA256, 4,256,256,DIG_SHA384, MODE_GCM   },   /* TLS_PSK_WITH_CAMELLIA_256_GCM_SHA384 */
-    {0xC090,KEX_DHE_PSK,     ENC_CAMELLIA128, 4,128,128,DIG_SHA256, MODE_GCM   },   /* TLS_DHE_PSK_WITH_CAMELLIA_128_GCM_SHA256 */
-    {0xC091,KEX_DHE_PSK,     ENC_CAMELLIA256, 4,256,256,DIG_SHA384, MODE_GCM   },   /* TLS_DHE_PSK_WITH_CAMELLIA_256_GCM_SHA384 */
-    {0xC092,KEX_RSA_PSK,     ENC_CAMELLIA128, 4,128,128,DIG_SHA256, MODE_GCM   },   /* TLS_RSA_PSK_WITH_CAMELLIA_128_GCM_SHA256 */
-    {0xC093,KEX_RSA_PSK,     ENC_CAMELLIA256, 4,256,256,DIG_SHA384, MODE_GCM   },   /* TLS_RSA_PSK_WITH_CAMELLIA_256_GCM_SHA384 */
-    {0xC094,KEX_PSK,         ENC_CAMELLIA128,16,128,128,DIG_SHA256, MODE_CBC   },   /* TLS_PSK_WITH_CAMELLIA_128_CBC_SHA256 */
-    {0xC095,KEX_PSK,         ENC_CAMELLIA256,16,256,256,DIG_SHA384, MODE_CBC   },   /* TLS_PSK_WITH_CAMELLIA_256_CBC_SHA384 */
-    {0xC096,KEX_DHE_PSK,     ENC_CAMELLIA128,16,128,128,DIG_SHA256, MODE_CBC   },   /* TLS_DHE_PSK_WITH_CAMELLIA_128_CBC_SHA256 */
-    {0xC097,KEX_DHE_PSK,     ENC_CAMELLIA256,16,256,256,DIG_SHA384, MODE_CBC   },   /* TLS_DHE_PSK_WITH_CAMELLIA_256_CBC_SHA384 */
-    {0xC098,KEX_RSA_PSK,     ENC_CAMELLIA128,16,128,128,DIG_SHA256, MODE_CBC   },   /* TLS_RSA_PSK_WITH_CAMELLIA_128_CBC_SHA256 */
-    {0xC099,KEX_RSA_PSK,     ENC_CAMELLIA256,16,256,256,DIG_SHA384, MODE_CBC   },   /* TLS_RSA_PSK_WITH_CAMELLIA_256_CBC_SHA384 */
-    {0xC09A,KEX_ECDHE_PSK,   ENC_CAMELLIA128,16,128,128,DIG_SHA256, MODE_CBC   },   /* TLS_ECDHE_PSK_WITH_CAMELLIA_128_CBC_SHA256 */
-    {0xC09B,KEX_ECDHE_PSK,   ENC_CAMELLIA256,16,256,256,DIG_SHA384, MODE_CBC   },   /* TLS_ECDHE_PSK_WITH_CAMELLIA_256_CBC_SHA384 */
-    {0xC09C,KEX_RSA,         ENC_AES,         4,128,128,DIG_NA,     MODE_CCM   },   /* TLS_RSA_WITH_AES_128_CCM */
-    {0xC09D,KEX_RSA,         ENC_AES256,      4,256,256,DIG_NA,     MODE_CCM   },   /* TLS_RSA_WITH_AES_256_CCM */
-    {0xC09E,KEX_DHE_RSA,     ENC_AES,         4,128,128,DIG_NA,     MODE_CCM   },   /* TLS_DHE_RSA_WITH_AES_128_CCM */
-    {0xC09F,KEX_DHE_RSA,     ENC_AES256,      4,256,256,DIG_NA,     MODE_CCM   },   /* TLS_DHE_RSA_WITH_AES_256_CCM */
-    {0xC0A0,KEX_RSA,         ENC_AES,         4,128,128,DIG_NA,     MODE_CCM_8 },   /* TLS_RSA_WITH_AES_128_CCM_8 */
-    {0xC0A1,KEX_RSA,         ENC_AES256,      4,256,256,DIG_NA,     MODE_CCM_8 },   /* TLS_RSA_WITH_AES_256_CCM_8 */
-    {0xC0A2,KEX_DHE_RSA,     ENC_AES,         4,128,128,DIG_NA,     MODE_CCM_8 },   /* TLS_DHE_RSA_WITH_AES_128_CCM_8 */
-    {0xC0A3,KEX_DHE_RSA,     ENC_AES256,      4,256,256,DIG_NA,     MODE_CCM_8 },   /* TLS_DHE_RSA_WITH_AES_256_CCM_8 */
-    {0xC0A4,KEX_PSK,         ENC_AES,         4,128,128,DIG_NA,     MODE_CCM   },   /* TLS_PSK_WITH_AES_128_CCM */
-    {0xC0A5,KEX_PSK,         ENC_AES256,      4,256,256,DIG_NA,     MODE_CCM   },   /* TLS_PSK_WITH_AES_256_CCM */
-    {0xC0A6,KEX_DHE_PSK,     ENC_AES,         4,128,128,DIG_NA,     MODE_CCM   },   /* TLS_DHE_PSK_WITH_AES_128_CCM */
-    {0xC0A7,KEX_DHE_PSK,     ENC_AES256,      4,256,256,DIG_NA,     MODE_CCM   },   /* TLS_DHE_PSK_WITH_AES_256_CCM */
-    {0xC0A8,KEX_PSK,         ENC_AES,         4,128,128,DIG_NA,     MODE_CCM_8 },   /* TLS_PSK_WITH_AES_128_CCM_8 */
-    {0xC0A9,KEX_PSK,         ENC_AES256,      4,256,256,DIG_NA,     MODE_CCM_8 },   /* TLS_PSK_WITH_AES_256_CCM_8 */
-    {0xC0AA,KEX_DHE_PSK,     ENC_AES,         4,128,128,DIG_NA,     MODE_CCM_8 },   /* TLS_PSK_DHE_WITH_AES_128_CCM_8 */
-    {0xC0AB,KEX_DHE_PSK,     ENC_AES256,      4,256,256,DIG_NA,     MODE_CCM_8 },   /* TLS_PSK_DHE_WITH_AES_256_CCM_8 */
-    {0xC0AC,KEX_ECDHE_ECDSA, ENC_AES,         4,128,128,DIG_NA,     MODE_CCM   },   /* TLS_ECDHE_ECDSA_WITH_AES_128_CCM */
-    {0xC0AD,KEX_ECDHE_ECDSA, ENC_AES256,      4,256,256,DIG_NA,     MODE_CCM   },   /* TLS_ECDHE_ECDSA_WITH_AES_256_CCM */
-    {0xC0AE,KEX_ECDHE_ECDSA, ENC_AES,         4,128,128,DIG_NA,     MODE_CCM_8 },   /* TLS_ECDHE_ECDSA_WITH_AES_128_CCM_8 */
-    {0xC0AF,KEX_ECDHE_ECDSA, ENC_AES256,      4,256,256,DIG_NA,     MODE_CCM_8 },   /* TLS_ECDHE_ECDSA_WITH_AES_256_CCM_8 */
-    {-1,    0,          0,               0,  0,  0,0,          MODE_STREAM}
+    {0x0001,KEX_RSA,            ENC_NULL,       DIG_MD5,    MODE_STREAM},   /* TLS_RSA_WITH_NULL_MD5 */
+    {0x0002,KEX_RSA,            ENC_NULL,       DIG_SHA,    MODE_STREAM},   /* TLS_RSA_WITH_NULL_SHA */
+    {0x0003,KEX_RSA,            ENC_RC4,        DIG_MD5,    MODE_STREAM},   /* TLS_RSA_EXPORT_WITH_RC4_40_MD5 */
+    {0x0004,KEX_RSA,            ENC_RC4,        DIG_MD5,    MODE_STREAM},   /* TLS_RSA_WITH_RC4_128_MD5 */
+    {0x0005,KEX_RSA,            ENC_RC4,        DIG_SHA,    MODE_STREAM},   /* TLS_RSA_WITH_RC4_128_SHA */
+    {0x0006,KEX_RSA,            ENC_RC2,        DIG_MD5,    MODE_CBC   },   /* TLS_RSA_EXPORT_WITH_RC2_CBC_40_MD5 */
+    {0x0007,KEX_RSA,            ENC_IDEA,       DIG_SHA,    MODE_CBC   },   /* TLS_RSA_WITH_IDEA_CBC_SHA */
+    {0x0008,KEX_RSA,            ENC_DES,        DIG_SHA,    MODE_CBC   },   /* TLS_RSA_EXPORT_WITH_DES40_CBC_SHA */
+    {0x0009,KEX_RSA,            ENC_DES,        DIG_SHA,    MODE_CBC   },   /* TLS_RSA_WITH_DES_CBC_SHA */
+    {0x000A,KEX_RSA,            ENC_3DES,       DIG_SHA,    MODE_CBC   },   /* TLS_RSA_WITH_3DES_EDE_CBC_SHA */
+    {0x000B,KEX_DH_DSS,         ENC_DES,        DIG_SHA,    MODE_CBC   },   /* TLS_DH_DSS_EXPORT_WITH_DES40_CBC_SHA */
+    {0x000C,KEX_DH_DSS,         ENC_DES,        DIG_SHA,    MODE_CBC   },   /* TLS_DH_DSS_WITH_DES_CBC_SHA */
+    {0x000D,KEX_DH_DSS,         ENC_3DES,       DIG_SHA,    MODE_CBC   },   /* TLS_DH_DSS_WITH_3DES_EDE_CBC_SHA */
+    {0x000E,KEX_DH_RSA,         ENC_DES,        DIG_SHA,    MODE_CBC   },   /* TLS_DH_RSA_EXPORT_WITH_DES40_CBC_SHA */
+    {0x000F,KEX_DH_RSA,         ENC_DES,        DIG_SHA,    MODE_CBC   },   /* TLS_DH_RSA_WITH_DES_CBC_SHA */
+    {0x0010,KEX_DH_RSA,         ENC_3DES,       DIG_SHA,    MODE_CBC   },   /* TLS_DH_RSA_WITH_3DES_EDE_CBC_SHA */
+    {0x0011,KEX_DHE_DSS,        ENC_DES,        DIG_SHA,    MODE_CBC   },   /* TLS_DHE_DSS_EXPORT_WITH_DES40_CBC_SHA */
+    {0x0012,KEX_DHE_DSS,        ENC_DES,        DIG_SHA,    MODE_CBC   },   /* TLS_DHE_DSS_WITH_DES_CBC_SHA */
+    {0x0013,KEX_DHE_DSS,        ENC_3DES,       DIG_SHA,    MODE_CBC   },   /* TLS_DHE_DSS_WITH_3DES_EDE_CBC_SHA */
+    {0x0014,KEX_DHE_RSA,        ENC_DES,        DIG_SHA,    MODE_CBC   },   /* TLS_DHE_RSA_EXPORT_WITH_DES40_CBC_SHA */
+    {0x0015,KEX_DHE_RSA,        ENC_DES,        DIG_SHA,    MODE_CBC   },   /* TLS_DHE_RSA_WITH_DES_CBC_SHA */
+    {0x0016,KEX_DHE_RSA,        ENC_3DES,       DIG_SHA,    MODE_CBC   },   /* TLS_DHE_RSA_WITH_3DES_EDE_CBC_SHA */
+    {0x0017,KEX_DH_ANON,        ENC_RC4,        DIG_MD5,    MODE_STREAM},   /* TLS_DH_anon_EXPORT_WITH_RC4_40_MD5 */
+    {0x0018,KEX_DH_ANON,        ENC_RC4,        DIG_MD5,    MODE_STREAM},   /* TLS_DH_anon_WITH_RC4_128_MD5 */
+    {0x0019,KEX_DH_ANON,        ENC_DES,        DIG_SHA,    MODE_CBC   },   /* TLS_DH_anon_EXPORT_WITH_DES40_CBC_SHA */
+    {0x001A,KEX_DH_ANON,        ENC_DES,        DIG_SHA,    MODE_CBC   },   /* TLS_DH_anon_WITH_DES_CBC_SHA */
+    {0x001B,KEX_DH_ANON,        ENC_3DES,       DIG_SHA,    MODE_CBC   },   /* TLS_DH_anon_WITH_3DES_EDE_CBC_SHA */
+    {0x002C,KEX_PSK,            ENC_NULL,       DIG_SHA,    MODE_STREAM},   /* TLS_PSK_WITH_NULL_SHA */
+    {0x002D,KEX_DHE_PSK,        ENC_NULL,       DIG_SHA,    MODE_STREAM},   /* TLS_DHE_PSK_WITH_NULL_SHA */
+    {0x002E,KEX_RSA_PSK,        ENC_NULL,       DIG_SHA,    MODE_STREAM},   /* TLS_RSA_PSK_WITH_NULL_SHA */
+    {0x002F,KEX_RSA,            ENC_AES,        DIG_SHA,    MODE_CBC   },   /* TLS_RSA_WITH_AES_128_CBC_SHA */
+    {0x0030,KEX_DH_DSS,         ENC_AES,        DIG_SHA,    MODE_CBC   },   /* TLS_DH_DSS_WITH_AES_128_CBC_SHA */
+    {0x0031,KEX_DH_RSA,         ENC_AES,        DIG_SHA,    MODE_CBC   },   /* TLS_DH_RSA_WITH_AES_128_CBC_SHA */
+    {0x0032,KEX_DHE_DSS,        ENC_AES,        DIG_SHA,    MODE_CBC   },   /* TLS_DHE_DSS_WITH_AES_128_CBC_SHA */
+    {0x0033,KEX_DHE_RSA,        ENC_AES,        DIG_SHA,    MODE_CBC   },   /* TLS_DHE_RSA_WITH_AES_128_CBC_SHA */
+    {0x0034,KEX_DH_ANON,        ENC_AES,        DIG_SHA,    MODE_CBC   },   /* TLS_DH_anon_WITH_AES_128_CBC_SHA */
+    {0x0035,KEX_RSA,            ENC_AES256,     DIG_SHA,    MODE_CBC   },   /* TLS_RSA_WITH_AES_256_CBC_SHA */
+    {0x0036,KEX_DH_DSS,         ENC_AES256,     DIG_SHA,    MODE_CBC   },   /* TLS_DH_DSS_WITH_AES_256_CBC_SHA */
+    {0x0037,KEX_DH_RSA,         ENC_AES256,     DIG_SHA,    MODE_CBC   },   /* TLS_DH_RSA_WITH_AES_256_CBC_SHA */
+    {0x0038,KEX_DHE_DSS,        ENC_AES256,     DIG_SHA,    MODE_CBC   },   /* TLS_DHE_DSS_WITH_AES_256_CBC_SHA */
+    {0x0039,KEX_DHE_RSA,        ENC_AES256,     DIG_SHA,    MODE_CBC   },   /* TLS_DHE_RSA_WITH_AES_256_CBC_SHA */
+    {0x003A,KEX_DH_ANON,        ENC_AES256,     DIG_SHA,    MODE_CBC   },   /* TLS_DH_anon_WITH_AES_256_CBC_SHA */
+    {0x003B,KEX_RSA,            ENC_NULL,       DIG_SHA256, MODE_STREAM},   /* TLS_RSA_WITH_NULL_SHA256 */
+    {0x003C,KEX_RSA,            ENC_AES,        DIG_SHA256, MODE_CBC   },   /* TLS_RSA_WITH_AES_128_CBC_SHA256 */
+    {0x003D,KEX_RSA,            ENC_AES256,     DIG_SHA256, MODE_CBC   },   /* TLS_RSA_WITH_AES_256_CBC_SHA256 */
+    {0x003E,KEX_DH_DSS,         ENC_AES,        DIG_SHA256, MODE_CBC   },   /* TLS_DH_DSS_WITH_AES_128_CBC_SHA256 */
+    {0x003F,KEX_DH_RSA,         ENC_AES,        DIG_SHA256, MODE_CBC   },   /* TLS_DH_RSA_WITH_AES_128_CBC_SHA256 */
+    {0x0040,KEX_DHE_DSS,        ENC_AES,        DIG_SHA256, MODE_CBC   },   /* TLS_DHE_DSS_WITH_AES_128_CBC_SHA256 */
+    {0x0041,KEX_RSA,            ENC_CAMELLIA128,DIG_SHA,    MODE_CBC   },   /* TLS_RSA_WITH_CAMELLIA_128_CBC_SHA */
+    {0x0042,KEX_DH_DSS,         ENC_CAMELLIA128,DIG_SHA,    MODE_CBC   },   /* TLS_DH_DSS_WITH_CAMELLIA_128_CBC_SHA */
+    {0x0043,KEX_DH_RSA,         ENC_CAMELLIA128,DIG_SHA,    MODE_CBC   },   /* TLS_DH_RSA_WITH_CAMELLIA_128_CBC_SHA */
+    {0x0044,KEX_DHE_DSS,        ENC_CAMELLIA128,DIG_SHA,    MODE_CBC   },   /* TLS_DHE_DSS_WITH_CAMELLIA_128_CBC_SHA */
+    {0x0045,KEX_DHE_RSA,        ENC_CAMELLIA128,DIG_SHA,    MODE_CBC   },   /* TLS_DHE_RSA_WITH_CAMELLIA_128_CBC_SHA */
+    {0x0046,KEX_DH_ANON,        ENC_CAMELLIA128,DIG_SHA,    MODE_CBC   },   /* TLS_DH_anon_WITH_CAMELLIA_128_CBC_SHA */
+    {0x0060,KEX_RSA,            ENC_RC4,        DIG_MD5,    MODE_STREAM},   /* TLS_RSA_EXPORT1024_WITH_RC4_56_MD5 */
+    {0x0061,KEX_RSA,            ENC_RC2,        DIG_MD5,    MODE_STREAM},   /* TLS_RSA_EXPORT1024_WITH_RC2_CBC_56_MD5 */
+    {0x0062,KEX_RSA,            ENC_DES,        DIG_SHA,    MODE_CBC   },   /* TLS_RSA_EXPORT1024_WITH_DES_CBC_SHA */
+    {0x0063,KEX_DHE_DSS,        ENC_DES,        DIG_SHA,    MODE_CBC   },   /* TLS_DHE_DSS_EXPORT1024_WITH_DES_CBC_SHA */
+    {0x0064,KEX_RSA,            ENC_RC4,        DIG_SHA,    MODE_STREAM},   /* TLS_RSA_EXPORT1024_WITH_RC4_56_SHA */
+    {0x0065,KEX_DHE_DSS,        ENC_RC4,        DIG_SHA,    MODE_STREAM},   /* TLS_DHE_DSS_EXPORT1024_WITH_RC4_56_SHA */
+    {0x0066,KEX_DHE_DSS,        ENC_RC4,        DIG_SHA,    MODE_STREAM},   /* TLS_DHE_DSS_WITH_RC4_128_SHA */
+    {0x0067,KEX_DHE_RSA,        ENC_AES,        DIG_SHA256, MODE_CBC   },   /* TLS_DHE_RSA_WITH_AES_128_CBC_SHA256 */
+    {0x0068,KEX_DH_DSS,         ENC_AES256,     DIG_SHA256, MODE_CBC   },   /* TLS_DH_DSS_WITH_AES_256_CBC_SHA256 */
+    {0x0069,KEX_DH_RSA,         ENC_AES256,     DIG_SHA256, MODE_CBC   },   /* TLS_DH_RSA_WITH_AES_256_CBC_SHA256 */
+    {0x006A,KEX_DHE_DSS,        ENC_AES256,     DIG_SHA256, MODE_CBC   },   /* TLS_DHE_DSS_WITH_AES_256_CBC_SHA256 */
+    {0x006B,KEX_DHE_RSA,        ENC_AES256,     DIG_SHA256, MODE_CBC   },   /* TLS_DHE_RSA_WITH_AES_256_CBC_SHA256 */
+    {0x006C,KEX_DH_ANON,        ENC_AES,        DIG_SHA256, MODE_CBC   },   /* TLS_DH_anon_WITH_AES_128_CBC_SHA256 */
+    {0x006D,KEX_DH_ANON,        ENC_AES256,     DIG_SHA256, MODE_CBC   },   /* TLS_DH_anon_WITH_AES_256_CBC_SHA256 */
+    {0x0084,KEX_RSA,            ENC_CAMELLIA256,DIG_SHA,    MODE_CBC   },   /* TLS_RSA_WITH_CAMELLIA_256_CBC_SHA */
+    {0x0085,KEX_DH_DSS,         ENC_CAMELLIA256,DIG_SHA,    MODE_CBC   },   /* TLS_DH_DSS_WITH_CAMELLIA_256_CBC_SHA */
+    {0x0086,KEX_DH_RSA,         ENC_CAMELLIA256,DIG_SHA,    MODE_CBC   },   /* TLS_DH_RSA_WITH_CAMELLIA_256_CBC_SHA */
+    {0x0087,KEX_DHE_DSS,        ENC_CAMELLIA256,DIG_SHA,    MODE_CBC   },   /* TLS_DHE_DSS_WITH_CAMELLIA_256_CBC_SHA */
+    {0x0088,KEX_DHE_RSA,        ENC_CAMELLIA256,DIG_SHA,    MODE_CBC   },   /* TLS_DHE_RSA_WITH_CAMELLIA_256_CBC_SHA */
+    {0x0089,KEX_DH_ANON,        ENC_CAMELLIA256,DIG_SHA,    MODE_CBC   },   /* TLS_DH_anon_WITH_CAMELLIA_256_CBC_SHA */
+    {0x008A,KEX_PSK,            ENC_RC4,        DIG_SHA,    MODE_STREAM},   /* TLS_PSK_WITH_RC4_128_SHA */
+    {0x008B,KEX_PSK,            ENC_3DES,       DIG_SHA,    MODE_CBC   },   /* TLS_PSK_WITH_3DES_EDE_CBC_SHA */
+    {0x008C,KEX_PSK,            ENC_AES,        DIG_SHA,    MODE_CBC   },   /* TLS_PSK_WITH_AES_128_CBC_SHA */
+    {0x008D,KEX_PSK,            ENC_AES256,     DIG_SHA,    MODE_CBC   },   /* TLS_PSK_WITH_AES_256_CBC_SHA */
+    {0x008E,KEX_DHE_PSK,        ENC_RC4,        DIG_SHA,    MODE_STREAM},   /* TLS_DHE_PSK_WITH_RC4_128_SHA */
+    {0x008F,KEX_DHE_PSK,        ENC_3DES,       DIG_SHA,    MODE_CBC   },   /* TLS_DHE_PSK_WITH_3DES_EDE_CBC_SHA */
+    {0x0090,KEX_DHE_PSK,        ENC_AES,        DIG_SHA,    MODE_CBC   },   /* TLS_DHE_PSK_WITH_AES_128_CBC_SHA */
+    {0x0091,KEX_DHE_PSK,        ENC_AES256,     DIG_SHA,    MODE_CBC   },   /* TLS_DHE_PSK_WITH_AES_256_CBC_SHA */
+    {0x0092,KEX_RSA_PSK,        ENC_RC4,        DIG_SHA,    MODE_STREAM},   /* TLS_RSA_PSK_WITH_RC4_128_SHA */
+    {0x0093,KEX_RSA_PSK,        ENC_3DES,       DIG_SHA,    MODE_CBC   },   /* TLS_RSA_PSK_WITH_3DES_EDE_CBC_SHA */
+    {0x0094,KEX_RSA_PSK,        ENC_AES,        DIG_SHA,    MODE_CBC   },   /* TLS_RSA_PSK_WITH_AES_128_CBC_SHA */
+    {0x0095,KEX_RSA_PSK,        ENC_AES256,     DIG_SHA,    MODE_CBC   },   /* TLS_RSA_PSK_WITH_AES_256_CBC_SHA */
+    {0x0096,KEX_RSA,            ENC_SEED,       DIG_SHA,    MODE_CBC   },   /* TLS_RSA_WITH_SEED_CBC_SHA */
+    {0x0097,KEX_DH_DSS,         ENC_SEED,       DIG_SHA,    MODE_CBC   },   /* TLS_DH_DSS_WITH_SEED_CBC_SHA */
+    {0x0098,KEX_DH_RSA,         ENC_SEED,       DIG_SHA,    MODE_CBC   },   /* TLS_DH_RSA_WITH_SEED_CBC_SHA */
+    {0x0099,KEX_DHE_DSS,        ENC_SEED,       DIG_SHA,    MODE_CBC   },   /* TLS_DHE_DSS_WITH_SEED_CBC_SHA */
+    {0x009A,KEX_DHE_RSA,        ENC_SEED,       DIG_SHA,    MODE_CBC   },   /* TLS_DHE_RSA_WITH_SEED_CBC_SHA */
+    {0x009B,KEX_DH_ANON,        ENC_SEED,       DIG_SHA,    MODE_CBC   },   /* TLS_DH_anon_WITH_SEED_CBC_SHA */
+    {0x009C,KEX_RSA,            ENC_AES,        DIG_SHA256, MODE_GCM   },   /* TLS_RSA_WITH_AES_128_GCM_SHA256 */
+    {0x009D,KEX_RSA,            ENC_AES256,     DIG_SHA384, MODE_GCM   },   /* TLS_RSA_WITH_AES_256_GCM_SHA384 */
+    {0x009E,KEX_DHE_RSA,        ENC_AES,        DIG_SHA256, MODE_GCM   },   /* TLS_DHE_RSA_WITH_AES_128_GCM_SHA256 */
+    {0x009F,KEX_DHE_RSA,        ENC_AES256,     DIG_SHA384, MODE_GCM   },   /* TLS_DHE_RSA_WITH_AES_256_GCM_SHA384 */
+    {0x00A0,KEX_DH_RSA,         ENC_AES,        DIG_SHA256, MODE_GCM   },   /* TLS_DH_RSA_WITH_AES_128_GCM_SHA256 */
+    {0x00A1,KEX_DH_RSA,         ENC_AES256,     DIG_SHA384, MODE_GCM   },   /* TLS_DH_RSA_WITH_AES_256_GCM_SHA384 */
+    {0x00A2,KEX_DHE_DSS,        ENC_AES,        DIG_SHA256, MODE_GCM   },   /* TLS_DHE_DSS_WITH_AES_128_GCM_SHA256 */
+    {0x00A3,KEX_DHE_DSS,        ENC_AES256,     DIG_SHA384, MODE_GCM   },   /* TLS_DHE_DSS_WITH_AES_256_GCM_SHA384 */
+    {0x00A4,KEX_DH_DSS,         ENC_AES,        DIG_SHA256, MODE_GCM   },   /* TLS_DH_DSS_WITH_AES_128_GCM_SHA256 */
+    {0x00A5,KEX_DH_DSS,         ENC_AES256,     DIG_SHA384, MODE_GCM   },   /* TLS_DH_DSS_WITH_AES_256_GCM_SHA384 */
+    {0x00A6,KEX_DH_ANON,        ENC_AES,        DIG_SHA256, MODE_GCM   },   /* TLS_DH_anon_WITH_AES_128_GCM_SHA256 */
+    {0x00A7,KEX_DH_ANON,        ENC_AES256,     DIG_SHA384, MODE_GCM   },   /* TLS_DH_anon_WITH_AES_256_GCM_SHA384 */
+    {0x00A8,KEX_PSK,            ENC_AES,        DIG_SHA256, MODE_GCM   },   /* TLS_PSK_WITH_AES_128_GCM_SHA256 */
+    {0x00A9,KEX_PSK,            ENC_AES256,     DIG_SHA384, MODE_GCM   },   /* TLS_PSK_WITH_AES_256_GCM_SHA384 */
+    {0x00AA,KEX_DHE_PSK,        ENC_AES,        DIG_SHA256, MODE_GCM   },   /* TLS_DHE_PSK_WITH_AES_128_GCM_SHA256 */
+    {0x00AB,KEX_DHE_PSK,        ENC_AES256,     DIG_SHA384, MODE_GCM   },   /* TLS_DHE_PSK_WITH_AES_256_GCM_SHA384 */
+    {0x00AC,KEX_RSA_PSK,        ENC_AES,        DIG_SHA256, MODE_GCM   },   /* TLS_RSA_PSK_WITH_AES_128_GCM_SHA256 */
+    {0x00AD,KEX_RSA_PSK,        ENC_AES256,     DIG_SHA384, MODE_GCM   },   /* TLS_RSA_PSK_WITH_AES_256_GCM_SHA384 */
+    {0x00AE,KEX_PSK,            ENC_AES,        DIG_SHA256, MODE_CBC   },   /* TLS_PSK_WITH_AES_128_CBC_SHA256 */
+    {0x00AF,KEX_PSK,            ENC_AES256,     DIG_SHA384, MODE_CBC   },   /* TLS_PSK_WITH_AES_256_CBC_SHA384 */
+    {0x00B0,KEX_PSK,            ENC_NULL,       DIG_SHA256, MODE_STREAM},   /* TLS_PSK_WITH_NULL_SHA256 */
+    {0x00B1,KEX_PSK,            ENC_NULL,       DIG_SHA384, MODE_STREAM},   /* TLS_PSK_WITH_NULL_SHA384 */
+    {0x00B2,KEX_DHE_PSK,        ENC_AES,        DIG_SHA256, MODE_CBC   },   /* TLS_DHE_PSK_WITH_AES_128_CBC_SHA256 */
+    {0x00B3,KEX_DHE_PSK,        ENC_AES256,     DIG_SHA384, MODE_CBC   },   /* TLS_DHE_PSK_WITH_AES_256_CBC_SHA384 */
+    {0x00B4,KEX_DHE_PSK,        ENC_NULL,       DIG_SHA256, MODE_STREAM},   /* TLS_DHE_PSK_WITH_NULL_SHA256 */
+    {0x00B5,KEX_DHE_PSK,        ENC_NULL,       DIG_SHA384, MODE_STREAM},   /* TLS_DHE_PSK_WITH_NULL_SHA384 */
+    {0x00B6,KEX_RSA_PSK,        ENC_AES,        DIG_SHA256, MODE_CBC   },   /* TLS_RSA_PSK_WITH_AES_128_CBC_SHA256 */
+    {0x00B7,KEX_RSA_PSK,        ENC_AES256,     DIG_SHA384, MODE_CBC   },   /* TLS_RSA_PSK_WITH_AES_256_CBC_SHA384 */
+    {0x00B8,KEX_RSA_PSK,        ENC_NULL,       DIG_SHA256, MODE_STREAM},   /* TLS_RSA_PSK_WITH_NULL_SHA256 */
+    {0x00B9,KEX_RSA_PSK,        ENC_NULL,       DIG_SHA384, MODE_STREAM},   /* TLS_RSA_PSK_WITH_NULL_SHA384 */
+    {0x00BA,KEX_RSA,            ENC_CAMELLIA128,DIG_SHA256, MODE_CBC   },   /* TLS_RSA_WITH_CAMELLIA_128_CBC_SHA256 */
+    {0x00BB,KEX_DH_DSS,         ENC_CAMELLIA128,DIG_SHA256, MODE_CBC   },   /* TLS_DH_DSS_WITH_CAMELLIA_128_CBC_SHA256 */
+    {0x00BC,KEX_DH_RSA,         ENC_CAMELLIA128,DIG_SHA256, MODE_CBC   },   /* TLS_DH_RSA_WITH_CAMELLIA_128_CBC_SHA256 */
+    {0x00BD,KEX_DHE_DSS,        ENC_CAMELLIA128,DIG_SHA256, MODE_CBC   },   /* TLS_DHE_DSS_WITH_CAMELLIA_128_CBC_SHA256 */
+    {0x00BE,KEX_DHE_RSA,        ENC_CAMELLIA128,DIG_SHA256, MODE_CBC   },   /* TLS_DHE_RSA_WITH_CAMELLIA_128_CBC_SHA256 */
+    {0x00BF,KEX_DH_ANON,        ENC_CAMELLIA128,DIG_SHA256, MODE_CBC   },   /* TLS_DH_anon_WITH_CAMELLIA_128_CBC_SHA256 */
+    {0x00C0,KEX_RSA,            ENC_CAMELLIA256,DIG_SHA256, MODE_CBC   },   /* TLS_RSA_WITH_CAMELLIA_256_CBC_SHA256 */
+    {0x00C1,KEX_DH_DSS,         ENC_CAMELLIA256,DIG_SHA256, MODE_CBC   },   /* TLS_DH_DSS_WITH_CAMELLIA_256_CBC_SHA256 */
+    {0x00C2,KEX_DH_RSA,         ENC_CAMELLIA256,DIG_SHA256, MODE_CBC   },   /* TLS_DH_RSA_WITH_CAMELLIA_256_CBC_SHA256 */
+    {0x00C3,KEX_DHE_DSS,        ENC_CAMELLIA256,DIG_SHA256, MODE_CBC   },   /* TLS_DHE_DSS_WITH_CAMELLIA_256_CBC_SHA256 */
+    {0x00C4,KEX_DHE_RSA,        ENC_CAMELLIA256,DIG_SHA256, MODE_CBC   },   /* TLS_DHE_RSA_WITH_CAMELLIA_256_CBC_SHA256 */
+    {0x00C5,KEX_DH_ANON,        ENC_CAMELLIA256,DIG_SHA256, MODE_CBC   },   /* TLS_DH_anon_WITH_CAMELLIA_256_CBC_SHA256 */
+    {0xC001,KEX_ECDH_ECDSA,     ENC_NULL,       DIG_SHA,    MODE_STREAM},   /* TLS_ECDH_ECDSA_WITH_NULL_SHA */
+    {0xC002,KEX_ECDH_ECDSA,     ENC_RC4,        DIG_SHA,    MODE_STREAM},   /* TLS_ECDH_ECDSA_WITH_RC4_128_SHA */
+    {0xC003,KEX_ECDH_ECDSA,     ENC_3DES,       DIG_SHA,    MODE_CBC   },   /* TLS_ECDH_ECDSA_WITH_3DES_EDE_CBC_SHA */
+    {0xC004,KEX_ECDH_ECDSA,     ENC_AES,        DIG_SHA,    MODE_CBC   },   /* TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA */
+    {0xC005,KEX_ECDH_ECDSA,     ENC_AES256,     DIG_SHA,    MODE_CBC   },   /* TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA */
+    {0xC006,KEX_ECDHE_ECDSA,    ENC_NULL,       DIG_SHA,    MODE_STREAM},   /* TLS_ECDHE_ECDSA_WITH_NULL_SHA */
+    {0xC007,KEX_ECDHE_ECDSA,    ENC_RC4,        DIG_SHA,    MODE_STREAM},   /* TLS_ECDHE_ECDSA_WITH_RC4_128_SHA */
+    {0xC008,KEX_ECDHE_ECDSA,    ENC_3DES,       DIG_SHA,    MODE_CBC   },   /* TLS_ECDHE_ECDSA_WITH_3DES_EDE_CBC_SHA */
+    {0xC009,KEX_ECDHE_ECDSA,    ENC_AES,        DIG_SHA,    MODE_CBC   },   /* TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA */
+    {0xC00A,KEX_ECDHE_ECDSA,    ENC_AES256,     DIG_SHA,    MODE_CBC   },   /* TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA */
+    {0xC00B,KEX_ECDH_RSA,       ENC_NULL,       DIG_SHA,    MODE_STREAM},   /* TLS_ECDH_RSA_WITH_NULL_SHA */
+    {0xC00C,KEX_ECDH_RSA,       ENC_RC4,        DIG_SHA,    MODE_STREAM},   /* TLS_ECDH_RSA_WITH_RC4_128_SHA */
+    {0xC00D,KEX_ECDH_RSA,       ENC_3DES,       DIG_SHA,    MODE_CBC   },   /* TLS_ECDH_RSA_WITH_3DES_EDE_CBC_SHA */
+    {0xC00E,KEX_ECDH_RSA,       ENC_AES,        DIG_SHA,    MODE_CBC   },   /* TLS_ECDH_RSA_WITH_AES_128_CBC_SHA */
+    {0xC00F,KEX_ECDH_RSA,       ENC_AES256,     DIG_SHA,    MODE_CBC   },   /* TLS_ECDH_RSA_WITH_AES_256_CBC_SHA */
+    {0xC010,KEX_ECDHE_RSA,      ENC_NULL,       DIG_SHA,    MODE_STREAM},   /* TLS_ECDHE_RSA_WITH_NULL_SHA */
+    {0xC011,KEX_ECDHE_RSA,      ENC_RC4,        DIG_SHA,    MODE_STREAM},   /* TLS_ECDHE_RSA_WITH_RC4_128_SHA */
+    {0xC012,KEX_ECDHE_RSA,      ENC_3DES,       DIG_SHA,    MODE_CBC   },   /* TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA */
+    {0xC013,KEX_ECDHE_RSA,      ENC_AES,        DIG_SHA,    MODE_CBC   },   /* TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA */
+    {0xC014,KEX_ECDHE_RSA,      ENC_AES256,     DIG_SHA,    MODE_CBC   },   /* TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA */
+    {0xC015,KEX_ECDH_ANON,      ENC_NULL,       DIG_SHA,    MODE_STREAM},   /* TLS_ECDH_anon_WITH_NULL_SHA */
+    {0xC016,KEX_ECDH_ANON,      ENC_RC4,        DIG_SHA,    MODE_STREAM},   /* TLS_ECDH_anon_WITH_RC4_128_SHA */
+    {0xC017,KEX_ECDH_ANON,      ENC_3DES,       DIG_SHA,    MODE_CBC   },   /* TLS_ECDH_anon_WITH_3DES_EDE_CBC_SHA */
+    {0xC018,KEX_ECDH_ANON,      ENC_AES,        DIG_SHA,    MODE_CBC   },   /* TLS_ECDH_anon_WITH_AES_128_CBC_SHA */
+    {0xC019,KEX_ECDH_ANON,      ENC_AES256,     DIG_SHA,    MODE_CBC   },   /* TLS_ECDH_anon_WITH_AES_256_CBC_SHA */
+    {0xC023,KEX_ECDHE_ECDSA,    ENC_AES,        DIG_SHA256, MODE_CBC   },   /* TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256 */
+    {0xC024,KEX_ECDHE_ECDSA,    ENC_AES256,     DIG_SHA384, MODE_CBC   },   /* TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384 */
+    {0xC025,KEX_ECDH_ECDSA,     ENC_AES,        DIG_SHA256, MODE_CBC   },   /* TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA256 */
+    {0xC026,KEX_ECDH_ECDSA,     ENC_AES256,     DIG_SHA384, MODE_CBC   },   /* TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA384 */
+    {0xC027,KEX_ECDHE_RSA,      ENC_AES,        DIG_SHA256, MODE_CBC   },   /* TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256 */
+    {0xC028,KEX_ECDHE_RSA,      ENC_AES256,     DIG_SHA384, MODE_CBC   },   /* TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384 */
+    {0xC029,KEX_ECDH_RSA,       ENC_AES,        DIG_SHA256, MODE_CBC   },   /* TLS_ECDH_RSA_WITH_AES_128_CBC_SHA256 */
+    {0xC02A,KEX_ECDH_RSA,       ENC_AES256,     DIG_SHA384, MODE_CBC   },   /* TLS_ECDH_RSA_WITH_AES_256_CBC_SHA384 */
+    {0xC02B,KEX_ECDHE_ECDSA,    ENC_AES,        DIG_SHA256, MODE_GCM   },   /* TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 */
+    {0xC02C,KEX_ECDHE_ECDSA,    ENC_AES256,     DIG_SHA384, MODE_GCM   },   /* TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384 */
+    {0xC02D,KEX_ECDH_ECDSA,     ENC_AES,        DIG_SHA256, MODE_GCM   },   /* TLS_ECDH_ECDSA_WITH_AES_128_GCM_SHA256 */
+    {0xC02E,KEX_ECDH_ECDSA,     ENC_AES256,     DIG_SHA384, MODE_GCM   },   /* TLS_ECDH_ECDSA_WITH_AES_256_GCM_SHA384 */
+    {0xC02F,KEX_ECDHE_RSA,      ENC_AES,        DIG_SHA256, MODE_GCM   },   /* TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 */
+    {0xC030,KEX_ECDHE_RSA,      ENC_AES256,     DIG_SHA384, MODE_GCM   },   /* TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 */
+    {0xC031,KEX_ECDH_RSA,       ENC_AES,        DIG_SHA256, MODE_GCM   },   /* TLS_ECDH_RSA_WITH_AES_128_GCM_SHA256 */
+    {0xC032,KEX_ECDH_RSA,       ENC_AES256,     DIG_SHA384, MODE_GCM   },   /* TLS_ECDH_RSA_WITH_AES_256_GCM_SHA384 */
+    {0xC033,KEX_ECDHE_PSK,      ENC_RC4,        DIG_SHA,    MODE_STREAM},   /* TLS_ECDHE_PSK_WITH_RC4_128_SHA */
+    {0xC034,KEX_ECDHE_PSK,      ENC_3DES,       DIG_SHA,    MODE_CBC   },   /* TLS_ECDHE_PSK_WITH_3DES_EDE_CBC_SHA */
+    {0xC035,KEX_ECDHE_PSK,      ENC_AES,        DIG_SHA,    MODE_CBC   },   /* TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA */
+    {0xC036,KEX_ECDHE_PSK,      ENC_AES256,     DIG_SHA,    MODE_CBC   },   /* TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA */
+    {0xC037,KEX_ECDHE_PSK,      ENC_AES,        DIG_SHA256, MODE_CBC   },   /* TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA256 */
+    {0xC038,KEX_ECDHE_PSK,      ENC_AES256,     DIG_SHA384, MODE_CBC   },   /* TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA384 */
+    {0xC039,KEX_ECDHE_PSK,      ENC_NULL,       DIG_SHA,    MODE_STREAM},   /* TLS_ECDHE_PSK_WITH_NULL_SHA */
+    {0xC03A,KEX_ECDHE_PSK,      ENC_NULL,       DIG_SHA256, MODE_STREAM},   /* TLS_ECDHE_PSK_WITH_NULL_SHA256 */
+    {0xC03B,KEX_ECDHE_PSK,      ENC_NULL,       DIG_SHA384, MODE_STREAM},   /* TLS_ECDHE_PSK_WITH_NULL_SHA384 */
+    {0xC072,KEX_ECDHE_ECDSA,    ENC_CAMELLIA128,DIG_SHA256, MODE_CBC   },   /* TLS_ECDHE_ECDSA_WITH_CAMELLIA_128_CBC_SHA256 */
+    {0xC073,KEX_ECDHE_ECDSA,    ENC_CAMELLIA256,DIG_SHA384, MODE_CBC   },   /* TLS_ECDHE_ECDSA_WITH_CAMELLIA_256_CBC_SHA384 */
+    {0xC074,KEX_ECDH_ECDSA,     ENC_CAMELLIA128,DIG_SHA256, MODE_CBC   },   /* TLS_ECDH_ECDSA_WITH_CAMELLIA_128_CBC_SHA256 */
+    {0xC075,KEX_ECDH_ECDSA,     ENC_CAMELLIA256,DIG_SHA384, MODE_CBC   },   /* TLS_ECDH_ECDSA_WITH_CAMELLIA_256_CBC_SHA384 */
+    {0xC076,KEX_ECDHE_RSA,      ENC_CAMELLIA128,DIG_SHA256, MODE_CBC   },   /* TLS_ECDHE_RSA_WITH_CAMELLIA_128_CBC_SHA256 */
+    {0xC077,KEX_ECDHE_RSA,      ENC_CAMELLIA256,DIG_SHA384, MODE_CBC   },   /* TLS_ECDHE_RSA_WITH_CAMELLIA_256_CBC_SHA384 */
+    {0xC078,KEX_ECDH_RSA,       ENC_CAMELLIA128,DIG_SHA256, MODE_CBC   },   /* TLS_ECDH_RSA_WITH_CAMELLIA_128_CBC_SHA256 */
+    {0xC079,KEX_ECDH_RSA,       ENC_CAMELLIA256,DIG_SHA384, MODE_CBC   },   /* TLS_ECDH_RSA_WITH_CAMELLIA_256_CBC_SHA384 */
+    {0xC07A,KEX_RSA,            ENC_CAMELLIA128,DIG_SHA256, MODE_GCM   },   /* TLS_RSA_WITH_CAMELLIA_128_GCM_SHA256 */
+    {0xC07B,KEX_RSA,            ENC_CAMELLIA256,DIG_SHA384, MODE_GCM   },   /* TLS_RSA_WITH_CAMELLIA_256_GCM_SHA384 */
+    {0xC07C,KEX_DHE_RSA,        ENC_CAMELLIA128,DIG_SHA256, MODE_GCM   },   /* TLS_DHE_RSA_WITH_CAMELLIA_128_GCM_SHA256 */
+    {0xC07D,KEX_DHE_RSA,        ENC_CAMELLIA256,DIG_SHA384, MODE_GCM   },   /* TLS_DHE_RSA_WITH_CAMELLIA_256_GCM_SHA384 */
+    {0xC07E,KEX_DH_RSA,         ENC_CAMELLIA128,DIG_SHA256, MODE_GCM   },   /* TLS_DH_RSA_WITH_CAMELLIA_128_GCM_SHA256 */
+    {0xC07F,KEX_DH_RSA,         ENC_CAMELLIA256,DIG_SHA384, MODE_GCM   },   /* TLS_DH_RSA_WITH_CAMELLIA_256_GCM_SHA384 */
+    {0xC080,KEX_DHE_DSS,        ENC_CAMELLIA128,DIG_SHA256, MODE_GCM   },   /* TLS_DHE_DSS_WITH_CAMELLIA_128_GCM_SHA256 */
+    {0xC081,KEX_DHE_DSS,        ENC_CAMELLIA256,DIG_SHA384, MODE_GCM   },   /* TLS_DHE_DSS_WITH_CAMELLIA_256_GCM_SHA384 */
+    {0xC082,KEX_DH_DSS,         ENC_CAMELLIA128,DIG_SHA256, MODE_GCM   },   /* TLS_DH_DSS_WITH_CAMELLIA_128_GCM_SHA256 */
+    {0xC083,KEX_DH_DSS,         ENC_CAMELLIA256,DIG_SHA384, MODE_GCM   },   /* TLS_DH_DSS_WITH_CAMELLIA_256_GCM_SHA384 */
+    {0xC084,KEX_DH_ANON,        ENC_CAMELLIA128,DIG_SHA256, MODE_GCM   },   /* TLS_DH_anon_WITH_CAMELLIA_128_GCM_SHA256 */
+    {0xC085,KEX_DH_ANON,        ENC_CAMELLIA256,DIG_SHA384, MODE_GCM   },   /* TLS_DH_anon_WITH_CAMELLIA_256_GCM_SHA384 */
+    {0xC086,KEX_ECDHE_ECDSA,    ENC_CAMELLIA128,DIG_SHA256, MODE_GCM   },   /* TLS_ECDHE_ECDSA_WITH_CAMELLIA_128_GCM_SHA256 */
+    {0xC087,KEX_ECDHE_ECDSA,    ENC_CAMELLIA256,DIG_SHA384, MODE_GCM   },   /* TLS_ECDHE_ECDSA_WITH_CAMELLIA_256_GCM_SHA384 */
+    {0xC088,KEX_ECDH_ECDSA,     ENC_CAMELLIA128,DIG_SHA256, MODE_GCM   },   /* TLS_ECDH_ECDSA_WITH_CAMELLIA_128_GCM_SHA256 */
+    {0xC089,KEX_ECDH_ECDSA,     ENC_CAMELLIA256,DIG_SHA384, MODE_GCM   },   /* TLS_ECDH_ECDSA_WITH_CAMELLIA_256_GCM_SHA384 */
+    {0xC08A,KEX_ECDHE_RSA,      ENC_CAMELLIA128,DIG_SHA256, MODE_GCM   },   /* TLS_ECDHE_RSA_WITH_CAMELLIA_128_GCM_SHA256 */
+    {0xC08B,KEX_ECDHE_RSA,      ENC_CAMELLIA256,DIG_SHA384, MODE_GCM   },   /* TLS_ECDHE_RSA_WITH_CAMELLIA_256_GCM_SHA384 */
+    {0xC08C,KEX_ECDH_RSA,       ENC_CAMELLIA128,DIG_SHA256, MODE_GCM   },   /* TLS_ECDH_RSA_WITH_CAMELLIA_128_GCM_SHA256 */
+    {0xC08D,KEX_ECDH_RSA,       ENC_CAMELLIA256,DIG_SHA384, MODE_GCM   },   /* TLS_ECDH_RSA_WITH_CAMELLIA_256_GCM_SHA384 */
+    {0xC08E,KEX_PSK,            ENC_CAMELLIA128,DIG_SHA256, MODE_GCM   },   /* TLS_PSK_WITH_CAMELLIA_128_GCM_SHA256 */
+    {0xC08F,KEX_PSK,            ENC_CAMELLIA256,DIG_SHA384, MODE_GCM   },   /* TLS_PSK_WITH_CAMELLIA_256_GCM_SHA384 */
+    {0xC090,KEX_DHE_PSK,        ENC_CAMELLIA128,DIG_SHA256, MODE_GCM   },   /* TLS_DHE_PSK_WITH_CAMELLIA_128_GCM_SHA256 */
+    {0xC091,KEX_DHE_PSK,        ENC_CAMELLIA256,DIG_SHA384, MODE_GCM   },   /* TLS_DHE_PSK_WITH_CAMELLIA_256_GCM_SHA384 */
+    {0xC092,KEX_RSA_PSK,        ENC_CAMELLIA128,DIG_SHA256, MODE_GCM   },   /* TLS_RSA_PSK_WITH_CAMELLIA_128_GCM_SHA256 */
+    {0xC093,KEX_RSA_PSK,        ENC_CAMELLIA256,DIG_SHA384, MODE_GCM   },   /* TLS_RSA_PSK_WITH_CAMELLIA_256_GCM_SHA384 */
+    {0xC094,KEX_PSK,            ENC_CAMELLIA128,DIG_SHA256, MODE_CBC   },   /* TLS_PSK_WITH_CAMELLIA_128_CBC_SHA256 */
+    {0xC095,KEX_PSK,            ENC_CAMELLIA256,DIG_SHA384, MODE_CBC   },   /* TLS_PSK_WITH_CAMELLIA_256_CBC_SHA384 */
+    {0xC096,KEX_DHE_PSK,        ENC_CAMELLIA128,DIG_SHA256, MODE_CBC   },   /* TLS_DHE_PSK_WITH_CAMELLIA_128_CBC_SHA256 */
+    {0xC097,KEX_DHE_PSK,        ENC_CAMELLIA256,DIG_SHA384, MODE_CBC   },   /* TLS_DHE_PSK_WITH_CAMELLIA_256_CBC_SHA384 */
+    {0xC098,KEX_RSA_PSK,        ENC_CAMELLIA128,DIG_SHA256, MODE_CBC   },   /* TLS_RSA_PSK_WITH_CAMELLIA_128_CBC_SHA256 */
+    {0xC099,KEX_RSA_PSK,        ENC_CAMELLIA256,DIG_SHA384, MODE_CBC   },   /* TLS_RSA_PSK_WITH_CAMELLIA_256_CBC_SHA384 */
+    {0xC09A,KEX_ECDHE_PSK,      ENC_CAMELLIA128,DIG_SHA256, MODE_CBC   },   /* TLS_ECDHE_PSK_WITH_CAMELLIA_128_CBC_SHA256 */
+    {0xC09B,KEX_ECDHE_PSK,      ENC_CAMELLIA256,DIG_SHA384, MODE_CBC   },   /* TLS_ECDHE_PSK_WITH_CAMELLIA_256_CBC_SHA384 */
+    {0xC09C,KEX_RSA,            ENC_AES,        DIG_NA,     MODE_CCM   },   /* TLS_RSA_WITH_AES_128_CCM */
+    {0xC09D,KEX_RSA,            ENC_AES256,     DIG_NA,     MODE_CCM   },   /* TLS_RSA_WITH_AES_256_CCM */
+    {0xC09E,KEX_DHE_RSA,        ENC_AES,        DIG_NA,     MODE_CCM   },   /* TLS_DHE_RSA_WITH_AES_128_CCM */
+    {0xC09F,KEX_DHE_RSA,        ENC_AES256,     DIG_NA,     MODE_CCM   },   /* TLS_DHE_RSA_WITH_AES_256_CCM */
+    {0xC0A0,KEX_RSA,            ENC_AES,        DIG_NA,     MODE_CCM_8 },   /* TLS_RSA_WITH_AES_128_CCM_8 */
+    {0xC0A1,KEX_RSA,            ENC_AES256,     DIG_NA,     MODE_CCM_8 },   /* TLS_RSA_WITH_AES_256_CCM_8 */
+    {0xC0A2,KEX_DHE_RSA,        ENC_AES,        DIG_NA,     MODE_CCM_8 },   /* TLS_DHE_RSA_WITH_AES_128_CCM_8 */
+    {0xC0A3,KEX_DHE_RSA,        ENC_AES256,     DIG_NA,     MODE_CCM_8 },   /* TLS_DHE_RSA_WITH_AES_256_CCM_8 */
+    {0xC0A4,KEX_PSK,            ENC_AES,        DIG_NA,     MODE_CCM   },   /* TLS_PSK_WITH_AES_128_CCM */
+    {0xC0A5,KEX_PSK,            ENC_AES256,     DIG_NA,     MODE_CCM   },   /* TLS_PSK_WITH_AES_256_CCM */
+    {0xC0A6,KEX_DHE_PSK,        ENC_AES,        DIG_NA,     MODE_CCM   },   /* TLS_DHE_PSK_WITH_AES_128_CCM */
+    {0xC0A7,KEX_DHE_PSK,        ENC_AES256,     DIG_NA,     MODE_CCM   },   /* TLS_DHE_PSK_WITH_AES_256_CCM */
+    {0xC0A8,KEX_PSK,            ENC_AES,        DIG_NA,     MODE_CCM_8 },   /* TLS_PSK_WITH_AES_128_CCM_8 */
+    {0xC0A9,KEX_PSK,            ENC_AES256,     DIG_NA,     MODE_CCM_8 },   /* TLS_PSK_WITH_AES_256_CCM_8 */
+    {0xC0AA,KEX_DHE_PSK,        ENC_AES,        DIG_NA,     MODE_CCM_8 },   /* TLS_PSK_DHE_WITH_AES_128_CCM_8 */
+    {0xC0AB,KEX_DHE_PSK,        ENC_AES256,     DIG_NA,     MODE_CCM_8 },   /* TLS_PSK_DHE_WITH_AES_256_CCM_8 */
+    {0xC0AC,KEX_ECDHE_ECDSA,    ENC_AES,        DIG_NA,     MODE_CCM   },   /* TLS_ECDHE_ECDSA_WITH_AES_128_CCM */
+    {0xC0AD,KEX_ECDHE_ECDSA,    ENC_AES256,     DIG_NA,     MODE_CCM   },   /* TLS_ECDHE_ECDSA_WITH_AES_256_CCM */
+    {0xC0AE,KEX_ECDHE_ECDSA,    ENC_AES,        DIG_NA,     MODE_CCM_8 },   /* TLS_ECDHE_ECDSA_WITH_AES_128_CCM_8 */
+    {0xC0AF,KEX_ECDHE_ECDSA,    ENC_AES256,     DIG_NA,     MODE_CCM_8 },   /* TLS_ECDHE_ECDSA_WITH_AES_256_CCM_8 */
+    {-1,    0,                  0,              0,          MODE_STREAM}
 };
 
 #define MAX_BLOCK_SIZE 16
@@ -2265,6 +2312,51 @@ ssl_find_cipher(int num)
 
     return NULL;
 }
+
+guint
+ssl_get_cipher_blocksize(const SslCipherSuite *cipher_suite)
+{
+    gint cipher_algo;
+    if (cipher_suite->mode != MODE_CBC) return 0;
+    cipher_algo = ssl_get_cipher_by_name(ciphers[cipher_suite->enc - 0x30]);
+    return (guint)gcry_cipher_get_algo_blklen(cipher_algo);
+}
+
+static guint
+ssl_get_cipher_export_keymat_size(int cipher_suite_num)
+{
+    switch (cipher_suite_num) {
+    /* See RFC 6101 (SSL 3.0), Table 2, column Key Material. */
+    case 0x0003:    /* TLS_RSA_EXPORT_WITH_RC4_40_MD5 */
+    case 0x0006:    /* TLS_RSA_EXPORT_WITH_RC2_CBC_40_MD5 */
+    case 0x0008:    /* TLS_RSA_EXPORT_WITH_DES40_CBC_SHA */
+    case 0x000B:    /* TLS_DH_DSS_EXPORT_WITH_DES40_CBC_SHA */
+    case 0x000E:    /* TLS_DH_RSA_EXPORT_WITH_DES40_CBC_SHA */
+    case 0x0011:    /* TLS_DHE_DSS_EXPORT_WITH_DES40_CBC_SHA */
+    case 0x0014:    /* TLS_DHE_RSA_EXPORT_WITH_DES40_CBC_SHA */
+    case 0x0017:    /* TLS_DH_anon_EXPORT_WITH_RC4_40_MD5 */
+    case 0x0019:    /* TLS_DH_anon_EXPORT_WITH_DES40_CBC_SHA */
+        return 5;
+
+    /* not defined in below draft, but "implemented by several vendors",
+     * https://www.ietf.org/mail-archive/web/tls/current/msg00036.html */
+    case 0x0060:    /* TLS_RSA_EXPORT1024_WITH_RC4_56_MD5 */
+    case 0x0061:    /* TLS_RSA_EXPORT1024_WITH_RC2_CBC_56_MD5 */
+        return 7;
+
+    /* Note: the draft states that DES_CBC needs 8 bytes, but Wireshark always
+     * used 7. Until a pcap proves 8, let's use the old value. Link:
+     * https://tools.ietf.org/html/draft-ietf-tls-56-bit-ciphersuites-01 */
+    case 0x0062:    /* TLS_RSA_EXPORT1024_WITH_DES_CBC_SHA */
+    case 0x0063:    /* TLS_DHE_DSS_EXPORT1024_WITH_DES_CBC_SHA */
+    case 0x0064:    /* TLS_RSA_EXPORT1024_WITH_RC4_56_SHA */
+    case 0x0065:    /* TLS_DHE_DSS_EXPORT1024_WITH_RC4_56_SHA */
+        return 7;
+
+    default:
+        return 0;
+    }
+}
 #else /* ! HAVE_LIBGCRYPT */
 const SslCipherSuite *
 ssl_find_cipher(int num)
@@ -2272,6 +2364,12 @@ ssl_find_cipher(int num)
     ssl_debug_printf("ssl_find_cipher: dummy without gnutls. num %d\n",
         num);
     return NULL;
+}
+
+guint
+ssl_get_cipher_blocksize(const SslCipherSuite *cipher_suite _U_)
+{
+    return 0;
 }
 #endif /* ! HAVE_LIBGCRYPT */
 
@@ -2648,7 +2746,7 @@ ssl_create_decompressor(gint compression)
             decomp->istream.next_out = Z_NULL;
             decomp->istream.avail_in = 0;
             decomp->istream.avail_out = 0;
-            err = inflateInit_(&decomp->istream, ZLIB_VERSION, sizeof(z_stream));
+            err = inflateInit(&decomp->istream);
             if (err != Z_OK) {
                 ssl_debug_printf("ssl_create_decompressor: inflateInit_() failed - %d\n", err);
                 return NULL;
@@ -2740,60 +2838,61 @@ ssl_change_cipher(SslDecryptSession *ssl_session, gboolean server)
 /* }}} */
 
 /* Init cipher state given some security parameters. {{{ */
+static gboolean
+ssl_decoder_destroy_cb(wmem_allocator_t *, wmem_cb_event_t, void *);
+
 static SslDecoder*
-ssl_create_decoder(const SslCipherSuite *cipher_suite, gint compression,
-        guint8 *mk, guint8 *sk, guint8 *iv)
+ssl_create_decoder(const SslCipherSuite *cipher_suite, gint cipher_algo,
+        gint compression, guint8 *mk, guint8 *sk, guint8 *iv)
 {
     SslDecoder *dec;
-    gint        ciph;
+    ssl_cipher_mode_t mode = cipher_suite->mode;
 
     dec = (SslDecoder *)wmem_alloc0(wmem_file_scope(), sizeof(SslDecoder));
-    /* Find the SSLeay cipher */
-    if(cipher_suite->enc!=ENC_NULL) {
-        ssl_debug_printf("ssl_create_decoder CIPHER: %s\n", ciphers[cipher_suite->enc-0x30]);
-        ciph=ssl_get_cipher_by_name(ciphers[cipher_suite->enc-0x30]);
-    } else {
-        ssl_debug_printf("ssl_create_decoder CIPHER: %s\n", "NULL");
-        ciph = -1;
-    }
-    if (ciph == 0) {
-        ssl_debug_printf("ssl_create_decoder can't find cipher %s\n",
-            ciphers[cipher_suite->enc > ENC_NULL ? ENC_NULL-0x30 : (cipher_suite->enc-0x30)]);
-        return NULL;
-    }
-
     /* init mac buffer: mac storage is embedded into decoder struct to save a
      memory allocation and waste samo more memory*/
     dec->cipher_suite=cipher_suite;
     dec->compression = compression;
-    /* AEED ciphers require a write IV (iv) and do not use MAC keys (mk).
-     * All other ciphers require a MAC key. As a special case, allow omission
-     * for the NULL cipher such that record payloads can still be dissected. */
-    if (mk != NULL) {
+    if ((mode == MODE_STREAM && mk != NULL) || mode == MODE_CBC) {
+        // AEAD ciphers use no MAC key, but stream and block ciphers do. Note
+        // the special case for NULL ciphers, even if there is insufficieny
+        // keying material (including MAC key), we will can still create
+        // decoders since "decryption" is easy for such ciphers.
         dec->mac_key.data = dec->_mac_key_or_write_iv;
         ssl_data_set(&dec->mac_key, mk, ssl_cipher_suite_dig(cipher_suite)->len);
-    } else if (iv != NULL) {
+    } else if (mode == MODE_GCM || mode == MODE_CCM || mode == MODE_CCM_8) {
+        /* So far all AEAD ciphers derive the 4-byte implicit nonce part from the write IV */
         dec->write_iv.data = dec->_mac_key_or_write_iv;
-        ssl_data_set(&dec->write_iv, iv, cipher_suite->block);
-    } else {
-        DISSECTOR_ASSERT(cipher_suite->enc == ENC_NULL);
+        ssl_data_set(&dec->write_iv, iv, 4);
     }
     dec->seq = 0;
     dec->decomp = ssl_create_decompressor(compression);
-    dec->flow = ssl_create_flow();
+    wmem_register_callback(wmem_file_scope(), ssl_decoder_destroy_cb, dec);
 
-    /* TODO this does nothing as dec->evp is always NULL. */
-    if (dec->evp)
-        ssl_cipher_cleanup(&dec->evp);
-
-    if (ssl_cipher_init(&dec->evp,ciph,sk,iv,cipher_suite->mode) < 0) {
-        ssl_debug_printf("ssl_create_decoder: can't create cipher id:%d mode:%d\n",
-            ciph, cipher_suite->mode);
+    if (ssl_cipher_init(&dec->evp,cipher_algo,sk,iv,cipher_suite->mode) < 0) {
+        ssl_debug_printf("%s: can't create cipher id:%d mode:%d\n", G_STRFUNC,
+            cipher_algo, cipher_suite->mode);
         return NULL;
     }
 
     ssl_debug_printf("decoder initialized (digest len %d)\n", ssl_cipher_suite_dig(cipher_suite)->len);
     return dec;
+}
+
+static gboolean
+ssl_decoder_destroy_cb(wmem_allocator_t *allocator _U_, wmem_cb_event_t event _U_, void *user_data)
+{
+    SslDecoder *dec = (SslDecoder *) user_data;
+
+    if (dec->evp)
+        ssl_cipher_cleanup(&dec->evp);
+
+#ifdef HAVE_ZLIB
+    if (dec->decomp != NULL && dec->decomp->compression == 1 /* DEFLATE */)
+        inflateEnd(&dec->decomp->istream);
+#endif
+
+    return FALSE;
 }
 /* }}} */
 
@@ -2951,7 +3050,10 @@ ssl_generate_keyring_material(SslDecryptSession*ssl_session)
     guint8      _iv_c[MAX_BLOCK_SIZE],_iv_s[MAX_BLOCK_SIZE];
     guint8      _key_c[MAX_KEY_SIZE],_key_s[MAX_KEY_SIZE];
     gint        needed;
-    guint8     *ptr, *c_iv = _iv_c,*s_iv = _iv_s;
+    gint        cipher_algo = -1;   /* special value (-1) for NULL encryption */
+    guint       encr_key_len, write_iv_len = 0;
+    gboolean    is_export_cipher;
+    guint8     *ptr, *c_iv = NULL, *s_iv = NULL;
     guint8     *c_wk = NULL, *s_wk = NULL, *c_mk = NULL, *s_mk = NULL;
     const SslCipherSuite *cipher_suite = ssl_session->cipher_suite;
 
@@ -3044,11 +3146,36 @@ ssl_generate_keyring_material(SslDecryptSession*ssl_session)
         ssl_session->state |= SSL_MASTER_SECRET;
     }
 
-    /* Compute the key block. First figure out how much data we need*/
-    needed=ssl_cipher_suite_dig(cipher_suite)->len*2;
-    needed+=cipher_suite->bits / 4;
-    if(cipher_suite->block>1)
-        needed+=cipher_suite->block*2;
+    /* Find the Libgcrypt cipher algorithm for the given SSL cipher suite ID */
+    if (cipher_suite->enc != ENC_NULL) {
+        const char *cipher_name = ciphers[cipher_suite->enc-0x30];
+        ssl_debug_printf("%s CIPHER: %s\n", G_STRFUNC, cipher_name);
+        cipher_algo = ssl_get_cipher_by_name(cipher_name);
+        if (cipher_algo == 0) {
+            ssl_debug_printf("%s can't find cipher %s\n", G_STRFUNC, cipher_name);
+            return -1;
+        }
+    }
+
+    /* Export ciphers consume less material from the key block. */
+    encr_key_len = ssl_get_cipher_export_keymat_size(cipher_suite->number);
+    is_export_cipher = encr_key_len > 0;
+    if (!is_export_cipher && cipher_suite->enc != ENC_NULL) {
+        encr_key_len = (guint)gcry_cipher_get_algo_keylen(cipher_algo);
+    }
+
+    if (cipher_suite->mode == MODE_CBC) {
+        write_iv_len = (guint)gcry_cipher_get_algo_blklen(cipher_algo);
+    } else if (cipher_suite->mode == MODE_GCM || cipher_suite->mode == MODE_CCM || cipher_suite->mode == MODE_CCM_8) {
+        /* account for a four-byte salt for client and server side (from
+         * client_write_IV and server_write_IV), see GCMNonce (RFC 5288) */
+        write_iv_len = 4;
+    }
+
+    /* Compute the key block. First figure out how much data we need */
+    needed = ssl_cipher_suite_dig(cipher_suite)->len*2;     /* MAC key  */
+    needed += 2 * encr_key_len;                             /* encryption key */
+    needed += 2 * write_iv_len;                             /* write IV */
 
     key_block.data = (guchar *)g_malloc(needed);
     ssl_debug_printf("%s sess key generation\n", G_STRFUNC);
@@ -3061,33 +3188,29 @@ ssl_generate_keyring_material(SslDecryptSession*ssl_session)
     ssl_print_string("key expansion", &key_block);
 
     ptr=key_block.data;
-    /* AEAD ciphers do not have a separate MAC */
-    if (cipher_suite->mode == MODE_GCM ||
-        cipher_suite->mode == MODE_CCM ||
-        cipher_suite->mode == MODE_CCM_8) {
-        c_mk = s_mk = NULL;
-    } else {
+    /* client/server write MAC key (for non-AEAD ciphers) */
+    if (cipher_suite->mode == MODE_STREAM || cipher_suite->mode == MODE_CBC) {
         c_mk=ptr; ptr+=ssl_cipher_suite_dig(cipher_suite)->len;
         s_mk=ptr; ptr+=ssl_cipher_suite_dig(cipher_suite)->len;
     }
-
-    c_wk=ptr; ptr+=cipher_suite->eff_bits/8;
-    s_wk=ptr; ptr+=cipher_suite->eff_bits/8;
-
-    if(cipher_suite->block>1){
-        c_iv=ptr; ptr+=cipher_suite->block;
-        s_iv=ptr; /*ptr+=cipher_suite->block;*/
+    /* client/server write encryption key */
+    c_wk=ptr; ptr += encr_key_len;
+    s_wk=ptr; ptr += encr_key_len;
+    /* client/server write IV (used as IV (for CBC) or salt (for AEAD)) */
+    if (write_iv_len > 0) {
+        c_iv=ptr; ptr += write_iv_len;
+        s_iv=ptr; /* ptr += write_iv_len; */
     }
 
     /* export ciphers work with a smaller key length */
-    if (cipher_suite->eff_bits < cipher_suite->bits) {
-        if(cipher_suite->block>1){
+    if (is_export_cipher) {
+        if (cipher_suite->mode == MODE_CBC) {
 
             /* We only have room for MAX_BLOCK_SIZE bytes IVs, but that's
              all we should need. This is a sanity check */
-            if(cipher_suite->block>MAX_BLOCK_SIZE) {
+            if (write_iv_len > MAX_BLOCK_SIZE) {
                 ssl_debug_printf("%s cipher suite block must be at most %d nut is %d\n",
-                G_STRFUNC, MAX_BLOCK_SIZE, cipher_suite->block);
+                        G_STRFUNC, MAX_BLOCK_SIZE, write_iv_len);
                 goto fail;
             }
 
@@ -3099,12 +3222,10 @@ ssl_generate_keyring_material(SslDecryptSession*ssl_session)
 
                 ssl_debug_printf("%s ssl3_generate_export_iv\n", G_STRFUNC);
                 ssl3_generate_export_iv(&ssl_session->client_random,
-                        &ssl_session->server_random, &iv_c,
-                        cipher_suite->block);
+                        &ssl_session->server_random, &iv_c, write_iv_len);
                 ssl_debug_printf("%s ssl3_generate_export_iv(2)\n", G_STRFUNC);
                 ssl3_generate_export_iv(&ssl_session->server_random,
-                        &ssl_session->client_random, &iv_s,
-                        cipher_suite->block);
+                        &ssl_session->client_random, &iv_s, write_iv_len);
             }
             else{
                 guint8 _iv_block[MAX_BLOCK_SIZE * 2];
@@ -3121,14 +3242,13 @@ ssl_generate_keyring_material(SslDecryptSession*ssl_session)
                 if (!prf(ssl_session, &key_null, "IV block",
                         &ssl_session->client_random,
                         &ssl_session->server_random, &iv_block,
-                        cipher_suite->block * 2)) {
+                        write_iv_len * 2)) {
                     ssl_debug_printf("%s can't generate tls31 iv block\n", G_STRFUNC);
                     goto fail;
                 }
 
-                memcpy(_iv_c,iv_block.data,cipher_suite->block);
-                memcpy(_iv_s,iv_block.data+cipher_suite->block,
-                    cipher_suite->block);
+                memcpy(_iv_c, iv_block.data, write_iv_len);
+                memcpy(_iv_s, iv_block.data + write_iv_len, write_iv_len);
             }
 
             c_iv=_iv_c;
@@ -3141,7 +3261,7 @@ ssl_generate_keyring_material(SslDecryptSession*ssl_session)
             ssl_debug_printf("%s MD5(client_random)\n", G_STRFUNC);
 
             ssl_md5_init(&md5);
-            ssl_md5_update(&md5,c_wk,cipher_suite->eff_bits/8);
+            ssl_md5_update(&md5,c_wk,encr_key_len);
             ssl_md5_update(&md5,ssl_session->client_random.data,
                 ssl_session->client_random.data_len);
             ssl_md5_update(&md5,ssl_session->server_random.data,
@@ -3152,7 +3272,7 @@ ssl_generate_keyring_material(SslDecryptSession*ssl_session)
 
             ssl_md5_init(&md5);
             ssl_debug_printf("%s MD5(server_random)\n", G_STRFUNC);
-            ssl_md5_update(&md5,s_wk,cipher_suite->eff_bits/8);
+            ssl_md5_update(&md5,s_wk,encr_key_len);
             ssl_md5_update(&md5,ssl_session->server_random.data,
                 ssl_session->server_random.data_len);
             ssl_md5_update(&md5,ssl_session->client_random.data,
@@ -3167,7 +3287,7 @@ ssl_generate_keyring_material(SslDecryptSession*ssl_session)
             key_s.data = _key_s;
 
             k.data = c_wk;
-            k.data_len = cipher_suite->eff_bits/8;
+            k.data_len = encr_key_len;
             ssl_debug_printf("%s PRF(key_c)\n", G_STRFUNC);
             if (!prf(ssl_session, &k, "client write key",
                     &ssl_session->client_random,
@@ -3178,7 +3298,7 @@ ssl_generate_keyring_material(SslDecryptSession*ssl_session)
             c_wk=_key_c;
 
             k.data = s_wk;
-            k.data_len = cipher_suite->eff_bits/8;
+            k.data_len = encr_key_len;
             ssl_debug_printf("%s PRF(key_s)\n", G_STRFUNC);
             if (!prf(ssl_session, &k, "server write key",
                     &ssl_session->client_random,
@@ -3195,32 +3315,32 @@ ssl_generate_keyring_material(SslDecryptSession*ssl_session)
         ssl_print_data("Client MAC key",c_mk,ssl_cipher_suite_dig(cipher_suite)->len);
         ssl_print_data("Server MAC key",s_mk,ssl_cipher_suite_dig(cipher_suite)->len);
     }
-    ssl_print_data("Client Write key",c_wk,cipher_suite->bits/8);
-    ssl_print_data("Server Write key",s_wk,cipher_suite->bits/8);
-
-    if(cipher_suite->block>1) {
-        ssl_print_data("Client Write IV",c_iv,cipher_suite->block);
-        ssl_print_data("Server Write IV",s_iv,cipher_suite->block);
-    }
-    else {
-        ssl_print_data("Client Write IV",c_iv,8);
-        ssl_print_data("Server Write IV",s_iv,8);
+    ssl_print_data("Client Write key", c_wk, encr_key_len);
+    ssl_print_data("Server Write key", s_wk, encr_key_len);
+    /* used as IV for CBC mode and the AEAD implicit nonce (salt) */
+    if (write_iv_len > 0) {
+        ssl_print_data("Client Write IV", c_iv, write_iv_len);
+        ssl_print_data("Server Write IV", s_iv, write_iv_len);
     }
 
 create_decoders:
     /* create both client and server ciphers*/
     ssl_debug_printf("%s ssl_create_decoder(client)\n", G_STRFUNC);
-    ssl_session->client_new = ssl_create_decoder(cipher_suite, ssl_session->session.compression, c_mk, c_wk, c_iv);
+    ssl_session->client_new = ssl_create_decoder(cipher_suite, cipher_algo, ssl_session->session.compression, c_mk, c_wk, c_iv);
     if (!ssl_session->client_new) {
         ssl_debug_printf("%s can't init client decoder\n", G_STRFUNC);
         goto fail;
     }
     ssl_debug_printf("%s ssl_create_decoder(server)\n", G_STRFUNC);
-    ssl_session->server_new = ssl_create_decoder(cipher_suite, ssl_session->session.compression, s_mk, s_wk, s_iv);
+    ssl_session->server_new = ssl_create_decoder(cipher_suite, cipher_algo, ssl_session->session.compression, s_mk, s_wk, s_iv);
     if (!ssl_session->server_new) {
         ssl_debug_printf("%s can't init client decoder\n", G_STRFUNC);
         goto fail;
     }
+
+    /* Continue the SSL stream after renegotiation with new keys. */
+    ssl_session->client_new->flow = ssl_session->client ? ssl_session->client->flow : ssl_create_flow();
+    ssl_session->server_new->flow = ssl_session->server ? ssl_session->server->flow : ssl_create_flow();
 
     ssl_debug_printf("%s: client seq %d, server seq %d\n",
         G_STRFUNC, ssl_session->client_new->seq, ssl_session->server_new->seq);
@@ -3496,25 +3616,28 @@ ssl_decrypt_record(SslDecryptSession*ssl,SslDecoder* decoder, gint ct,
 
     /* (TLS 1.1 and later, DTLS) Extract explicit IV for GenericBlockCipher */
     if (decoder->cipher_suite->mode == MODE_CBC) {
+        guint blocksize;
+
         switch (ssl->session.version) {
         case TLSV1DOT1_VERSION:
         case TLSV1DOT2_VERSION:
         case DTLSV1DOT0_VERSION:
         case DTLSV1DOT2_VERSION:
         case DTLSV1DOT0_OPENSSL_VERSION:
-            if ((gint)inl < decoder->cipher_suite->block) {
+            blocksize = ssl_get_cipher_blocksize(decoder->cipher_suite);
+            if (inl < blocksize) {
                 ssl_debug_printf("ssl_decrypt_record failed: input %d has no space for IV %d\n",
-                        inl, decoder->cipher_suite->block);
+                        inl, blocksize);
                 return -1;
             }
-            pad = gcry_cipher_setiv(decoder->evp, in, decoder->cipher_suite->block);
+            pad = gcry_cipher_setiv(decoder->evp, in, blocksize);
             if (pad != 0) {
                 ssl_debug_printf("ssl_decrypt_record failed: failed to set IV: %s %s\n",
                         gcry_strsource (pad), gcry_strerror (pad));
             }
 
-            inl -= decoder->cipher_suite->block;
-            in += decoder->cipher_suite->block;
+            inl -= blocksize;
+            in += blocksize;
             break;
         }
     }
@@ -3545,6 +3668,7 @@ ssl_decrypt_record(SslDecryptSession*ssl,SslDecoder* decoder, gint ct,
             /* Flags: (L-1) ; L = 16 - 1 - nonceSize */
             gcm_nonce[0] = 3 - 1;
 
+            /* struct { opaque salt[4]; opaque nonce_explicit[8] } CCMNonce (RFC 6655) */
             memcpy(gcm_nonce + 1, decoder->write_iv.data, decoder->write_iv.data_len); /* salt */
             memcpy(gcm_nonce + 1 + decoder->write_iv.data_len, in, SSL_EX_NONCE_LEN_GCM);
             gcm_nonce[4 + SSL_EX_NONCE_LEN_GCM + 3] = 1;
@@ -3983,7 +4107,6 @@ ssl_load_pkcs12(FILE* fp, const gchar *cert_passwd, char** err) {
                     /* Private key found, return it. */
                     priv_key = ssl_pkey;
                     goto done;
-                    break;
 
                 default: ;
             }
@@ -4109,6 +4232,48 @@ ssl_get_session(conversation_t *conversation, dissector_handle_t ssl_handle)
     return ssl_session;
 }
 
+/* Resets the decryption parameters for the next decoder. */
+static void ssl_reset_session(SslSession *session, SslDecryptSession *ssl, gboolean is_client)
+{
+    if (ssl) {
+        /* Ensure that secrets are not restored using stale identifiers. Split
+         * between client and server in case the packets somehow got out of order. */
+        gint clear_flags = SSL_HAVE_SESSION_KEY | SSL_MASTER_SECRET | SSL_PRE_MASTER_SECRET;
+
+        if (is_client) {
+            clear_flags |= SSL_CLIENT_EXTENDED_MASTER_SECRET;
+            ssl->session_id.data_len = 0;
+            ssl->session_ticket.data_len = 0;
+            ssl->master_secret.data_len = 0;
+            ssl->client_random.data_len = 0;
+        } else {
+            clear_flags |= SSL_SERVER_EXTENDED_MASTER_SECRET | SSL_NEW_SESSION_TICKET;
+            ssl->server_random.data_len = 0;
+            ssl->pre_master_secret.data_len = 0;
+#if defined(HAVE_LIBGNUTLS) && defined(HAVE_LIBGCRYPT)
+            ssl->private_key = NULL;
+#endif
+            ssl->psk.data_len = 0;
+        }
+
+        if (ssl->state & clear_flags) {
+            ssl_debug_printf("%s detected renegotiation, clearing 0x%02x (%s side)\n",
+                    G_STRFUNC, ssl->state & clear_flags, is_client ? "client" : "server");
+            ssl->state &= ~clear_flags;
+        }
+    }
+
+    /* These flags might be used for non-decryption purposes and may affect the
+     * dissection, so reset them as well. */
+    if (is_client) {
+        session->client_cert_type = 0;
+    } else {
+        session->compression = 0;
+        session->server_cert_type = 0;
+        /* session->is_session_resumed is already handled in the ServerHello dissection. */
+    }
+}
+
 static guint32
 ssl_starttls(dissector_handle_t ssl_handle, packet_info *pinfo,
                  dissector_handle_t app_handle, guint32 last_nontls_frame)
@@ -4160,6 +4325,15 @@ ssl_starttls_post_ack(dissector_handle_t ssl_handle, packet_info *pinfo,
                  dissector_handle_t app_handle)
 {
     return ssl_starttls(ssl_handle, pinfo, app_handle, pinfo->num - 1);
+}
+
+dissector_handle_t
+ssl_find_appdata_dissector(const char *name)
+{
+    /* Accept 'http' for backwards compatibility and sanity. */
+    if (!strcmp(name, "http"))
+        name = "http-over-tls";
+    return find_dissector(name);
 }
 
 /* Functions for TLS/DTLS sessions and RSA private keys hashtables. {{{ */
@@ -4273,7 +4447,7 @@ int
 ssl_packet_from_server(SslSession *session, dissector_table_t table, packet_info *pinfo)
 {
     gint ret;
-    if (session->srv_ptype != PT_NONE) {
+    if (session->srv_addr.type != AT_NONE) {
         ret = (session->srv_ptype == pinfo->ptype) &&
               (session->srv_port == pinfo->srcport) &&
               addresses_equal(&session->srv_addr, &pinfo->src);
@@ -4482,14 +4656,21 @@ ssl_parse_key_list(const ssldecrypt_assoc_t *uats, GHashTable *key_hash, const c
     key_id = NULL; /* used in key_hash, do not free. */
     ssl_debug_printf("ssl_init private key file %s successfully loaded.\n", uats->keyfile);
 
-    {
+    handle = ssl_find_appdata_dissector(uats->protocol);
+    if (handle) {
         /* Port to subprotocol mapping */
-        int port = atoi(uats->port); /* Also maps "start_tls" -> 0 (wildcard) */
-        ssl_debug_printf("ssl_init port '%d' filename '%s' password(only for p12 file) '%s'\n",
-            port, uats->keyfile, uats->password);
+        guint16 port = 0;
+        if (ws_strtou16(uats->port, NULL, &port)) {
+            if (port > 0) {
+                ssl_debug_printf("ssl_init port '%d' filename '%s' password(only for p12 file) '%s'\n",
+                    port, uats->keyfile, uats->password);
 
-        handle = find_dissector(uats->protocol);
-        ssl_association_add(dissector_table_name, main_handle, handle, port, tcp);
+                ssl_association_add(dissector_table_name, main_handle, handle, port, tcp);
+            }
+        } else {
+            if (strcmp(uats->port, "start_tls"))
+                ssl_debug_printf("invalid ssl_init_port: %s\n", uats->port);
+        }
     }
 
 end:
@@ -4949,8 +5130,8 @@ ssldecrypt_uat_fld_port_chk_cb(void* r _U_, const char* p, guint len _U_, const 
     }
 
     if (strcmp(p, "start_tls") != 0){
-        const gint i = atoi(p);
-        if (i < 0 || i > 65535) {
+        guint16 port;
+        if (!ws_strtou16(p, NULL, &port)) {
             *err = g_strdup("Invalid port given.");
             return FALSE;
         }
@@ -5078,7 +5259,7 @@ ssl_dissect_change_cipher_spec(ssl_common_dissect_t *hf, tvbuff_t *tvb,
      * Normally this should be done at the Finished message, but that may be
      * encrypted so we do it here, at the last cleartext message. */
     if (is_from_server && ssl) {
-        if (!(ssl->state & SSL_SERVER_HELLO_DONE)) {
+        if (session->is_session_resumed) {
             const char *resumed = NULL;
             if (ssl->session_ticket.data_len) {
                 resumed = "Session Ticket";
@@ -5087,7 +5268,6 @@ ssl_dissect_change_cipher_spec(ssl_common_dissect_t *hf, tvbuff_t *tvb,
             }
             if (resumed) {
                 ssl_debug_printf("%s Session resumption using %s\n", G_STRFUNC, resumed);
-                session->is_session_resumed = TRUE;
             } else {
                 /* Can happen if the capture somehow starts in the middle */
                 ssl_debug_printf("%s No Session resumption, missing packets?\n", G_STRFUNC);
@@ -5171,7 +5351,7 @@ ssl_dissect_hnd_hello_ext_sig_hash_algs(ssl_common_dissect_t *hf, tvbuff_t *tvb,
 static gint
 ssl_dissect_hnd_hello_ext_alpn(ssl_common_dissect_t *hf, tvbuff_t *tvb,
                                proto_tree *tree, guint32 offset, guint32 ext_len,
-                               gboolean is_client, SslSession *session)
+                               guint8 hnd_type, SslSession *session)
 {
     guint16 alpn_length;
     guint8 name_length;
@@ -5193,7 +5373,7 @@ ssl_dissect_hnd_hello_ext_alpn(ssl_common_dissect_t *hf, tvbuff_t *tvb,
 
     /* If ALPN is given in ServerHello, then ProtocolNameList MUST contain
      * exactly one "ProtocolName". */
-    if (!is_client) {
+    if (hnd_type == SSL_HND_SERVER_HELLO) {
         guint8 *proto_name;
         size_t i;
 
@@ -5204,15 +5384,16 @@ ssl_dissect_hnd_hello_ext_alpn(ssl_common_dissect_t *hf, tvbuff_t *tvb,
         for (i = 0; i < G_N_ELEMENTS(ssl_alpn_protocols); i++) {
             const ssl_alpn_protocol_t *alpn_proto = &ssl_alpn_protocols[i];
 
-            if (name_length >= alpn_proto->proto_name_len &&
-                (memcmp(proto_name, alpn_proto->proto_name,
-                        alpn_proto->proto_name_len) == 0)) {
+            if ((alpn_proto->match_exact &&
+                        name_length == strlen(alpn_proto->proto_name) &&
+                        !strcmp(proto_name, alpn_proto->proto_name)) ||
+                (!alpn_proto->match_exact && g_str_has_prefix(proto_name, alpn_proto->proto_name))) {
 
                 dissector_handle_t handle;
                 /* ProtocolName match, so set the App data dissector handle.
                  * This may override protocols given via the UAT dialog, but
                  * since the ALPN hint is precise, do it anyway. */
-                handle = find_dissector(alpn_proto->dissector_name);
+                handle = ssl_find_appdata_dissector(alpn_proto->dissector_name);
                 ssl_debug_printf("%s: changing handle %p to %p (%s)", G_STRFUNC,
                                  (void *)session->app_handle,
                                  (void *)handle, alpn_proto->dissector_name);
@@ -5297,6 +5478,218 @@ ssl_dissect_hnd_hello_ext_reneg_info(ssl_common_dissect_t *hf, tvbuff_t *tvb,
 }
 
 static gint
+ssl_dissect_hnd_hello_ext_key_share_entry(ssl_common_dissect_t *hf, tvbuff_t *tvb,
+                                          proto_tree *tree, guint32 offset, guint32 offset_end)
+{
+    guint32 key_exchange_length, group;
+    proto_tree *ks_tree;
+
+    ks_tree = proto_tree_add_subtree(tree, tvb, offset, 4, hf->ett.hs_ext_key_share_ks, NULL, "Key Share Entry");
+
+    proto_tree_add_item_ret_uint(ks_tree, hf->hf.hs_ext_key_share_group, tvb, offset, 2, ENC_BIG_ENDIAN, &group);
+    offset += 2;
+
+    proto_tree_add_item_ret_uint(ks_tree, hf->hf.hs_ext_key_share_key_exchange_length, tvb, offset, 2, ENC_BIG_ENDIAN, &key_exchange_length);
+    offset += 2;
+
+    proto_item_set_len(ks_tree, 2 + 2 + key_exchange_length);
+    proto_item_append_text(ks_tree, ": Group: %s, Key Exchange length: %u", val_to_str(group, ssl_extension_curves, "Unknown (%u)"), key_exchange_length);
+
+    if (key_exchange_length > offset_end - offset) {
+        offset = offset_end;
+        return offset; /* XXX expert info? */
+    }
+
+    proto_tree_add_item(ks_tree, hf->hf.hs_ext_key_share_key_exchange, tvb, offset, key_exchange_length, ENC_NA);
+    offset += key_exchange_length;
+
+    return offset;
+}
+static gint
+ssl_dissect_hnd_hello_ext_key_share(ssl_common_dissect_t *hf, tvbuff_t *tvb,
+                                    proto_tree *tree, guint32 offset, guint32 ext_len,
+                                    guint8 hnd_type)
+{
+    proto_tree *key_share_tree;
+    guint32 offset_end = offset + ext_len;
+
+    if (offset_end <= offset) {  /* Check if ext_len == 0 and "overflow" (offset + ext_len) > guint32) */
+        return offset;
+    }
+
+    key_share_tree = proto_tree_add_subtree(tree, tvb, offset, ext_len, hf->ett.hs_ext_key_share, NULL, "Key Share extension");
+
+    switch(hnd_type){
+        case SSL_HND_CLIENT_HELLO:
+            proto_tree_add_item(key_share_tree, hf->hf.hs_ext_key_share_client_length, tvb, offset, 2, ENC_BIG_ENDIAN);
+            offset += 2;
+            while (offset + 4 <= offset_end) { /* (NamedGroup (2 bytes), key_exchange (1 byte for length, 1 byte minimum data) */
+                offset = ssl_dissect_hnd_hello_ext_key_share_entry(hf, tvb, key_share_tree, offset, offset_end);
+            }
+        break;
+        case SSL_HND_SERVER_HELLO:
+            offset = ssl_dissect_hnd_hello_ext_key_share_entry(hf, tvb, key_share_tree, offset, offset_end);
+        break;
+        case SSL_HND_HELLO_RETRY_REQUEST:
+            proto_tree_add_item(key_share_tree, hf->hf.hs_ext_key_share_selected_group, tvb, offset, 2, ENC_BIG_ENDIAN );
+            offset += 2;
+        break;
+        default: /* no default */
+        break;
+    }
+
+    return offset;
+}
+
+static gint
+ssl_dissect_hnd_hello_ext_pre_shared_key(ssl_common_dissect_t *hf, tvbuff_t *tvb,
+                                         proto_tree *tree, guint32 offset, guint32 ext_len,
+                                         guint8 hnd_type)
+{
+    proto_tree *psk_tree;
+    guint32 offset_end = offset + ext_len;
+
+    if (offset_end <= offset) { /* Check if ext_len == 0 and "overflow" (offset + ext_len) > guint32) */
+        return offset;
+    }
+
+    psk_tree = proto_tree_add_subtree(tree, tvb, offset, ext_len, hf->ett.hs_ext_pre_shared_key, NULL, "Pre-Shared Key extension");
+
+    switch (hnd_type){
+        case SSL_HND_CLIENT_HELLO: {
+
+            proto_tree_add_item(psk_tree, hf->hf.hs_ext_psk_identities_length, tvb, offset, 2, ENC_BIG_ENDIAN);
+            offset += 2;
+
+            while (offset < offset_end) {
+                guint32 identity_length, ke_modes_length, auth_modes_length;
+                guint32 ke_mode, auth_mode, i;
+                proto_tree *identity_tree;
+
+                identity_tree = proto_tree_add_subtree(psk_tree, tvb, offset, 4, hf->ett.hs_ext_psk_identity, NULL, "PSK Identity (");
+
+                proto_tree_add_item_ret_uint(identity_tree, hf->hf.hs_ext_psk_identity_ke_modes_length, tvb, offset, 1, ENC_NA, &ke_modes_length);
+                offset += 1;
+
+                if (ke_modes_length > offset_end - offset) {
+                    offset = offset_end;
+                    break; /* XXX expert info? */
+                }
+                if (ke_modes_length) {
+                    proto_item_append_text(identity_tree, "KE: ");
+                }
+                for(i = 0; i < ke_modes_length; i++) {
+                    proto_tree_add_item_ret_uint(identity_tree, hf->hf.hs_ext_psk_identity_ke_mode, tvb, offset, 1, ENC_NA, &ke_mode);
+                    offset += 1;
+                    proto_item_append_text(identity_tree, i == 0 ? "%s" : ", %s", val_to_str(ke_mode, tls_hello_ext_psk_ke_mode_short, "Unknown (%u)"));
+                }
+
+                proto_tree_add_item_ret_uint(identity_tree, hf->hf.hs_ext_psk_identity_auth_modes_length, tvb, offset, 1, ENC_NA, &auth_modes_length);
+                offset += 1;
+
+                if (auth_modes_length > offset_end - offset) {
+                    offset = offset_end;
+                    break; /* XXX expert info? */
+                }
+                if (auth_modes_length) {
+                    proto_item_append_text(identity_tree, "%sAuth: ", ke_modes_length == 0 ? "" : ", ");
+                }
+                for(i = 0; i < auth_modes_length; i++) {
+                    proto_tree_add_item_ret_uint(identity_tree, hf->hf.hs_ext_psk_identity_auth_mode, tvb, offset, 1, ENC_NA, &auth_mode);
+                    offset += 1;
+                    proto_item_append_text(identity_tree, i == 0 ? "%s" : ", %s", val_to_str(auth_mode, tls_hello_ext_psk_auth_mode_short, "Unknown (%u)"));
+                }
+
+                proto_tree_add_item_ret_uint(identity_tree, hf->hf.hs_ext_psk_identity_length, tvb, offset, 2, ENC_BIG_ENDIAN, &identity_length);
+                offset += 2;
+                proto_item_append_text(identity_tree, ", Identity length: %u)", identity_length);
+
+                if (identity_length > offset_end - offset) {
+                    offset = offset_end;
+                    break; /* XXX expert info? */
+                }
+
+                proto_tree_add_item(identity_tree, hf->hf.hs_ext_psk_identity, tvb, offset, identity_length, ENC_NA);
+                offset += identity_length;
+
+                proto_item_set_len(identity_tree, 1 + ke_modes_length + 1 + auth_modes_length + 2 + identity_length);
+            }
+        }
+        break;
+        case SSL_HND_SERVER_HELLO: {
+            proto_tree_add_item(psk_tree, hf->hf.hs_ext_psk_identity_selected, tvb, offset, 2, ENC_BIG_ENDIAN);
+            offset += 2;
+        }
+        break;
+        default:
+        break;
+    }
+
+    return offset;
+}
+
+static gint
+ssl_dissect_hnd_hello_ext_early_data(ssl_common_dissect_t *hf, tvbuff_t *tvb,
+                                         proto_tree *tree, guint32 offset, guint32 ext_len _U_,
+                                         guint8 hnd_type)
+{
+
+    switch (hnd_type){
+        case SSL_HND_CLIENT_HELLO:
+            proto_tree_add_item(tree, hf->hf.hs_ext_early_data_obfuscated_ticket_age, tvb, offset, 4, ENC_BIG_ENDIAN);
+            offset += 4;
+            break;
+        case SSL_HND_SERVER_HELLO: /* empty extension_data */
+            break;
+        default: /* no default */
+        break;
+    }
+
+    return offset;
+}
+
+static gint
+ssl_dissect_hnd_hello_ext_supported_versions(ssl_common_dissect_t *hf, tvbuff_t *tvb,
+                                             proto_tree *tree, guint32 offset, guint32 ext_len)
+{
+    guint32 offset_end = offset + ext_len;
+
+    if (ext_len < 1) {
+        return offset;
+    }
+
+    proto_tree_add_item(tree, hf->hf.hs_ext_supported_versions_len, tvb, offset, 1, ENC_BIG_ENDIAN);
+    offset += 1;
+
+    while(offset_end - offset >= 2){
+        proto_tree_add_item(tree, hf->hf.hs_ext_supported_versions, tvb, offset, 2, ENC_BIG_ENDIAN);
+        offset += 2;
+    }
+
+    return offset;
+}
+
+static gint
+ssl_dissect_hnd_hello_ext_cookie(ssl_common_dissect_t *hf, tvbuff_t *tvb,
+                                 proto_tree *tree, guint32 offset, guint32 ext_len)
+{
+
+    if (ext_len < 2) {
+        return offset;
+    }
+
+    proto_tree_add_item(tree, hf->hf.hs_ext_cookie_len, tvb, offset, 2, ENC_BIG_ENDIAN);
+    offset += 2;
+    ext_len -= 2;
+
+    proto_tree_add_item(tree, hf->hf.hs_ext_cookie, tvb, offset, ext_len, ENC_NA);
+    offset += ext_len;
+
+    return offset;
+}
+
+
+static gint
 ssl_dissect_hnd_hello_ext_server_name(ssl_common_dissect_t *hf, tvbuff_t *tvb,
                                       proto_tree *tree, guint32 offset, guint32 ext_len)
 {
@@ -5304,70 +5697,44 @@ ssl_dissect_hnd_hello_ext_server_name(ssl_common_dissect_t *hf, tvbuff_t *tvb,
     proto_tree *server_name_tree;
 
 
-   if (ext_len == 0) {
-       return offset;
-   }
-
-   server_name_tree = proto_tree_add_subtree(tree, tvb, offset, ext_len, hf->ett.hs_ext_server_name, NULL, "Server Name Indication extension");
-
-   proto_tree_add_item(server_name_tree, hf->hf.hs_ext_server_name_list_len,
-                       tvb, offset, 2, ENC_BIG_ENDIAN);
-   offset += 2;
-   ext_len -= 2;
-
-   while (ext_len > 0) {
-       proto_tree_add_item(server_name_tree, hf->hf.hs_ext_server_name_type,
-                           tvb, offset, 1, ENC_NA);
-       offset += 1;
-       ext_len -= 1;
-
-       server_name_length = tvb_get_ntohs(tvb, offset);
-       proto_tree_add_item(server_name_tree, hf->hf.hs_ext_server_name_len,
-                           tvb, offset, 2, ENC_BIG_ENDIAN);
-       offset += 2;
-       ext_len -= 2;
-
-       if (server_name_length > 0) {
-           proto_tree_add_item(server_name_tree, hf->hf.hs_ext_server_name,
-                               tvb, offset, server_name_length, ENC_ASCII|ENC_NA);
-           offset += server_name_length;
-           ext_len -= server_name_length;
-       }
-   }
-   return offset;
-}
-
-static gint
-ssl_dissect_hnd_hello_ext_padding(ssl_common_dissect_t *hf, tvbuff_t *tvb,
-                                     proto_tree *tree, guint32 offset, guint32 ext_len)
-{
-    guint8      padding_length;
-    proto_tree *padding_tree;
-    proto_item *ti;
-
     if (ext_len == 0) {
         return offset;
     }
 
-    ti = proto_tree_add_item(tree, hf->hf.hs_ext_padding_data, tvb, offset, ext_len, ENC_NA);
-    padding_tree = proto_item_add_subtree(ti, hf->ett.hs_ext_padding);
+    server_name_tree = proto_tree_add_subtree(tree, tvb, offset, ext_len, hf->ett.hs_ext_server_name, NULL, "Server Name Indication extension");
 
-
-    proto_tree_add_item(padding_tree, hf->hf.hs_ext_padding_len, tvb, offset, 2, ENC_NA);
-    padding_length = tvb_get_guint8(tvb, offset);
+    proto_tree_add_item(server_name_tree, hf->hf.hs_ext_server_name_list_len,
+                        tvb, offset, 2, ENC_BIG_ENDIAN);
     offset += 2;
+    ext_len -= 2;
 
-    proto_tree_add_item(padding_tree, hf->hf.hs_ext_padding_data, tvb, offset, padding_length, ENC_NA);
-    offset += padding_length;
+    while (ext_len > 0) {
+        proto_tree_add_item(server_name_tree, hf->hf.hs_ext_server_name_type,
+                            tvb, offset, 1, ENC_NA);
+        offset += 1;
+        ext_len -= 1;
 
+        server_name_length = tvb_get_ntohs(tvb, offset);
+        proto_tree_add_item(server_name_tree, hf->hf.hs_ext_server_name_len,
+                            tvb, offset, 2, ENC_BIG_ENDIAN);
+        offset += 2;
+        ext_len -= 2;
+
+        if (server_name_length > 0) {
+            proto_tree_add_item(server_name_tree, hf->hf.hs_ext_server_name,
+                                tvb, offset, server_name_length, ENC_ASCII|ENC_NA);
+            offset += server_name_length;
+            ext_len -= server_name_length;
+        }
+    }
     return offset;
 }
 
 static gint
 ssl_dissect_hnd_hello_ext_session_ticket(ssl_common_dissect_t *hf, tvbuff_t *tvb,
-                                      proto_tree *tree, guint32 offset, guint32 ext_len, gboolean is_client, SslDecryptSession *ssl)
+                                      proto_tree *tree, guint32 offset, guint32 ext_len, guint8 hnd_type, SslDecryptSession *ssl)
 {
-    if (is_client && ssl && ext_len != 0) {
+    if (hnd_type == SSL_HND_CLIENT_HELLO && ssl && ext_len != 0) {
         tvb_ensure_bytes_exist(tvb, offset, ext_len);
         /* Save the Session Ticket such that it can be used as identifier for
          * restoring a previous Master Secret (in ChangeCipherSpec) */
@@ -5386,14 +5753,15 @@ ssl_dissect_hnd_hello_ext_session_ticket(ssl_common_dissect_t *hf, tvbuff_t *tvb
 static gint
 ssl_dissect_hnd_hello_ext_cert_type(ssl_common_dissect_t *hf, tvbuff_t *tvb,
                                     proto_tree *tree, guint32 offset, guint32 ext_len,
-                                    gboolean is_client, guint16 ext_type, SslSession *session)
+                                    guint8 hnd_type, guint16 ext_type, SslSession *session)
 {
     guint8      cert_list_length;
     guint8      cert_type;
     proto_tree *cert_list_tree;
     proto_item *ti;
 
-    if (is_client) {
+    switch(hnd_type){
+    case SSL_HND_CLIENT_HELLO:
         cert_list_length = tvb_get_guint8(tvb, offset);
         proto_tree_add_item(tree, hf->hf.hs_ext_cert_types_len,
                             tvb, offset, 1, ENC_BIG_ENDIAN);
@@ -5415,7 +5783,8 @@ ssl_dissect_hnd_hello_ext_cert_type(ssl_common_dissect_t *hf, tvbuff_t *tvb,
             offset++;
             cert_list_length--;
         }
-    } else {
+    break;
+    case SSL_HND_SERVER_HELLO:
         cert_type = tvb_get_guint8(tvb, offset);
         proto_tree_add_item(tree, hf->hf.hs_ext_cert_type, tvb, offset, 1, ENC_BIG_ENDIAN);
         offset += 1;
@@ -5423,8 +5792,11 @@ ssl_dissect_hnd_hello_ext_cert_type(ssl_common_dissect_t *hf, tvbuff_t *tvb,
             session->client_cert_type = cert_type;
         }
         if (ext_type == SSL_HND_HELLO_EXT_CERT_TYPE || ext_type == SSL_HND_HELLO_EXT_SERVER_CERT_TYPE) {
-            session->server_cert_type = cert_type;
+           session->server_cert_type = cert_type;
         }
+    break;
+    default: /* no default */
+    break;
     }
 
     return offset;
@@ -5433,11 +5805,16 @@ ssl_dissect_hnd_hello_ext_cert_type(ssl_common_dissect_t *hf, tvbuff_t *tvb,
 static gint
 ssl_dissect_hnd_hello_common(ssl_common_dissect_t *hf, tvbuff_t *tvb,
                              proto_tree *tree, guint32 offset,
-                             SslDecryptSession *ssl, gboolean from_server)
+                             SslSession *session, SslDecryptSession *ssl,
+                             gboolean from_server)
 {
     nstime_t     gmt_unix_time;
     guint8       sessid_length;
     proto_tree  *rnd_tree;
+    proto_tree  *ti_rnd;
+
+    /* Prepare for renegotiation by resetting the state. */
+    ssl_reset_session(session, ssl, !from_server);
 
     if (ssl) {
         StringInfo *rnd;
@@ -5457,40 +5834,47 @@ ssl_dissect_hnd_hello_common(ssl_common_dissect_t *hf, tvbuff_t *tvb,
                 from_server ? "SERVER" : "CLIENT", ssl->state);
     }
 
-    rnd_tree = proto_tree_add_subtree(tree, tvb, offset, 32,
-            hf->ett.hs_random, NULL, "Random");
+    ti_rnd = proto_tree_add_item(tree, hf->hf.hs_random, tvb, offset, 32, ENC_NA);
 
-    /* show the time */
-    gmt_unix_time.secs  = tvb_get_ntohl(tvb, offset);
-    gmt_unix_time.nsecs = 0;
-    proto_tree_add_time(rnd_tree, hf->hf.hs_random_time,
-            tvb, offset, 4, &gmt_unix_time);
-    offset += 4;
+    if (session->version != TLSV1DOT3_VERSION) { /* No time on first bytes random with TLS 1.3 */
 
-    /* show the random bytes */
-    proto_tree_add_item(rnd_tree, hf->hf.hs_random_bytes,
-            tvb, offset, 28, ENC_NA);
-    offset += 28;
+        rnd_tree = proto_item_add_subtree(ti_rnd, hf->ett.hs_random);
+        /* show the time */
+        gmt_unix_time.secs  = tvb_get_ntohl(tvb, offset);
+        gmt_unix_time.nsecs = 0;
+        proto_tree_add_time(rnd_tree, hf->hf.hs_random_time,
+                tvb, offset, 4, &gmt_unix_time);
+        offset += 4;
 
-    /* show the session id (length followed by actual Session ID) */
-    sessid_length = tvb_get_guint8(tvb, offset);
-    proto_tree_add_item(tree, hf->hf.hs_session_id_len,
-            tvb, offset, 1, ENC_BIG_ENDIAN);
-    offset++;
-
-    if (ssl) {
-        /* save the authorative SID for later use in ChangeCipherSpec.
-         * (D)TLS restricts the SID to 32 chars, it does not make sense to
-         * save more, so ignore larger ones. */
-        if (from_server && sessid_length <= 32) {
-            tvb_memcpy(tvb, ssl->session_id.data, offset, sessid_length);
-            ssl->session_id.data_len = sessid_length;
-        }
+        /* show the random bytes */
+        proto_tree_add_item(rnd_tree, hf->hf.hs_random_bytes,
+                tvb, offset, 28, ENC_NA);
+        offset += 28;
+    } else {
+        offset += 32;
     }
-    if (sessid_length > 0) {
-        proto_tree_add_item(tree, hf->hf.hs_session_id,
-                tvb, offset, sessid_length, ENC_NA);
-        offset += sessid_length;
+
+    if (from_server == 0 || session->version != TLSV1DOT3_VERSION) { /* No Session ID with TLS 1.3 on Server Hello */
+        /* show the session id (length followed by actual Session ID) */
+        sessid_length = tvb_get_guint8(tvb, offset);
+        proto_tree_add_item(tree, hf->hf.hs_session_id_len,
+                tvb, offset, 1, ENC_BIG_ENDIAN);
+        offset++;
+
+        if (ssl) {
+            /* save the authorative SID for later use in ChangeCipherSpec.
+             * (D)TLS restricts the SID to 32 chars, it does not make sense to
+             * save more, so ignore larger ones. */
+            if (from_server && sessid_length <= 32) {
+                tvb_memcpy(tvb, ssl->session_id.data, offset, sessid_length);
+                ssl->session_id.data_len = sessid_length;
+            }
+        }
+        if (sessid_length > 0) {
+            proto_tree_add_item(tree, hf->hf.hs_session_id,
+                    tvb, offset, sessid_length, ENC_NA);
+            offset += sessid_length;
+        }
     }
 
     return offset;
@@ -5668,6 +6052,7 @@ ssl_is_valid_handshake_type(guint8 hs_type, gboolean is_dtls)
     case SSL_HND_CLIENT_HELLO:
     case SSL_HND_SERVER_HELLO:
     case SSL_HND_NEWSESSION_TICKET:
+    case SSL_HND_HELLO_RETRY_REQUEST:
     case SSL_HND_CERTIFICATE:
     case SSL_HND_SERVER_KEY_EXCHG:
     case SSL_HND_CERT_REQUEST:
@@ -5711,6 +6096,7 @@ ssl_try_set_version(SslSession *session, SslDecryptSession *ssl,
     case TLSV1_VERSION:
     case TLSV1DOT1_VERSION:
     case TLSV1DOT2_VERSION:
+    case TLSV1DOT3_VERSION:
         if (is_dtls)
             return;
         break;
@@ -5738,7 +6124,7 @@ ssl_try_set_version(SslSession *session, SslDecryptSession *ssl,
 /* Client Hello and Server Hello dissections. {{{ */
 static gint
 ssl_dissect_hnd_hello_ext(ssl_common_dissect_t *hf, tvbuff_t *tvb, proto_tree *tree,
-                          packet_info* pinfo, guint32 offset, guint32 left, gboolean is_client,
+                          packet_info* pinfo, guint32 offset, guint32 left, guint8 hnd_type,
                           SslSession *session, SslDecryptSession *ssl);
 void
 ssl_dissect_hnd_cli_hello(ssl_common_dissect_t *hf, tvbuff_t *tvb,
@@ -5770,7 +6156,7 @@ ssl_dissect_hnd_cli_hello(ssl_common_dissect_t *hf, tvbuff_t *tvb,
     offset += 2;
 
     /* dissect fields that are also present in ClientHello */
-    offset = ssl_dissect_hnd_hello_common(hf, tvb, tree, offset, ssl, FALSE);
+    offset = ssl_dissect_hnd_hello_common(hf, tvb, tree, offset, session, ssl, FALSE);
 
     /* fields specific for DTLS (cookie_len, cookie) */
     if (dtls_hfs != NULL) {
@@ -5853,7 +6239,7 @@ ssl_dissect_hnd_cli_hello(ssl_common_dissect_t *hf, tvbuff_t *tvb,
     }
     if (length > offset - start_offset) {
         ssl_dissect_hnd_hello_ext(hf, tvb, tree, pinfo, offset,
-                                  length - (offset - start_offset), TRUE,
+                                  length - (offset - start_offset), SSL_HND_CLIENT_HELLO,
                                   session, ssl);
     }
 }
@@ -5873,11 +6259,23 @@ ssl_dissect_hnd_srv_hello(ssl_common_dissect_t *hf, tvbuff_t *tvb,
      *     Extension server_hello_extension_list<0..2^16-1>;
      * } ServerHello;
      */
+    guint16 server_version;
     guint16 start_offset = offset;
 
     /* This version is always better than the guess at the Record Layer */
+    server_version = tvb_get_ntohs(tvb, offset);
+    if((server_version & 0xFF00) == 0x7f00) { /* if server_version start with 0x7f, it is (and force) TLS 1.3 */
+        server_version = TLSV1DOT3_VERSION;
+    }
     ssl_try_set_version(session, ssl, SSL_ID_HANDSHAKE, SSL_HND_SERVER_HELLO,
-            is_dtls, tvb_get_ntohs(tvb, offset));
+            is_dtls, server_version);
+    col_set_str(pinfo->cinfo, COL_PROTOCOL,
+                val_to_str_const(server_version, ssl_version_short_names, "SSL"));
+
+    /* Initially assume that the session is resumed. If this is not the case, a
+     * ServerHelloDone will be observed before the ChangeCipherSpec message
+     * which will reset this flag. */
+    session->is_session_resumed = TRUE;
 
     /* show the server version */
     proto_tree_add_item(tree, hf->hf.hs_server_version, tvb,
@@ -5885,7 +6283,7 @@ ssl_dissect_hnd_srv_hello(ssl_common_dissect_t *hf, tvbuff_t *tvb,
     offset += 2;
 
     /* dissect fields that are also present in ClientHello */
-    offset = ssl_dissect_hnd_hello_common(hf, tvb, tree, offset, ssl, TRUE);
+    offset = ssl_dissect_hnd_hello_common(hf, tvb, tree, offset, session, ssl, TRUE);
 
     if (ssl) {
         /* store selected cipher suite for decryption */
@@ -5911,19 +6309,21 @@ ssl_dissect_hnd_srv_hello(ssl_common_dissect_t *hf, tvbuff_t *tvb,
                         tvb, offset, 2, ENC_BIG_ENDIAN);
     offset += 2;
 
-    if (ssl) {
-        /* store selected compression method for decryption */
-        ssl->session.compression = tvb_get_guint8(tvb, offset);
+    if (session->version != TLSV1DOT3_VERSION) { /* No compression with TLS 1.3 */
+        if (ssl) {
+            /* store selected compression method for decryption */
+            ssl->session.compression = tvb_get_guint8(tvb, offset);
+        }
+        /* and the server-selected compression method */
+        proto_tree_add_item(tree, hf->hf.hs_comp_method,
+                            tvb, offset, 1, ENC_BIG_ENDIAN);
+        offset++;
     }
-    /* and the server-selected compression method */
-    proto_tree_add_item(tree, hf->hf.hs_comp_method,
-                        tvb, offset, 1, ENC_BIG_ENDIAN);
-    offset++;
 
     /* remaining data are extensions */
     if (length > offset - start_offset) {
         ssl_dissect_hnd_hello_ext(hf, tvb, tree, pinfo, offset,
-                                  length - (offset - start_offset), FALSE,
+                                  length - (offset - start_offset), SSL_HND_SERVER_HELLO,
                                   session, ssl);
     }
 }
@@ -5977,6 +6377,30 @@ ssl_dissect_hnd_new_ses_ticket(ssl_common_dissect_t *hf, tvbuff_t *tvb,
     }
 #endif
 } /* }}} */
+
+void
+ssl_dissect_hnd_hello_retry_request(ssl_common_dissect_t *hf, tvbuff_t *tvb,
+                                    packet_info* pinfo, proto_tree *tree, guint32 offset, guint32 length,
+                                    SslSession *session, SslDecryptSession *ssl)
+{
+    /* struct {
+     *     ProtocolVersion server_version;
+     *     Extension extensions<2..2^16-1>;
+     * } HelloRetryRequest;
+     */
+    guint16 start_offset = offset;
+
+    proto_tree_add_item(tree, hf->hf.hs_server_version, tvb,
+                        offset, 2, ENC_BIG_ENDIAN);
+    offset += 2;
+
+    /* remaining data are extensions */
+    if (length > offset - start_offset) {
+        ssl_dissect_hnd_hello_ext(hf, tvb, tree, pinfo, offset,
+                                  length - (offset - start_offset), SSL_HND_HELLO_RETRY_REQUEST,
+                                  session, ssl);
+    }
+}
 
 /* Certificate and Certificate Request dissections. {{{ */
 void
@@ -6340,7 +6764,7 @@ ssl_dissect_hnd_cert_url(ssl_common_dissect_t *hf, tvbuff_t *tvb, proto_tree *tr
 /* Client Hello and Server Hello TLS extensions dissection. {{{ */
 static gint
 ssl_dissect_hnd_hello_ext(ssl_common_dissect_t *hf, tvbuff_t *tvb, proto_tree *tree,
-                          packet_info* pinfo, guint32 offset, guint32 left, gboolean is_client,
+                          packet_info* pinfo, guint32 offset, guint32 left, guint8 hnd_type,
                           SslSession *session, SslDecryptSession *ssl)
 {
     guint16     extension_length;
@@ -6363,9 +6787,9 @@ ssl_dissect_hnd_hello_ext(ssl_common_dissect_t *hf, tvbuff_t *tvb, proto_tree *t
         ext_len  = tvb_get_ntohs(tvb, offset + 2);
 
         ext_tree = proto_tree_add_subtree_format(tree, tvb, offset, 4 + ext_len, hf->ett.hs_ext, NULL,
-                                  "Extension: %s", val_to_str(ext_type,
+                                  "Extension: %s (len=%u)", val_to_str(ext_type,
                                             tls_hello_extension_types,
-                                            "Unknown %u"));
+                                            "Unknown type %u"), ext_len);
 
         proto_tree_add_uint(ext_tree, hf->hf.hs_ext_type,
                             tvb, offset, 2, ext_type);
@@ -6377,34 +6801,54 @@ ssl_dissect_hnd_hello_ext(ssl_common_dissect_t *hf, tvbuff_t *tvb, proto_tree *t
 
         switch (ext_type) {
         case SSL_HND_HELLO_EXT_STATUS_REQUEST:
-            if (is_client)
+            if (hnd_type == SSL_HND_CLIENT_HELLO)
                 offset = ssl_dissect_hnd_hello_ext_status_request(hf, tvb, ext_tree, offset, FALSE);
             else
                 offset += ext_len; /* server must return empty extension_data */
             break;
         case SSL_HND_HELLO_EXT_STATUS_REQUEST_V2:
-            if (is_client)
+            if (hnd_type == SSL_HND_CLIENT_HELLO)
                 offset = ssl_dissect_hnd_hello_ext_status_request_v2(hf, tvb, ext_tree, offset);
             else
                 offset += ext_len; /* server must return empty extension_data */
             break;
-        case SSL_HND_HELLO_EXT_ELLIPTIC_CURVES:
+        case SSL_HND_HELLO_EXT_SUPPORTED_GROUPS:
             offset = ssl_dissect_hnd_hello_ext_elliptic_curves(hf, tvb, ext_tree, offset);
             break;
         case SSL_HND_HELLO_EXT_EC_POINT_FORMATS:
             offset = ssl_dissect_hnd_hello_ext_ec_point_formats(hf, tvb, ext_tree, offset);
             break;
-        case SSL_HND_HELLO_EXT_SIG_HASH_ALGS:
+        case SSL_HND_HELLO_EXT_SIGNATURE_ALGORITHMS:
             offset = ssl_dissect_hnd_hello_ext_sig_hash_algs(hf, tvb, ext_tree, pinfo, offset, ext_len);
             break;
         case SSL_HND_HELLO_EXT_ALPN:
-            offset = ssl_dissect_hnd_hello_ext_alpn(hf, tvb, ext_tree, offset, ext_len, is_client, session);
+            offset = ssl_dissect_hnd_hello_ext_alpn(hf, tvb, ext_tree, offset, ext_len, hnd_type, session);
             break;
         case SSL_HND_HELLO_EXT_NPN:
             offset = ssl_dissect_hnd_hello_ext_npn(hf, tvb, ext_tree, offset, ext_len);
             break;
-        case SSL_HND_HELLO_EXT_RENEG_INFO:
+        case SSL_HND_HELLO_EXT_RENEGOTIATION_INFO:
             offset = ssl_dissect_hnd_hello_ext_reneg_info(hf, tvb, ext_tree, offset, ext_len);
+            break;
+        case SSL_HND_HELLO_EXT_KEY_SHARE:
+            offset = ssl_dissect_hnd_hello_ext_key_share(hf, tvb, ext_tree, offset, ext_len, hnd_type);
+            break;
+        case SSL_HND_HELLO_EXT_PRE_SHARED_KEY:
+            offset = ssl_dissect_hnd_hello_ext_pre_shared_key(hf, tvb, ext_tree, offset, ext_len, hnd_type);
+            break;
+        case SSL_HND_HELLO_EXT_EARLY_DATA:
+            offset = ssl_dissect_hnd_hello_ext_early_data(hf, tvb, ext_tree, offset, ext_len, hnd_type);
+            break;
+        case SSL_HND_HELLO_EXT_SUPPORTED_VERSIONS:
+            offset = ssl_dissect_hnd_hello_ext_supported_versions(hf, tvb, ext_tree, offset, ext_len);
+            break;
+        case SSL_HND_HELLO_EXT_COOKIE:
+            offset = ssl_dissect_hnd_hello_ext_cookie(hf, tvb, ext_tree, offset, ext_len);
+            break;
+        case SSL_HND_HELLO_EXT_DRAFT_VERSION_TLS13:
+            proto_tree_add_item(ext_tree, hf->hf.hs_ext_draft_version_tls13,
+                                tvb, offset, 2, ENC_BIG_ENDIAN);
+            offset += ext_len;
             break;
         case SSL_HND_HELLO_EXT_SERVER_NAME:
             offset = ssl_dissect_hnd_hello_ext_server_name(hf, tvb, ext_tree, offset, ext_len);
@@ -6415,28 +6859,37 @@ ssl_dissect_hnd_hello_ext(ssl_common_dissect_t *hf, tvbuff_t *tvb, proto_tree *t
             offset += ext_len;
             break;
         case SSL_HND_HELLO_EXT_PADDING:
-            offset = ssl_dissect_hnd_hello_ext_padding(hf, tvb, ext_tree, offset, ext_len);
+            proto_tree_add_item(ext_tree, hf->hf.hs_ext_padding_data, tvb, offset, ext_len, ENC_NA);
+            offset += ext_len;
             break;
-        case SSL_HND_HELLO_EXT_SESSION_TICKET:
-            offset = ssl_dissect_hnd_hello_ext_session_ticket(hf, tvb, ext_tree, offset, ext_len, is_client, ssl);
+        case SSL_HND_HELLO_EXT_SESSION_TICKET_TLS:
+            offset = ssl_dissect_hnd_hello_ext_session_ticket(hf, tvb, ext_tree, offset, ext_len, hnd_type, ssl);
             break;
         case SSL_HND_HELLO_EXT_CERT_TYPE:
         case SSL_HND_HELLO_EXT_SERVER_CERT_TYPE:
         case SSL_HND_HELLO_EXT_CLIENT_CERT_TYPE:
             offset = ssl_dissect_hnd_hello_ext_cert_type(hf, tvb, ext_tree,
                                                          offset, ext_len,
-                                                         is_client, ext_type,
+                                                         hnd_type, ext_type,
                                                          session);
             break;
-        case SSL_HND_HELLO_EXT_EXTENDED_MASTER_SECRET_TYPE:
-            if (ssl)
-                ssl->state |= (is_client ? SSL_CLIENT_EXTENDED_MASTER_SECRET : SSL_SERVER_EXTENDED_MASTER_SECRET);
+        case SSL_HND_HELLO_EXT_EXTENDED_MASTER_SECRET:
+            if (ssl){
+                switch(hnd_type){
+                    case SSL_HND_CLIENT_HELLO:
+                        ssl->state |= SSL_CLIENT_EXTENDED_MASTER_SECRET;
+                    break;
+                    case SSL_HND_SERVER_HELLO:
+                        ssl->state |= SSL_SERVER_EXTENDED_MASTER_SECRET;
+                    break;
+                    default: /* no default */
+                    break;
+                }
+            }
             break;
         default:
-            proto_tree_add_bytes_format(ext_tree, hf->hf.hs_ext_data,
-                                        tvb, offset, ext_len, NULL,
-                                        "Data (%u byte%s)",
-                                        ext_len, plurality(ext_len, "", "s"));
+            proto_tree_add_item(ext_tree, hf->hf.hs_ext_data,
+                                        tvb, offset, ext_len, ENC_NA);
             offset += ext_len;
             break;
         }

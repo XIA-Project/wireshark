@@ -604,9 +604,9 @@ proto_register_mpls(void)
     /* FF: mpls subdissector table is indexed by label */
     mpls_subdissector_table = register_dissector_table("mpls.label",
                                                        "MPLS protocol",
-                                                       proto_mpls, FT_UINT32, BASE_DEC, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
+                                                       proto_mpls, FT_UINT32, BASE_DEC);
 
-    pw_ach_subdissector_table  = register_dissector_table("pwach.channel_type", "PW Associated Channel Type", proto_pw_ach, FT_UINT16, BASE_HEX, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
+    pw_ach_subdissector_table  = register_dissector_table("pwach.channel_type", "PW Associated Channel Type", proto_pw_ach, FT_UINT16, BASE_HEX);
 
     module_mpls = prefs_register_protocol( proto_mpls, NULL );
 
@@ -645,7 +645,7 @@ proto_reg_handoff_mpls(void)
     dissector_add_for_decode_as("pwach.channel_type", mpls_handle);
     dissector_add_uint("sflow_245.header_protocol", SFLOW_245_HEADER_MPLS, mpls_handle);
     dissector_add_uint("l2tp.pw_type", L2TPv3_PROTOCOL_MPLS, mpls_handle);
-    dissector_add_uint("udp.port", UDP_PORT_MPLS_OVER_UDP, mpls_handle);
+    dissector_add_uint_with_preference("udp.port", UDP_PORT_MPLS_OVER_UDP, mpls_handle);
     dissector_add_uint("vxlan.next_proto", VXLAN_MPLS, mpls_handle);
 
     mpls_pwcw_handle = create_dissector_handle( dissect_pw_mcw, proto_pw_mcw );

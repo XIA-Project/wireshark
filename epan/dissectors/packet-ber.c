@@ -4576,8 +4576,8 @@ proto_register_ber(void)
                                   " and the syntax of any associated values",
                                   users_uat);
 
-    ber_oid_dissector_table = register_dissector_table("ber.oid", "BER OID Dissectors", proto_ber, FT_STRING, BASE_NONE, DISSECTOR_TABLE_ALLOW_DUPLICATE);
-    ber_syntax_dissector_table = register_dissector_table("ber.syntax", "BER syntax", proto_ber, FT_STRING, BASE_NONE, DISSECTOR_TABLE_ALLOW_DUPLICATE);
+    ber_oid_dissector_table = register_dissector_table("ber.oid", "BER OID Dissectors", proto_ber, FT_STRING, BASE_NONE);
+    ber_syntax_dissector_table = register_dissector_table("ber.syntax", "BER syntax", proto_ber, FT_STRING, BASE_NONE);
     syntax_table = g_hash_table_new(g_str_hash, g_str_equal); /* oid to syntax */
 
     register_ber_syntax_dissector("ASN.1", proto_ber, dissect_ber_syntax);
@@ -4607,7 +4607,7 @@ proto_reg_handoff_ber(void)
 
     /* allow the dissection of BER/DER carried over a TCP transport
        by using "Decode As..." */
-    dissector_add_for_decode_as("tcp.port", ber_handle);
+    dissector_add_for_decode_as_with_preference("tcp.port", ber_handle);
 
     ber_update_oids();
 }

@@ -125,6 +125,7 @@
 #include <epan/uat.h>
 #include <epan/oui.h>
 #include <wsutil/str_util.h>
+#include <wsutil/strtoi.h>
 void proto_register_bootp(void);
 void proto_reg_handoff_bootp(void);
 
@@ -404,6 +405,7 @@ static int hf_bootp_option82_vi_cl_docsis_version = -1;
 									/* 82:9 suboptions end */
 static int hf_bootp_option82_flags = -1;				/* 82:10 */
 static int hf_bootp_option82_server_id_override = -1;			/* 82:11 */
+static int hf_bootp_option82_relay_agent_id = -1;			/* 82:12 */
 static int hf_bootp_option82_link_selection_cisco = -1;			/* 82:150 */
 static int hf_bootp_option82_vrf_name_vpn_id = -1;			/* 82:151 */
 									/* 82:151 suboptions */
@@ -619,6 +621,8 @@ static expert_field ei_bootp_client_address_not_given = EI_INIT;
 static expert_field ei_bootp_server_name_overloaded_by_dhcp = EI_INIT;
 static expert_field ei_bootp_boot_filename_overloaded_by_dhcp = EI_INIT;
 static expert_field ei_bootp_option_isns_ignored_bitfield = EI_INIT;
+static expert_field ei_bootp_option242_avaya_l2qvlan_invalid = EI_INIT;
+static expert_field ei_bootp_option242_avaya_vlantest_invalid = EI_INIT;
 
 static dissector_handle_t bootp_handle;
 
@@ -839,8 +843,7 @@ static const enum_val_t bootp_uuid_endian_vals[] = {
 	{ NULL, NULL, 0 }
 };
 
-#define UDP_PORT_BOOTPS	 67
-#define UDP_PORT_BOOTPC	 68
+#define BOOTP_UDP_PORT_RANGE  "67-68"
 
 #define BOOTP_BC	0x8000
 #define BOOTP_MBZ	0x7FFF
@@ -3020,6 +3023,7 @@ static const value_string option82_suboption_vals[] = {
 	{  9, "Vendor-Specific Information" },
 	{ 10, "Flags" },
 	{ 11, "Server ID Override" },
+	{ 12, "Relay Agent Identifier" },
 	{ 150, "Link selection (Cisco proprietary)" },
 	{ 151, "VRF name/VPN ID" },
 	{ 152, "Server ID Override (Cisco proprietary)" },
@@ -3069,6 +3073,7 @@ bootp_dhcp_decode_agent_info(packet_info *pinfo, proto_item *v_ti, proto_tree *v
 		{9, {"Vendor-Specific Information", special, &hf_bootp_option82_vi}}, /* [RFC 4243] */
 		{10, {"Flags", val_u_byte, &hf_bootp_option82_flags}}, /* [RFC5010] */
 		{11, {"Server ID Override", ipv4, &hf_bootp_option82_server_id_override}}, /* [RFC 5107] */
+		{12, {"Relay Agent Identifier", bytes, &hf_bootp_option82_relay_agent_id}}, /* [RFC 6925] */
 		{150, {"Link selection (Cisco proprietary)", ipv4, &hf_bootp_option82_link_selection_cisco}}, /* [RFC3527] */
 		{151, {"VRF name/VPN ID", special, &hf_bootp_option82_vrf_name_vpn_id}}, /* [RFC2685] */
 		{152, {"Server ID Override (Cisco proprietary)", ipv4, &hf_bootp_option82_server_id_override_cisco}} /* [RFC 5107] */
@@ -3357,7 +3362,14 @@ dissect_vendor_avaya_param(proto_tree *tree, packet_info *pinfo, proto_item *vti
 		proto_tree_add_string_format_value(tree, hf_bootp_option242_avaya_l2q, tvb, optoff, len, field + 4, "%s (%s)", field + 4, str_to_str(field + 4, option242_avaya_l2q_vals, "Unknown (%s)"));
 	}
 	else if((strncmp(field, "L2QVLAN=", 8) == 0) && ( len > 8)) {
-		proto_tree_add_int(tree, hf_bootp_option242_avaya_l2qvlan, tvb, optoff, len, atoi(field +8));
+		gint32 val = -1;
+		gboolean val_valid;
+		proto_item* pi;
+
+		val_valid = ws_strtoi32(field + 8, NULL, &val);
+		pi = proto_tree_add_int(tree, hf_bootp_option242_avaya_l2qvlan, tvb, optoff, len, val);
+		if (val_valid)
+			expert_add_info(pinfo, pi, &ei_bootp_option242_avaya_l2qvlan_invalid);
 	}
 	else if((strncmp(field, "LOGLOCAL=", 9) == 0) && ( len > 9)) {
 		proto_tree_add_string_format_value(tree, hf_bootp_option242_avaya_loglocal, tvb, optoff, len, field + 9, "%s (%s)", field + 9, str_to_str(field + 9, option242_avaya_loglocal_vals, "Unknown (%s)"));
@@ -3381,7 +3393,14 @@ dissect_vendor_avaya_param(proto_tree *tree, packet_info *pinfo, proto_item *vti
 		proto_tree_add_string(tree, hf_bootp_option242_avaya_snmpstring, tvb, optoff, len, field + 11);
 	}
 	else if((strncmp(field, "VLANTEST=", 9) == 0) && ( len > 9)) {
-		proto_tree_add_int(tree, hf_bootp_option242_avaya_vlantest, tvb, optoff, len, atoi(field + 9));
+		gint32 val = -1;
+		gboolean val_valid;
+		proto_item* pi;
+
+		val_valid = ws_strtoi32(field + 9, NULL, &val);
+		pi = proto_tree_add_int(tree, hf_bootp_option242_avaya_vlantest, tvb, optoff, len, val);
+		if (!val_valid)
+			expert_add_info(pinfo, pi, &ei_bootp_option242_avaya_vlantest_invalid);
 	}
 	else {
 		expert_add_info_format(pinfo, vti, &hf_bootp_subopt_unknown_type, "ERROR, Unknown Avaya IP Telephone parameter %s", field);
@@ -7727,6 +7746,11 @@ proto_register_bootp(void)
 		    FT_IPv4, BASE_NONE, NULL, 0x00,
 		    "Option 82:11 Server ID Override", HFILL }},
 
+		{ &hf_bootp_option82_relay_agent_id,
+		  { "Relay Agent Identifier", "bootp.option.agent_information_option.relay_agent_id",
+		    FT_BYTES, BASE_NONE, NULL, 0x00,
+		    "Option 82:12 Relay Agent Identifier", HFILL }},
+
 		{ &hf_bootp_option82_link_selection_cisco,
 		  { "Link selection (Cisco proprietary)", "bootp.option.agent_information_option.link_selection_cisco",
 		    FT_IPv4, BASE_NONE, NULL, 0x00,
@@ -8561,6 +8585,8 @@ proto_register_bootp(void)
 		{ &ei_bootp_server_name_overloaded_by_dhcp, { "bootp.server_name_overloaded_by_dhcp", PI_PROTOCOL, PI_NOTE, "Server name option overloaded by DHCP", EXPFILL }},
 		{ &ei_bootp_boot_filename_overloaded_by_dhcp, { "bootp.boot_filename_overloaded_by_dhcp", PI_PROTOCOL, PI_NOTE, "Boot file name option overloaded by DHCP", EXPFILL }},
 		{ &ei_bootp_option_isns_ignored_bitfield, { "bootp.option.isns.ignored_bitfield", PI_PROTOCOL, PI_NOTE, "Enabled field is not set - non-zero bitmask ignored", EXPFILL }},
+		{ &ei_bootp_option242_avaya_l2qvlan_invalid, { "bootp.option.vendor.avaya.l2qvlan.invalid", PI_PROTOCOL, PI_ERROR, "Option 242 (L2QVLAN) invalid", EXPFILL }},
+		{ &ei_bootp_option242_avaya_vlantest_invalid, { "bootp.option.vendor.avaya.vlantest.invalid", PI_PROTOCOL, PI_ERROR, "Option 242 (avaya vlantest) invalid", EXPFILL }}
 	};
 
 	static tap_param bootp_stat_params[] = {
@@ -8656,8 +8682,7 @@ proto_register_bootp(void)
 void
 proto_reg_handoff_bootp(void)
 {
-	dissector_add_uint("udp.port", UDP_PORT_BOOTPS, bootp_handle);
-	dissector_add_uint("udp.port", UDP_PORT_BOOTPC, bootp_handle);
+	dissector_add_uint_range_with_preference("udp.port", BOOTP_UDP_PORT_RANGE, bootp_handle);
 }
 
 /*

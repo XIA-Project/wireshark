@@ -35,8 +35,8 @@ QUIC source code in Chromium : https://code.google.com/p/chromium/codesearch#chr
 #include <epan/prefs.h>
 #include <epan/expert.h>
 #include <epan/conversation.h>
-#include <stdlib.h> /* for atoi() */
 #include <epan/dissectors/packet-http2.h>
+#include <wsutil/strtoi.h>
 
 void proto_register_quic(void);
 void proto_reg_handoff_quic(void);
@@ -160,6 +160,8 @@ static int hf_quic_tag_nonp = -1;
 static int hf_quic_tag_csct = -1;
 static int hf_quic_tag_ctim = -1;
 static int hf_quic_tag_mids = -1;
+static int hf_quic_tag_fhol = -1;
+static int hf_quic_tag_sttl = -1;
 
 /* Public Reset Tags */
 static int hf_quic_tag_rnon = -1;
@@ -176,8 +178,8 @@ static int hf_quic_padding = -1;
 static int hf_quic_stream_data = -1;
 static int hf_quic_payload = -1;
 
-static guint g_quic_port = 80;
-static guint g_quics_port = 443;
+#define QUIC_PORT_RANGE "80,443"
+static gboolean g_quic_debug = FALSE;
 
 static gint ett_quic = -1;
 static gint ett_quic_puflags = -1;
@@ -189,9 +191,11 @@ static gint ett_quic_tag_value = -1;
 static expert_field ei_quic_tag_undecoded = EI_INIT;
 static expert_field ei_quic_tag_length = EI_INIT;
 static expert_field ei_quic_tag_unknown = EI_INIT;
+static expert_field ei_quic_version_invalid = EI_INIT;
 
 typedef struct quic_info_data {
     guint8 version;
+    gboolean version_valid;
     guint16 server_port;
 } quic_info_data_t;
 
@@ -384,6 +388,8 @@ static const value_string message_tag_vals[] = {
 #define TAG_CSCT 0x43534354
 #define TAG_CTIM 0x4354494D
 #define TAG_MIDS 0x4D494453
+#define TAG_FHOL 0x46484F4C
+#define TAG_STTL 0x5354544C
 
 /* Public Reset Tag */
 #define TAG_RNON 0x524E4F4E
@@ -426,6 +432,8 @@ static const value_string tag_vals[] = {
     { TAG_CSCT, "Signed cert timestamp (RFC6962) of leaf cert" },
     { TAG_CTIM, "Client Timestamp" },
     { TAG_MIDS, "Max incoming dynamic streams" },
+    { TAG_FHOL, "Force Head Of Line blocking" },
+    { TAG_STTL, "Server Config TTL" },
 
     { TAG_RNON, "Public Reset Nonce Proof" },
     { TAG_RSEQ, "Rejected Packet Number" },
@@ -788,6 +796,65 @@ static const value_string error_code_vals[] = {
 static value_string_ext error_code_vals_ext = VALUE_STRING_EXT_INIT(error_code_vals);
 
 /**************************************************************************/
+/*                      RST Stream Error Code                             */
+/**************************************************************************/
+/* See https://chromium.googlesource.com/chromium/src.git/+/master/net/quic/core/quic_protocol.h (enum QuicRstStreamErrorCode) */
+
+enum QuicRstStreamErrorCode {
+  /* Complete response has been sent, sending a RST to ask the other endpoint to stop sending request data without discarding the response. */
+
+  QUIC_STREAM_NO_ERROR = 0,
+  /* There was some error which halted stream processing.*/
+  QUIC_ERROR_PROCESSING_STREAM,
+  /* We got two fin or reset offsets which did not match.*/
+  QUIC_MULTIPLE_TERMINATION_OFFSETS,
+  /* We got bad payload and can not respond to it at the protocol level. */
+  QUIC_BAD_APPLICATION_PAYLOAD,
+  /* Stream closed due to connection error. No reset frame is sent when this happens. */
+  QUIC_STREAM_CONNECTION_ERROR,
+  /* GoAway frame sent. No more stream can be created. */
+  QUIC_STREAM_PEER_GOING_AWAY,
+  /* The stream has been cancelled. */
+  QUIC_STREAM_CANCELLED,
+  /* Closing stream locally, sending a RST to allow for proper flow control accounting. Sent in response to a RST from the peer. */
+  QUIC_RST_ACKNOWLEDGEMENT,
+  /* Receiver refused to create the stream (because its limit on open streams has been reached).  The sender should retry the request later (using another stream). */
+  QUIC_REFUSED_STREAM,
+  /* Invalid URL in PUSH_PROMISE request header. */
+  QUIC_INVALID_PROMISE_URL,
+  /* Server is not authoritative for this URL. */
+  QUIC_UNAUTHORIZED_PROMISE_URL,
+  /* Can't have more than one active PUSH_PROMISE per URL. */
+  QUIC_DUPLICATE_PROMISE_URL,
+  /* Vary check failed. */
+  QUIC_PROMISE_VARY_MISMATCH,
+  /* Only GET and HEAD methods allowed. */
+  QUIC_INVALID_PROMISE_METHOD,
+  /* No error. Used as bound while iterating. */
+  QUIC_STREAM_LAST_ERROR,
+};
+
+static const value_string rststream_error_code_vals[] = {
+    { QUIC_STREAM_NO_ERROR, "Complete response has been sent, sending a RST to ask the other endpoint to stop sending request data without discarding the response." },
+    { QUIC_ERROR_PROCESSING_STREAM, "There was some error which halted stream processing" },
+    { QUIC_MULTIPLE_TERMINATION_OFFSETS, "We got two fin or reset offsets which did not match" },
+    { QUIC_BAD_APPLICATION_PAYLOAD, "We got bad payload and can not respond to it at the protocol level" },
+    { QUIC_STREAM_CONNECTION_ERROR, "Stream closed due to connection error. No reset frame is sent when this happens" },
+    { QUIC_STREAM_PEER_GOING_AWAY, "GoAway frame sent. No more stream can be created" },
+    { QUIC_STREAM_CANCELLED, "The stream has been cancelled" },
+    { QUIC_RST_ACKNOWLEDGEMENT, "Closing stream locally, sending a RST to allow for proper flow control accounting. Sent in response to a RST from the peer" },
+    { QUIC_REFUSED_STREAM, "Receiver refused to create the stream (because its limit on open streams has been reached). The sender should retry the request later (using another stream)" },
+    { QUIC_INVALID_PROMISE_URL, "Invalid URL in PUSH_PROMISE request header" },
+    { QUIC_UNAUTHORIZED_PROMISE_URL, "Server is not authoritative for this URL" },
+    { QUIC_DUPLICATE_PROMISE_URL, "Can't have more than one active PUSH_PROMISE per URL" },
+    { QUIC_PROMISE_VARY_MISMATCH, "Vary check failed" },
+    { QUIC_INVALID_PROMISE_METHOD, "Only GET and HEAD methods allowed" },
+    { QUIC_STREAM_LAST_ERROR, "No error. Used as bound while iterating" },
+    { 0, NULL }
+};
+static value_string_ext rststream_error_code_vals_ext = VALUE_STRING_EXT_INIT(rststream_error_code_vals);
+
+/**************************************************************************/
 /*                      Handshake Failure Reason                          */
 /**************************************************************************/
 /* See https://chromium.googlesource.com/chromium/src.git/+/master/net/quic/core/crypto/crypto_handshake.h */
@@ -996,7 +1063,7 @@ static gboolean is_quic_unencrypt(tvbuff_t *tvb, packet_info *pinfo, guint offse
     /* Message Authentication Hash */
     offset += 12;
 
-    if(quic_info->version < 34){ /* No longer Private Flags after Q034 */
+    if(quic_info->version_valid && quic_info->version < 34){ /* No longer Private Flags after Q034 */
         /* Private Flags */
         offset += 1;
     }
@@ -1068,7 +1135,7 @@ static gboolean is_quic_unencrypt(tvbuff_t *tvb, packet_info *pinfo, guint offse
                     offset += 4;
                 break;
                 case FT_STOP_WAITING:
-                    if(quic_info->version < 34){ /* No longer Entropy after Q034 */
+                    if(quic_info->version_valid && quic_info->version < 34){ /* No longer Entropy after Q034 */
                         /* Send Entropy */
                         offset += 1;
                     }
@@ -1125,7 +1192,7 @@ static gboolean is_quic_unencrypt(tvbuff_t *tvb, packet_info *pinfo, guint offse
                 /* Frame Type */
                 offset += 1;
 
-                if(quic_info->version < 34){ /* No longer Entropy after Q034 */
+                if(quic_info->version_valid && quic_info->version < 34){ /* No longer Entropy after Q034 */
                     /* Received Entropy */
                     offset += 1;
 
@@ -1528,6 +1595,17 @@ dissect_quic_tag(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tree, guint
                 tag_offset += 4;
                 tag_len -= 4;
             break;
+            case TAG_FHOL:
+                proto_tree_add_item(tag_tree, hf_quic_tag_fhol, tvb, tag_offset_start + tag_offset, 4, ENC_LITTLE_ENDIAN);
+                proto_item_append_text(ti_tag, ": %u", tvb_get_letohl(tvb, tag_offset_start + tag_offset));
+                tag_offset += 4;
+                tag_len -= 4;
+            break;
+            case TAG_STTL:
+                proto_tree_add_item(tag_tree, hf_quic_tag_sttl, tvb, tag_offset_start + tag_offset, 8, ENC_LITTLE_ENDIAN);
+                tag_offset += 8;
+                tag_len -= 8;
+            break;
 
             default:
                 proto_tree_add_item(tag_tree, hf_quic_tag_unknown, tvb, tag_offset_start + tag_offset, tag_len, ENC_NA);
@@ -1591,7 +1669,8 @@ dissect_quic_frame_type(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tree
                 offset += 8;
                 proto_tree_add_item_ret_uint(ft_tree, hf_quic_frame_type_rsts_error_code, tvb, offset, 4, ENC_LITTLE_ENDIAN, &error_code);
                 offset += 4;
-                proto_item_append_text(ti_ft, " Stream ID: %u, Error code: %s", stream_id, val_to_str_ext(error_code, &error_code_vals_ext, "Unknown (%d)"));
+                proto_item_append_text(ti_ft, " Stream ID: %u, Error code: %s", stream_id, val_to_str_ext(error_code, &rststream_error_code_vals_ext, "Unknown (%d)"));
+                col_set_str(pinfo->cinfo, COL_INFO, "RST STREAM");
                 }
             break;
             case FT_CONNECTION_CLOSE:{
@@ -1623,6 +1702,7 @@ dissect_quic_frame_type(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tree
                 proto_tree_add_item(ft_tree, hf_quic_frame_type_goaway_reason_phrase, tvb, offset, len_reason, ENC_ASCII|ENC_NA);
                 offset += len_reason;
                 proto_item_append_text(ti_ft, " Stream ID: %u, Error code: %s", last_good_stream_id, val_to_str_ext(error_code, &error_code_vals_ext, "Unknown (%d)"));
+                col_set_str(pinfo->cinfo, COL_INFO, "GOAWAY");
                 }
             break;
             case FT_WINDOW_UPDATE:{
@@ -1645,7 +1725,7 @@ dissect_quic_frame_type(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tree
             break;
             case FT_STOP_WAITING:{
                 guint8 send_entropy;
-                if(quic_info->version < 34){ /* No longer Entropy after Q034 */
+                if(quic_info->version_valid && quic_info->version < 34){ /* No longer Entropy after Q034 */
                     proto_tree_add_item(ft_tree, hf_quic_frame_type_sw_send_entropy, tvb, offset, 1, ENC_LITTLE_ENDIAN);
                     send_entropy = tvb_get_guint8(tvb, offset);
                     proto_item_append_text(ti_ft, " Send Entropy: %u", send_entropy);
@@ -1749,7 +1829,7 @@ dissect_quic_frame_type(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tree
 
             proto_tree_add_item(ftflags_tree, hf_quic_frame_type_ack_n, tvb, offset, 1, ENC_LITTLE_ENDIAN);
 
-            if(quic_info->version < 34){ /* No longer NACK after Q034 */
+            if(quic_info->version_valid && quic_info->version < 34){ /* No longer NACK after Q034 */
                 proto_tree_add_item(ftflags_tree, hf_quic_frame_type_ack_t, tvb, offset, 1, ENC_LITTLE_ENDIAN);
             } else {
                 proto_tree_add_item(ftflags_tree, hf_quic_frame_type_ack_u, tvb, offset, 1, ENC_LITTLE_ENDIAN);
@@ -1762,7 +1842,7 @@ dissect_quic_frame_type(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tree
             len_missing_packet = get_len_missing_packet(frame_type);
             offset += 1;
 
-            if(quic_info->version < 34){ /* Big change after Q034 */
+            if(quic_info->version_valid && quic_info->version < 34){ /* Big change after Q034 */
                 proto_tree_add_item(ft_tree, hf_quic_frame_type_ack_received_entropy, tvb, offset, 1, ENC_LITTLE_ENDIAN);
                 offset += 1;
 
@@ -1910,7 +1990,7 @@ dissect_quic_unencrypt(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tree,
     proto_tree_add_item(quic_tree, hf_quic_message_authentication_hash, tvb, offset, 12, ENC_NA);
     offset += 12;
 
-    if(quic_info->version < 34){ /* No longer Private Flags after Q034 */
+    if(quic_info->version_valid && quic_info->version < 34){ /* No longer Private Flags after Q034 */
         /* Private Flags */
         ti_prflags = proto_tree_add_item(quic_tree, hf_quic_prflags, tvb, offset, 1, ENC_LITTLE_ENDIAN);
         prflags_tree = proto_item_add_subtree(ti_prflags, ett_quic_prflags);
@@ -1954,6 +2034,7 @@ dissect_quic_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     if (!quic_info) {
         quic_info = wmem_new(wmem_file_scope(), quic_info_data_t);
         quic_info->version = 0;
+        quic_info->version_valid = TRUE;
         quic_info->server_port = 443;
         conversation_add_proto_data(conv, proto_quic, quic_info);
     }
@@ -1972,18 +2053,23 @@ dissect_quic_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     }
     /* check and get (and store) version */
     if(puflags & PUFLAGS_VRSN){
-        quic_info->version = atoi(tvb_get_string_enc(wmem_packet_scope(), tvb,offset + 1 + len_cid + 1, 3, ENC_ASCII));
+        quic_info->version_valid = ws_strtou8(tvb_get_string_enc(wmem_packet_scope(), tvb,
+            offset + 1 + len_cid + 1, 3, ENC_ASCII), NULL, &quic_info->version);
+        if (!quic_info->version_valid)
+            expert_add_info(pinfo, quic_tree, &ei_quic_version_invalid);
     }
 
     ti_puflags = proto_tree_add_item(quic_tree, hf_quic_puflags, tvb, offset, 1, ENC_LITTLE_ENDIAN);
     puflags_tree = proto_item_add_subtree(ti_puflags, ett_quic_puflags);
     proto_tree_add_item(puflags_tree, hf_quic_puflags_vrsn, tvb, offset, 1, ENC_NA);
     proto_tree_add_item(puflags_tree, hf_quic_puflags_rst, tvb, offset, 1, ENC_NA);
-    if(quic_info->version < 33){
-        proto_tree_add_item(puflags_tree, hf_quic_puflags_cid_old, tvb, offset, 1, ENC_LITTLE_ENDIAN);
-    } else {
-        proto_tree_add_item(puflags_tree, hf_quic_puflags_dnonce, tvb, offset, 1, ENC_LITTLE_ENDIAN);
-        proto_tree_add_item(puflags_tree, hf_quic_puflags_cid, tvb, offset, 1, ENC_LITTLE_ENDIAN);
+    if (quic_info->version_valid) {
+        if(quic_info->version < 33){
+            proto_tree_add_item(puflags_tree, hf_quic_puflags_cid_old, tvb, offset, 1, ENC_LITTLE_ENDIAN);
+        } else {
+            proto_tree_add_item(puflags_tree, hf_quic_puflags_dnonce, tvb, offset, 1, ENC_LITTLE_ENDIAN);
+            proto_tree_add_item(puflags_tree, hf_quic_puflags_cid, tvb, offset, 1, ENC_LITTLE_ENDIAN);
+        }
     }
     proto_tree_add_item(puflags_tree, hf_quic_puflags_pkn, tvb, offset, 1, ENC_LITTLE_ENDIAN);
     proto_tree_add_item(puflags_tree, hf_quic_puflags_mpth, tvb, offset, 1, ENC_LITTLE_ENDIAN);
@@ -2037,7 +2123,7 @@ dissect_quic_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     }
 
     /* Diversification Nonce */
-    if(puflags & PUFLAGS_DNONCE && quic_info->version >= 33){
+    if(quic_info->version_valid && (puflags & PUFLAGS_DNONCE) && (quic_info->version >= 33)){
         if(pinfo->srcport == quic_info->server_port){ /* Diversification nonce is only present from server to client */
             proto_tree_add_item(quic_tree, hf_quic_diversification_nonce, tvb, offset, 32, ENC_NA);
             offset += 32;
@@ -2073,7 +2159,7 @@ dissect_quic_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     offset += len_pkn;
 
     /* Unencrypt Message (Handshake or Connection Close...) */
-    if (is_quic_unencrypt(tvb, pinfo, offset, len_pkn, quic_info)){
+    if (is_quic_unencrypt(tvb, pinfo, offset, len_pkn, quic_info) || g_quic_debug){
         offset = dissect_quic_unencrypt(tvb, pinfo, quic_tree, offset, len_pkn, quic_info);
     }else {     /* Payload... (encrypted... TODO FIX !) */
         col_add_str(pinfo->cinfo, COL_INFO, "Payload (Encrypted)");
@@ -2234,13 +2320,13 @@ proto_register_quic(void)
         },
         { &hf_quic_frame_type_rsts_error_code,
             { "Error code", "quic.frame_type.rsts.error_code",
-               FT_UINT32, BASE_DEC|BASE_EXT_STRING, &error_code_vals_ext, 0x0,
+               FT_UINT32, BASE_DEC|BASE_EXT_STRING, &rststream_error_code_vals_ext, 0x0,
               "Indicates why the stream is being closed", HFILL }
         },
         { &hf_quic_frame_type_cc_error_code,
             { "Error code", "quic.frame_type.cc.error_code",
                FT_UINT32, BASE_DEC|BASE_EXT_STRING, &error_code_vals_ext, 0x0,
-              "Stream ID of the stream being terminated", HFILL }
+              "Indicates the reason for closing this connection", HFILL }
         },
         { &hf_quic_frame_type_cc_reason_phrase_length,
             { "Reason phrase Length", "quic.frame_type.cc.reason_phrase.length",
@@ -2255,12 +2341,12 @@ proto_register_quic(void)
         { &hf_quic_frame_type_goaway_error_code,
             { "Error code", "quic.frame_type.goaway.error_code",
                FT_UINT32, BASE_DEC|BASE_EXT_STRING, &error_code_vals_ext, 0x0,
-              "Stream ID of the stream being terminated", HFILL }
+              "Indicates the reason for closing this connection", HFILL }
         },
         { &hf_quic_frame_type_goaway_last_good_stream_id,
-            { "Error code", "quic.frame_type.goaway.error_code",
-               FT_UINT32, BASE_DEC|BASE_EXT_STRING, &error_code_vals_ext, 0x0,
-              "Stream ID of the stream being terminated", HFILL }
+            { "Last Good Stream ID", "quic.frame_type.goaway.last_good_stream_id",
+               FT_UINT32, BASE_DEC, NULL, 0x0,
+              "last Stream ID which was accepted by the sender of the GOAWAY message", HFILL }
         },
         { &hf_quic_frame_type_goaway_reason_phrase_length,
             { "Reason phrase Length", "quic.frame_type.goaway.reason_phrase.length",
@@ -2722,6 +2808,16 @@ proto_register_quic(void)
                FT_UINT32, BASE_DEC, NULL, 0x0,
               NULL, HFILL }
         },
+        { &hf_quic_tag_fhol,
+            { "Force Head Of Line blocking", "quic.tag.fhol",
+               FT_UINT32, BASE_DEC, NULL, 0x0,
+              NULL, HFILL }
+        },
+        { &hf_quic_tag_sttl,
+            { "Server Config TTL", "quic.tag.sttl",
+               FT_UINT64, BASE_DEC, NULL, 0x0,
+              NULL, HFILL }
+        },
 
         { &hf_quic_tag_unknown,
             { "Unknown tag", "quic.tag.unknown",
@@ -2758,28 +2854,23 @@ proto_register_quic(void)
     static ei_register_info ei[] = {
         { &ei_quic_tag_undecoded, { "quic.tag.undecoded", PI_UNDECODED, PI_NOTE, "Dissector for QUIC Tag code not implemented, Contact Wireshark developers if you want this supported", EXPFILL }},
         { &ei_quic_tag_length, { "quic.tag.length.truncated", PI_MALFORMED, PI_NOTE, "Truncated Tag Length...", EXPFILL }},
-        { &ei_quic_tag_unknown, { "quic.tag.unknown.data", PI_UNDECODED, PI_NOTE, "Unknown Data", EXPFILL }}
-
+        { &ei_quic_tag_unknown, { "quic.tag.unknown.data", PI_UNDECODED, PI_NOTE, "Unknown Data", EXPFILL }},
+        { &ei_quic_version_invalid, { "quic.version.invalid", PI_MALFORMED, PI_ERROR, "Invalid Version", EXPFILL }}
     };
 
     expert_module_t *expert_quic;
 
-    proto_quic = proto_register_protocol("QUIC (Quick UDP Internet Connections)",
-            "QUIC", "quic");
+    proto_quic = proto_register_protocol("QUIC (Quick UDP Internet Connections)", "QUIC", "quic");
 
     proto_register_field_array(proto_quic, hf, array_length(hf));
     proto_register_subtree_array(ett, array_length(ett));
 
-    quic_module = prefs_register_protocol(proto_quic, proto_reg_handoff_quic);
+    quic_module = prefs_register_protocol(proto_quic, NULL);
 
-
-    prefs_register_uint_preference(quic_module, "udp.quic.port", "QUIC UDP Port",
-            "QUIC UDP port if other than the default",
-            10, &g_quic_port);
-
-    prefs_register_uint_preference(quic_module, "udp.quics.port", "QUICS UDP Port",
-            "QUICS (Secure) UDP port if other than the default",
-            10, &g_quics_port);
+    prefs_register_bool_preference(quic_module, "debug.quic",
+                       "Force decode of all QUIC Payload",
+                       "Help for debug...",
+                       &g_quic_debug);
 
     expert_quic = expert_register_protocol(proto_quic);
     expert_register_field_array(expert_quic, ei, array_length(ei));
@@ -2788,27 +2879,10 @@ proto_register_quic(void)
 void
 proto_reg_handoff_quic(void)
 {
-    static gboolean initialized = FALSE;
-    static dissector_handle_t quic_handle;
-    static int current_quic_port;
-    static int current_quics_port;
+    dissector_handle_t quic_handle;
 
-    if (!initialized) {
-        quic_handle = create_dissector_handle(dissect_quic,
-                proto_quic);
-        initialized = TRUE;
-
-    } else {
-        dissector_delete_uint("udp.port", current_quic_port, quic_handle);
-        dissector_delete_uint("udp.port", current_quics_port, quic_handle);
-    }
-
-    current_quic_port = g_quic_port;
-    current_quics_port = g_quics_port;
-
-
-    dissector_add_uint("udp.port", current_quic_port, quic_handle);
-    dissector_add_uint("udp.port", current_quics_port, quic_handle);
+    quic_handle = create_dissector_handle(dissect_quic, proto_quic);
+    dissector_add_uint_range_with_preference("udp.port", QUIC_PORT_RANGE, quic_handle);
 }
 
 
