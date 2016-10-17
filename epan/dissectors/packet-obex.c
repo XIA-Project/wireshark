@@ -3825,7 +3825,7 @@ proto_register_obex(void)
 
     obex_handle = register_dissector("obex", dissect_obex, proto_obex);
 
-    obex_profile_table = register_dissector_table("obex.profile", "OBEX Profile", proto_obex, FT_UINT8, BASE_DEC, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
+    obex_profile_table = register_dissector_table("obex.profile", "OBEX Profile", proto_obex, FT_UINT8, BASE_DEC);
 
     /* Required function calls to register the header fields and subtrees used */
     proto_register_field_array(proto_obex, hf, array_length(hf));
@@ -3959,8 +3959,8 @@ proto_reg_handoff_obex(void)
     dissector_add_for_decode_as("usb.product",  obex_handle);
     dissector_add_for_decode_as("usb.device",   obex_handle);
     dissector_add_for_decode_as("usb.protocol", obex_handle);
-    dissector_add_for_decode_as("tcp.port",     obex_handle);
-    dissector_add_for_decode_as("udp.port",     obex_handle);
+    dissector_add_for_decode_as_with_preference("tcp.port",     obex_handle);
+    dissector_add_for_decode_as_with_preference("udp.port",     obex_handle);
 }
 
 /*

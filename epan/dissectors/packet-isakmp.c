@@ -81,6 +81,14 @@ typedef struct _byte_string {
   const gchar   *strptr;
 } byte_string;
 
+typedef struct _attribute_common_fields {
+  int all;
+  int format;
+  int type;
+  int length;
+  int value;
+} attribute_common_fields;
+
 static int proto_isakmp = -1;
 
 static int hf_isakmp_nat_keepalive = -1;
@@ -175,11 +183,8 @@ static int hf_isakmp_notify_data_redirect_org_resp_gw_ident_ipv6 = -1;
 static int hf_isakmp_notify_data_redirect_org_resp_gw_ident = -1;
 static int hf_isakmp_notify_data_ticket_lifetime = -1;
 static int hf_isakmp_notify_data_ticket_data = -1;
-static int hf_isakmp_notify_data_rohc_attr = -1;
-static int hf_isakmp_notify_data_rohc_attr_type = -1;
-static int hf_isakmp_notify_data_rohc_attr_format = -1;
-static int hf_isakmp_notify_data_rohc_attr_length = -1;
-static int hf_isakmp_notify_data_rohc_attr_value = -1;
+
+static attribute_common_fields hf_isakmp_notify_data_rohc_attr = { -1, -1, -1, -1, -1 };
 static int hf_isakmp_notify_data_rohc_attr_max_cid = -1;
 static int hf_isakmp_notify_data_rohc_attr_profile = -1;
 static int hf_isakmp_notify_data_rohc_attr_integ = -1;
@@ -228,34 +233,32 @@ static int hf_isakmp_hash = -1;
 static int hf_isakmp_sig = -1;
 static int hf_isakmp_nonce = -1;
 
-static int hf_isakmp_tf_attr = -1;
-static int hf_isakmp_tf_attr_type_v1 = -1;
-static int hf_isakmp_tf_attr_format = -1;
-static int hf_isakmp_tf_attr_length = -1;
-static int hf_isakmp_tf_attr_value = -1;
-static int hf_isakmp_tf_attr_life_type = -1;
-static int hf_isakmp_tf_attr_life_duration_uint32 = -1;
-static int hf_isakmp_tf_attr_life_duration_uint64 = -1;
-static int hf_isakmp_tf_attr_life_duration_bytes = -1;
-static int hf_isakmp_tf_attr_group_description = -1;
-static int hf_isakmp_tf_attr_encap_mode = -1;
-static int hf_isakmp_tf_attr_auth_algorithm = -1;
-static int hf_isakmp_tf_attr_key_length = -1;
-static int hf_isakmp_tf_attr_key_rounds = -1;
-static int hf_isakmp_tf_attr_cmpr_dict_size = -1;
-static int hf_isakmp_tf_attr_cmpr_algorithm = -1;
-static int hf_isakmp_tf_attr_ecn_tunnel = -1;
-static int hf_isakmp_tf_attr_ext_seq_nbr = -1;
-static int hf_isakmp_tf_attr_auth_key_length = -1;
-static int hf_isakmp_tf_attr_sig_enco_algorithm = -1;
-static int hf_isakmp_tf_attr_addr_preservation = -1;
-static int hf_isakmp_tf_attr_sa_direction = -1;
+static attribute_common_fields hf_isakmp_ipsec_attr = { -1, -1, -1, -1, -1 };
+static int hf_isakmp_ipsec_attr_life_type = -1;
+static int hf_isakmp_ipsec_attr_life_duration_uint32 = -1;
+static int hf_isakmp_ipsec_attr_life_duration_uint64 = -1;
+static int hf_isakmp_ipsec_attr_life_duration_bytes = -1;
+static int hf_isakmp_ipsec_attr_group_description = -1;
+static int hf_isakmp_ipsec_attr_encap_mode = -1;
+static int hf_isakmp_ipsec_attr_auth_algorithm = -1;
+static int hf_isakmp_ipsec_attr_key_length = -1;
+static int hf_isakmp_ipsec_attr_key_rounds = -1;
+static int hf_isakmp_ipsec_attr_cmpr_dict_size = -1;
+static int hf_isakmp_ipsec_attr_cmpr_algorithm = -1;
+static int hf_isakmp_ipsec_attr_ecn_tunnel = -1;
+static int hf_isakmp_ipsec_attr_ext_seq_nbr = -1;
+static int hf_isakmp_ipsec_attr_auth_key_length = -1;
+static int hf_isakmp_ipsec_attr_sig_enco_algorithm = -1;
+static int hf_isakmp_ipsec_attr_addr_preservation = -1;
+static int hf_isakmp_ipsec_attr_sa_direction = -1;
 
-static int hf_isakmp_ike_attr = -1;
-static int hf_isakmp_ike_attr_type = -1;
-static int hf_isakmp_ike_attr_format = -1;
-static int hf_isakmp_ike_attr_length = -1;
-static int hf_isakmp_ike_attr_value = -1;
+static attribute_common_fields hf_isakmp_resp_lifetime_ipsec_attr = { -1, -1, -1, -1, -1 };
+static int hf_isakmp_resp_lifetime_ipsec_attr_life_type = -1;
+static int hf_isakmp_resp_lifetime_ipsec_attr_life_duration_uint32 = -1;
+static int hf_isakmp_resp_lifetime_ipsec_attr_life_duration_uint64 = -1;
+static int hf_isakmp_resp_lifetime_ipsec_attr_life_duration_bytes = -1;
+
+static attribute_common_fields hf_isakmp_ike_attr = { -1, -1, -1, -1, -1 };
 static int hf_isakmp_ike_attr_encryption_algorithm = -1;
 static int hf_isakmp_ike_attr_hash_algorithm = -1;
 static int hf_isakmp_ike_attr_authentication_method = -1;
@@ -275,6 +278,12 @@ static int hf_isakmp_ike_attr_key_length = -1;
 static int hf_isakmp_ike_attr_field_size = -1;
 static int hf_isakmp_ike_attr_group_order = -1;
 
+static attribute_common_fields hf_isakmp_resp_lifetime_ike_attr = { -1, -1, -1, -1, -1 };
+static int hf_isakmp_resp_lifetime_ike_attr_life_type = -1;
+static int hf_isakmp_resp_lifetime_ike_attr_life_duration_uint32 = -1;
+static int hf_isakmp_resp_lifetime_ike_attr_life_duration_uint64 = -1;
+static int hf_isakmp_resp_lifetime_ike_attr_life_duration_bytes = -1;
+
 static int hf_isakmp_trans_type = -1;
 static int hf_isakmp_trans_encr = -1;
 static int hf_isakmp_trans_prf = -1;
@@ -283,11 +292,7 @@ static int hf_isakmp_trans_dh = -1;
 static int hf_isakmp_trans_esn = -1;
 static int hf_isakmp_trans_id_v2 = -1;
 
-static int hf_isakmp_ike2_attr = -1;
-static int hf_isakmp_ike2_attr_type = -1;
-static int hf_isakmp_ike2_attr_format = -1;
-static int hf_isakmp_ike2_attr_length = -1;
-static int hf_isakmp_ike2_attr_value = -1;
+static attribute_common_fields hf_isakmp_ike2_attr = { -1, -1, -1, -1, -1 };
 static int hf_isakmp_ike2_attr_key_length = -1;
 
 static int hf_isakmp_fragments = -1;
@@ -317,12 +322,10 @@ static int hf_isakmp_gspm_data = -1;
 static int hf_isakmp_cfg_type_v1 = -1;
 static int hf_isakmp_cfg_identifier = -1;
 static int hf_isakmp_cfg_type_v2 = -1;
-static int hf_isakmp_cfg_attr = -1;
+
+static attribute_common_fields hf_isakmp_cfg_attr = { -1, -1, -1, -1, -1 };
 static int hf_isakmp_cfg_attr_type_v1 = -1;
 static int hf_isakmp_cfg_attr_type_v2 = -1;
-static int hf_isakmp_cfg_attr_format = -1;
-static int hf_isakmp_cfg_attr_length = -1;
-static int hf_isakmp_cfg_attr_value = -1;
 
 static int hf_isakmp_cfg_attr_internal_ip4_address = -1;
 static int hf_isakmp_cfg_attr_internal_ip4_netmask = -1;
@@ -376,12 +379,9 @@ static gint ett_isakmp_payload = -1;
 static gint ett_isakmp_fragment = -1;
 static gint ett_isakmp_fragments = -1;
 static gint ett_isakmp_sa = -1;
-static gint ett_isakmp_tf_attr = -1;
-static gint ett_isakmp_tf_ike_attr = -1;
-static gint ett_isakmp_tf_ike2_attr = -1;
+static gint ett_isakmp_attr = -1;
 static gint ett_isakmp_id = -1;
-static gint ett_isakmp_cfg_attr = -1;
-static gint ett_isakmp_rohc_attr = -1;
+static gint ett_isakmp_notify_data = -1;
 #ifdef HAVE_LIBGCRYPT
 /* For decrypted IKEv2 Encrypted payload*/
 static gint ett_isakmp_decrypted_data = -1;
@@ -684,39 +684,41 @@ static const value_string doi_type[] = {
 
 /* Transform Type */
 
-#define ISAKMP_ATTR_LIFE_TYPE                   1
-#define ISAKMP_ATTR_LIFE_DURATION               2
-#define ISAKMP_ATTR_GROUP_DESC                  3
-#define ISAKMP_ATTR_ENCAP_MODE                  4
-#define ISAKMP_ATTR_AUTH_ALGORITHM              5
-#define ISAKMP_ATTR_KEY_LENGTH                  6
-#define ISAKMP_ATTR_KEY_ROUNDS                  7
-#define ISAKMP_ATTR_CMPR_DICT_SIZE              8
-#define ISAKMP_ATTR_CMPR_ALGORITHM              9
-#define ISAKMP_ATTR_ECN_TUNNEL                  10      /* [RFC3168] */
-#define ISAKMP_ATTR_EXT_SEQ_NBR                 11      /* [RFC4304] */
-#define ISAKMP_ATTR_AUTH_KEY_LENGTH             12      /* [RFC4359] */
-#define ISAKMP_ATTR_SIG_ENCO_ALGORITHM          13      /* [RFC4359] */
-#define ISAKMP_ATTR_ADDR_PRESERVATION           14      /* [RFC6407] */
-#define ISAKMP_ATTR_SA_DIRECTION                15      /* [RFC6407] */
+#define IPSEC_ATTR_LIFE_TYPE                   1
+#define IPSEC_ATTR_LIFE_DURATION               2
+#define IPSEC_ATTR_GROUP_DESC                  3
+#define IPSEC_ATTR_ENCAP_MODE                  4
+#define IPSEC_ATTR_AUTH_ALGORITHM              5
+#define IPSEC_ATTR_KEY_LENGTH                  6
+#define IPSEC_ATTR_KEY_ROUNDS                  7
+#define IPSEC_ATTR_CMPR_DICT_SIZE              8
+#define IPSEC_ATTR_CMPR_ALGORITHM              9
+#define IPSEC_ATTR_ECN_TUNNEL                  10      /* [RFC3168] */
+#define IPSEC_ATTR_EXT_SEQ_NBR                 11      /* [RFC4304] */
+#define IPSEC_ATTR_AUTH_KEY_LENGTH             12      /* [RFC4359] */
+#define IPSEC_ATTR_SIG_ENCO_ALGORITHM          13      /* [RFC4359] */
+#define IPSEC_ATTR_ADDR_PRESERVATION           14      /* [RFC6407] */
+#define IPSEC_ATTR_SA_DIRECTION                15      /* [RFC6407] */
 
-static const value_string transform_isakmp_attr_type[] = {
-  { ISAKMP_ATTR_LIFE_TYPE,      "SA-Life-Type" },
-  { ISAKMP_ATTR_LIFE_DURATION,  "SA-Life-Duration" },
-  { ISAKMP_ATTR_GROUP_DESC,     "Group-Description" },
-  { ISAKMP_ATTR_ENCAP_MODE,     "Encapsulation-Mode" },
-  { ISAKMP_ATTR_AUTH_ALGORITHM, "Authentication-Algorithm" },
-  { ISAKMP_ATTR_KEY_LENGTH,     "Key-Length" },
-  { ISAKMP_ATTR_KEY_ROUNDS,     "Key-Rounds" },
-  { ISAKMP_ATTR_CMPR_DICT_SIZE, "Compress-Dictionary-Size" },
-  { ISAKMP_ATTR_CMPR_ALGORITHM, "Compress-Private-Algorithm" },
-  { ISAKMP_ATTR_ECN_TUNNEL,     "ECN Tunnel" },
-  { ISAKMP_ATTR_EXT_SEQ_NBR,    "Extended (64-bit) Sequence Number" },
-  { ISAKMP_ATTR_AUTH_KEY_LENGTH, "Authentication Key Length" },
-  { ISAKMP_ATTR_SIG_ENCO_ALGORITHM, "Signature Encoding Algorithm" },
-  { ISAKMP_ATTR_ADDR_PRESERVATION, "Address Preservation" },
-  { ISAKMP_ATTR_SA_DIRECTION, "SA Direction" },
-  { 0,  NULL },
+static const range_string ipsec_attr_type[] = {
+  { 1,1,         "SA-Life-Type" },
+  { 2,2,         "SA-Life-Duration" },
+  { 3,3,         "Group-Description" },
+  { 4,4,         "Encapsulation-Mode" },
+  { 5,5,         "Authentication-Algorithm" },
+  { 6,6,         "Key-Length" },
+  { 7,7,         "Key-Rounds" },
+  { 8,8,         "Compress-Dictionary-Size" },
+  { 9,9,         "Compress-Private-Algorithm" },
+  { 10,10,       "ECN Tunnel" },
+  { 11,11,       "Extended (64-bit) Sequence Number" },
+  { 12,12,       "Authentication Key Length" },
+  { 13,13,       "Signature Encoding Algorithm" },
+  { 14,14,       "Address Preservation" },
+  { 15,15,       "SA Direction" },
+  { 16,32000,    "Unassigned (Future use)" },
+  { 32001,32767, "Private use" },
+  { 0,0,         NULL },
 };
 
 /* Transform IKE Type */
@@ -739,24 +741,26 @@ static const value_string transform_isakmp_attr_type[] = {
 
 
 
-static const value_string transform_ike_attr_type[] = {
-  { IKE_ATTR_ENCRYPTION_ALGORITHM,"Encryption-Algorithm" },
-  { IKE_ATTR_HASH_ALGORITHM,    "Hash-Algorithm" },
-  { IKE_ATTR_AUTHENTICATION_METHOD,"Authentication-Method" },
-  { IKE_ATTR_GROUP_DESCRIPTION, "Group-Description" },
-  { IKE_ATTR_GROUP_TYPE,        "Group-Type" },
-  { IKE_ATTR_GROUP_PRIME,       "Group-Prime" },
-  { IKE_ATTR_GROUP_GENERATOR_ONE,"Group-Generator-One" },
-  { IKE_ATTR_GROUP_GENERATOR_TWO,"Group-Generator-Two" },
-  { IKE_ATTR_GROUP_CURVE_A,     "Group-Curve-A" },
-  { IKE_ATTR_GROUP_CURVE_B,     "Group-Curve-B" },
-  { IKE_ATTR_LIFE_TYPE,         "Life-Type" },
-  { IKE_ATTR_LIFE_DURATION,     "Life-Duration" },
-  { IKE_ATTR_PRF,               "PRF" },
-  { IKE_ATTR_KEY_LENGTH,        "Key-Length" },
-  { IKE_ATTR_FIELD_SIZE,        "Field-Size" },
-  { IKE_ATTR_GROUP_ORDER,       "Group-Order" },
-  { 0,  NULL },
+static const range_string ike_attr_type[] = {
+  { 1,1,         "Encryption-Algorithm" },
+  { 2,2,         "Hash-Algorithm" },
+  { 3,3,         "Authentication-Method" },
+  { 4,4,         "Group-Description" },
+  { 5,5,         "Group-Type" },
+  { 6,6,         "Group-Prime" },
+  { 7,7,         "Group-Generator-One" },
+  { 8,8,         "Group-Generator-Two" },
+  { 9,9,         "Group-Curve-A" },
+  { 10,10,       "Group-Curve-B" },
+  { 11,11,       "Life-Type" },
+  { 12,12,       "Life-Duration" },
+  { 13,13,       "PRF" },
+  { 14,14,       "Key-Length" },
+  { 15,15,       "Field-Size" },
+  { 16,16,       "Group-Order" },
+  { 17,16383,    "Unassigned (Future use)" },
+  { 16384,32767, "Private use" },
+  { 0,0,         NULL },
 };
 
 #if 0
@@ -824,14 +828,14 @@ static const value_string redirect_gateway_identity_type[] = {
   { 3,  "FQDN" },
   { 0,  NULL },
 };
-static const value_string transform_attr_sa_life_type[] = {
+static const value_string attr_life_type[] = {
   { 0,  "RESERVED" },
   { 1,  "Seconds" },
   { 2,  "Kilobytes" },
   { 0,  NULL },
 };
 
-static const value_string transform_attr_encap_type[] = {
+static const value_string ipsec_attr_encap_mode[] = {
   { 0,  "RESERVED" },
   { 1,  "Tunnel" },
   { 2,  "Transport" },
@@ -843,7 +847,7 @@ static const value_string transform_attr_encap_type[] = {
   { 0,  NULL },
 };
 
-static const value_string transform_attr_auth_type[] = {
+static const value_string ipsec_attr_auth_algo[] = {
   { 0,  "RESERVED" },
   { 1,  "HMAC-MD5" },
   { 2,  "HMAC-SHA" },
@@ -875,7 +879,7 @@ static const value_string transform_attr_auth_type[] = {
 #define ENC_AES_CBC             7
 #define ENC_CAMELLIA_CBC        8
 
-static const value_string transform_attr_enc_type[] = {
+static const value_string ike_attr_enc_algo[] = {
   { 0,                          "RESERVED" },
   { ENC_DES_CBC,                "DES-CBC" },
   { ENC_IDEA_CBC,               "IDEA-CBC" },
@@ -895,7 +899,7 @@ static const value_string transform_attr_enc_type[] = {
 #define HMAC_SHA2_384   5
 #define HMAC_SHA2_512   6
 
-static const value_string transform_attr_hash_type[] = {
+static const value_string ike_attr_hash_algo[] = {
   { 0,                  "RESERVED" },
   { HMAC_MD5,           "MD5" },
   { HMAC_SHA,           "SHA" },
@@ -906,14 +910,14 @@ static const value_string transform_attr_hash_type[] = {
   { 0,  NULL },
 };
 
-static const value_string transform_attr_ecn_type[] = {
+static const value_string ipsec_attr_ecn_tunnel[] = {
   { 0, "RESERVED" },
   { 1, "Allowed" },
   { 2, "Forbidden" },
   { 0,  NULL },
 };
 
-static const value_string transform_attr_ext_seq_nbr_type[] = {
+static const value_string ipsec_attr_ext_seq_nbr[] = {
   { 0, "RESERVED" },
   { 1, "64-bit Sequence Number" },
   { 0,  NULL },
@@ -928,7 +932,7 @@ static const value_string transform_attr_sig_enco_algo_type[] = {
 };
 #endif
 
-static const value_string transform_attr_addr_preservation_type[] = {
+static const value_string ipsec_attr_addr_preservation[] = {
   { 0, "Reserved" },
   { 1, "None" },
   { 2, "Source-Only" },
@@ -937,7 +941,7 @@ static const value_string transform_attr_addr_preservation_type[] = {
   { 0,  NULL },
 };
 
-static const value_string transform_attr_sa_direction_type[] = {
+static const value_string ipsec_attr_sa_direction[] = {
   { 0, "Reserved" },
   { 1, "Sender-Only" },
   { 2, "Receiver-Only" },
@@ -945,7 +949,7 @@ static const value_string transform_attr_sa_direction_type[] = {
   { 0,  NULL },
 };
 
-static const value_string transform_attr_authmeth_type[] = {
+static const value_string ike_attr_authmeth[] = {
   { 0,  "RESERVED" },
   { 1,  "PSK" },
   { 2,  "DSS-SIG" },
@@ -974,7 +978,7 @@ static const value_string transform_attr_authmeth_type[] = {
 };
 
 
-static const value_string transform_dh_group_type[] = {
+static const value_string dh_group[] = {
   { 0,  "UNDEFINED - 0" },
   { 1,  "Default 768-bit MODP group" },
   { 2,  "Alternate 1024-bit MODP group" },
@@ -1009,7 +1013,7 @@ static const value_string transform_dh_group_type[] = {
   { 0,  NULL }
 };
 
-static const value_string transform_attr_grp_type[] = {
+static const value_string ike_attr_grp_type[] = {
   { 0,  "UNDEFINED - 0" },
   { 1,  "MODP" },
   { 2,  "ECP" },
@@ -1121,9 +1125,13 @@ static const value_string transform_ike2_esn_type[] = {
 /* Transform IKE2 Type */
 #define IKE2_ATTR_KEY_LENGTH            14
 
-static const value_string transform_ike2_attr_type[] = {
-  { IKE2_ATTR_KEY_LENGTH,               "Key-Length" },
-  { 0,  NULL },
+static const range_string transform_ike2_attr_type[] = {
+  { 0,13,        "Reserved" },
+  { 14,14,       "Key Length" },
+  { 15,17,       "Reserved" },
+  { 18,16383,    "Unassigned (Future use)" },
+  { 16384,32767, "Private use" },
+  { 0,0,         NULL },
 };
 
 static const range_string cert_v1_type[] = {
@@ -1562,13 +1570,15 @@ static const true_false_string flag_r = {
 #define ROHC_ICV_LEN            4
 #define ROHC_MRRU               5
 
-static const value_string rohc_attr_type[] = {
-  { ROHC_MAX_CID,       "Maximum Context Identifier (MAX_CID)" },
-  { ROHC_PROFILE,       "ROHC Profile (ROHC_PROFILE)" },
-  { ROHC_INTEG,         "ROHC Integrity Algorithm (ROHC_INTEG)" },
-  { ROHC_ICV_LEN,       "ROHC ICV Length in bytes (ROHC_ICV_LEN)" },
-  { ROHC_MRRU,          "Maximum Reconstructed Reception Unit (MRRU)" },
-  { 0,  NULL },
+static const range_string rohc_attr_type[] = {
+  { 1,1,         "Maximum Context Identifier (MAX_CID)" },
+  { 2,2,         "ROHC Profile (ROHC_PROFILE)" },
+  { 3,3,         "ROHC Integrity Algorithm (ROHC_INTEG)" },
+  { 4,4,         "ROHC ICV Length in bytes (ROHC_ICV_LEN)" },
+  { 5,5,         "Maximum Reconstructed Reception Unit (MRRU)" },
+  { 6,16383,     "Unassigned (Future use)" },
+  { 16384,32767, "Private use" },
+  { 0,0,         NULL },
 };
 
 #define ISAKMP_HDR_SIZE ((int)sizeof(struct isakmp_hdr) + (2 * COOKIE_SIZE))
@@ -3413,44 +3423,79 @@ dissect_proposal(tvbuff_t *tvb, packet_info *pinfo, int offset, int length, prot
   }
 }
 
+/** Dissect an attribute header, which is common to all attributes.
+ *
+ * @param [in]  tvb             The tv buffer of the current data.
+ * @param [in]  tree            The tree to append the attribute subtree to.
+ * @param [in]  offset          The start of the data in tvb.
+ * @param [in]  hf_attr         A struct of indices pointing to attribute header field descriptions.
+ * @param [in]  attr_typenames  The table for translation of the attribute type id to a name.
+ * @param [out] headerlen       The length of the attribute header, excluding the value.
+ * @param [out] value_len       The length of the attribute value.
+ * @param [out] attr_type       The attribute type, as read from the attribute header.
+ * @param [out] attr_item       The root item created for this attribute.
+ * @param [out] subtree         The subtree created for this attribute.
+ */
+static void
+dissect_attribute_header(tvbuff_t *tvb, proto_tree *tree, int offset,
+                         attribute_common_fields hf_attr, const range_string *attr_typenames,
+                         guint *headerlen, guint *value_len, guint *attr_type,
+                         proto_item **attr_item, proto_tree **subtree)
+{
+  guint attr_type_format;
+  gboolean has_len;
+  const gchar *attr_typename;
+
+  attr_type_format = tvb_get_ntohs(tvb, offset);
+  has_len = !(attr_type_format & 0x8000);
+  *attr_type = attr_type_format & 0x7fff;
+
+  if (has_len) {
+    /* Type/Length/Value format */
+    *headerlen = 4;
+    *value_len = tvb_get_ntohs(tvb, offset + 2);
+  } else {
+    /* Type/Value format */
+    *headerlen = 2;
+    *value_len = 2;
+  }
+
+  *attr_item = proto_tree_add_item(tree, hf_attr.all, tvb, offset, *headerlen + *value_len, ENC_NA);
+  attr_typename = rval_to_str(*attr_type, attr_typenames, "Unknown Attribute Type (%02d)");
+  proto_item_append_text(*attr_item, " (t=%d,l=%d): %s", *attr_type, *value_len, attr_typename);
+
+  *subtree = proto_item_add_subtree(*attr_item, ett_isakmp_attr);
+  proto_tree_add_item(*subtree, hf_attr.format, tvb, offset, 2, ENC_BIG_ENDIAN);
+  proto_tree_add_uint(*subtree, hf_attr.type, tvb, offset, 2, *attr_type);
+
+  if (has_len)
+    proto_tree_add_item(*subtree, hf_attr.length, tvb, offset + 2, 2, ENC_BIG_ENDIAN);
+
+  if (*value_len > 0)
+    proto_tree_add_item(*subtree, hf_attr.value, tvb, offset + *headerlen, *value_len, ENC_NA);
+}
+
 /* Returns the number of bytes consumed by this option. */
 static int
-dissect_rohc_supported(tvbuff_t *tvb, packet_info *pinfo, proto_tree *rohc_tree, int offset )
+dissect_rohc_supported(tvbuff_t *tvb, packet_info *pinfo, proto_tree *rohc_tree, int offset)
 {
-  guint optlen, rohc, len = 0;
+  guint headerlen, optlen, rohc;
   proto_item *rohc_item;
   proto_tree *sub_rohc_tree;
 
-  rohc = tvb_get_ntohs(tvb, offset);
-  optlen = tvb_get_ntohs(tvb, offset+2);
-  len = 2;
+  dissect_attribute_header(tvb, rohc_tree, offset,
+                           hf_isakmp_notify_data_rohc_attr, rohc_attr_type,
+                           &headerlen, &optlen, &rohc,
+                           &rohc_item, &sub_rohc_tree);
 
-  /* is TV ? (Type/Value) ? */
-  if (rohc & 0x8000) {
-    rohc = rohc & 0x7fff;
-    len = 0;
-    optlen = 2;
-  }
+  offset += headerlen;
 
-
-  rohc_item = proto_tree_add_item(rohc_tree, hf_isakmp_notify_data_rohc_attr, tvb, offset, 2+len+optlen, ENC_NA);
-  proto_item_append_text(rohc_item," (t=%d,l=%d) %s",rohc, optlen, val_to_str(rohc, rohc_attr_type, "Unknown Attribute Type (%02d)") );
-  sub_rohc_tree = proto_item_add_subtree(rohc_item, ett_isakmp_rohc_attr);
-  proto_tree_add_item(sub_rohc_tree, hf_isakmp_notify_data_rohc_attr_format, tvb, offset, 2, ENC_BIG_ENDIAN);
-  proto_tree_add_uint(sub_rohc_tree, hf_isakmp_notify_data_rohc_attr_type, tvb, offset, 2, rohc);
-
-  offset += 2;
-  if (len)
-  {
-     proto_tree_add_item(sub_rohc_tree, hf_isakmp_notify_data_rohc_attr_length, tvb, offset, 2, ENC_BIG_ENDIAN);
-     offset += 2;
-  }
   if (optlen == 0)
   {
     expert_add_info(pinfo, rohc_item, &ei_isakmp_attribute_value_empty);
-    return 2+len;
+    return headerlen;
   }
-  proto_tree_add_item(sub_rohc_tree, hf_isakmp_notify_data_rohc_attr_value, tvb, offset, optlen, ENC_NA);
+
   switch(rohc) {
     case ROHC_MAX_CID:
       proto_tree_add_item(sub_rohc_tree, hf_isakmp_notify_data_rohc_attr_max_cid, tvb, offset, optlen, ENC_BIG_ENDIAN);
@@ -3473,7 +3518,7 @@ dissect_rohc_supported(tvbuff_t *tvb, packet_info *pinfo, proto_tree *rohc_tree,
       break;
   }
 
-  return 2+len+optlen;
+  return headerlen + optlen;
 }
 
 /* Dissect life duration, which is variable-length.  Note that this function
@@ -3560,185 +3605,185 @@ dissect_life_duration(tvbuff_t *tvb, proto_tree *tree, proto_item *ti, int hf_ui
 
 /* Returns the number of bytes consumed by this option. */
 static int
-dissect_transform_attribute(tvbuff_t *tvb, packet_info *pinfo, proto_tree *transform_attr_type_tree, int offset )
+dissect_ipsec_attribute(tvbuff_t *tvb, packet_info *pinfo, proto_tree *transform_attr_type_tree, int offset)
 {
-  guint optlen, transform_attr_type, len = 0;
+  guint headerlen, optlen, transform_attr_type;
   proto_item *transform_attr_type_item;
   proto_tree *sub_transform_attr_type_tree;
 
-  transform_attr_type = tvb_get_ntohs(tvb, offset);
-  optlen = tvb_get_ntohs(tvb, offset+2);
-  len = 2;
+  dissect_attribute_header(tvb, transform_attr_type_tree, offset,
+                           hf_isakmp_ipsec_attr, ipsec_attr_type,
+                           &headerlen, &optlen, &transform_attr_type,
+                           &transform_attr_type_item, &sub_transform_attr_type_tree);
 
-  /* is TV ? (Type/Value) ? */
-  if (transform_attr_type & 0x8000) {
-    transform_attr_type = transform_attr_type & 0x7fff;
-    len = 0;
-    optlen = 2;
-  }
+  offset += headerlen;
 
-
-  transform_attr_type_item = proto_tree_add_item(transform_attr_type_tree, hf_isakmp_tf_attr, tvb, offset, 2+len+optlen, ENC_NA);
-  proto_item_append_text(transform_attr_type_item, " (t=%d,l=%d) %s",transform_attr_type, optlen, val_to_str(transform_attr_type, transform_isakmp_attr_type, "Unknown Attribute Type (%02d)") );
-  sub_transform_attr_type_tree = proto_item_add_subtree(transform_attr_type_item, ett_isakmp_tf_attr);
-  proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_tf_attr_format, tvb, offset, 2, ENC_BIG_ENDIAN);
-  proto_tree_add_uint(sub_transform_attr_type_tree, hf_isakmp_tf_attr_type_v1, tvb, offset, 2, transform_attr_type);
-
-  offset += 2;
-  if (len)
-  {
-    proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_tf_attr_length, tvb, offset, 2, ENC_BIG_ENDIAN);
-    offset += 2;
-  }
   if (optlen == 0)
   {
     expert_add_info(pinfo, transform_attr_type_item, &ei_isakmp_attribute_value_empty);
-    return 2+len;
+    return headerlen;
   }
-  proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_tf_attr_value, tvb, offset, optlen, ENC_NA);
 
   switch(transform_attr_type) {
-    case ISAKMP_ATTR_LIFE_TYPE:
-      proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_tf_attr_life_type, tvb, offset, optlen, ENC_BIG_ENDIAN);
-      proto_item_append_text(transform_attr_type_item," : %s", val_to_str(tvb_get_ntohs(tvb, offset), transform_attr_sa_life_type, "Unknown %d"));
+    case IPSEC_ATTR_LIFE_TYPE:
+      proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_ipsec_attr_life_type, tvb, offset, optlen, ENC_BIG_ENDIAN);
+      proto_item_append_text(transform_attr_type_item," : %s", val_to_str(tvb_get_ntohs(tvb, offset), attr_life_type, "Unknown %d"));
       break;
-    case ISAKMP_ATTR_LIFE_DURATION:
-      dissect_life_duration(tvb, sub_transform_attr_type_tree, transform_attr_type_item, hf_isakmp_tf_attr_life_duration_uint32, hf_isakmp_tf_attr_life_duration_uint64, hf_isakmp_tf_attr_life_duration_bytes , offset, optlen);
+    case IPSEC_ATTR_LIFE_DURATION:
+      dissect_life_duration(tvb, sub_transform_attr_type_tree, transform_attr_type_item, hf_isakmp_ipsec_attr_life_duration_uint32, hf_isakmp_ipsec_attr_life_duration_uint64, hf_isakmp_ipsec_attr_life_duration_bytes , offset, optlen);
       break;
-    case ISAKMP_ATTR_GROUP_DESC:
-      proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_tf_attr_group_description, tvb, offset, optlen, ENC_BIG_ENDIAN);
-      proto_item_append_text(transform_attr_type_item," : %s", val_to_str(tvb_get_ntohs(tvb, offset), transform_dh_group_type, "Unknown %d"));
+    case IPSEC_ATTR_GROUP_DESC:
+      proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_ipsec_attr_group_description, tvb, offset, optlen, ENC_BIG_ENDIAN);
+      proto_item_append_text(transform_attr_type_item," : %s", val_to_str(tvb_get_ntohs(tvb, offset), dh_group, "Unknown %d"));
       break;
-    case ISAKMP_ATTR_ENCAP_MODE:
-      proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_tf_attr_encap_mode, tvb, offset, optlen, ENC_BIG_ENDIAN);
-      proto_item_append_text(transform_attr_type_item," : %s", val_to_str(tvb_get_ntohs(tvb, offset), transform_attr_encap_type, "Unknown %d"));
+    case IPSEC_ATTR_ENCAP_MODE:
+      proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_ipsec_attr_encap_mode, tvb, offset, optlen, ENC_BIG_ENDIAN);
+      proto_item_append_text(transform_attr_type_item," : %s", val_to_str(tvb_get_ntohs(tvb, offset), ipsec_attr_encap_mode, "Unknown %d"));
       break;
-    case ISAKMP_ATTR_AUTH_ALGORITHM:
-      proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_tf_attr_auth_algorithm, tvb, offset, optlen, ENC_BIG_ENDIAN);
-      proto_item_append_text(transform_attr_type_item," : %s", val_to_str(tvb_get_ntohs(tvb, offset), transform_attr_auth_type, "Unknown %d"));
+    case IPSEC_ATTR_AUTH_ALGORITHM:
+      proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_ipsec_attr_auth_algorithm, tvb, offset, optlen, ENC_BIG_ENDIAN);
+      proto_item_append_text(transform_attr_type_item," : %s", val_to_str(tvb_get_ntohs(tvb, offset), ipsec_attr_auth_algo, "Unknown %d"));
       break;
-    case ISAKMP_ATTR_KEY_LENGTH:
-      proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_tf_attr_key_length, tvb, offset, optlen, ENC_BIG_ENDIAN);
+    case IPSEC_ATTR_KEY_LENGTH:
+      proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_ipsec_attr_key_length, tvb, offset, optlen, ENC_BIG_ENDIAN);
       proto_item_append_text(transform_attr_type_item," : %d", tvb_get_ntohs(tvb, offset));
       break;
-    case ISAKMP_ATTR_KEY_ROUNDS:
-      proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_tf_attr_key_rounds, tvb, offset, optlen, ENC_BIG_ENDIAN);
+    case IPSEC_ATTR_KEY_ROUNDS:
+      proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_ipsec_attr_key_rounds, tvb, offset, optlen, ENC_BIG_ENDIAN);
       proto_item_append_text(transform_attr_type_item," : %d", tvb_get_ntohs(tvb, offset));
       break;
-    case ISAKMP_ATTR_CMPR_DICT_SIZE:
-      proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_tf_attr_cmpr_dict_size, tvb, offset, optlen, ENC_BIG_ENDIAN);
+    case IPSEC_ATTR_CMPR_DICT_SIZE:
+      proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_ipsec_attr_cmpr_dict_size, tvb, offset, optlen, ENC_BIG_ENDIAN);
       break;
-    case ISAKMP_ATTR_CMPR_ALGORITHM:
-      proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_tf_attr_cmpr_algorithm, tvb, offset, optlen, ENC_NA);
+    case IPSEC_ATTR_CMPR_ALGORITHM:
+      proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_ipsec_attr_cmpr_algorithm, tvb, offset, optlen, ENC_NA);
       break;
-    case ISAKMP_ATTR_ECN_TUNNEL:
-      proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_tf_attr_ecn_tunnel, tvb, offset, optlen, ENC_BIG_ENDIAN);
-      proto_item_append_text(transform_attr_type_item," : %s", val_to_str(tvb_get_ntohs(tvb, offset), transform_attr_ecn_type, "Unknown %d"));
+    case IPSEC_ATTR_ECN_TUNNEL:
+      proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_ipsec_attr_ecn_tunnel, tvb, offset, optlen, ENC_BIG_ENDIAN);
+      proto_item_append_text(transform_attr_type_item," : %s", val_to_str(tvb_get_ntohs(tvb, offset), ipsec_attr_ecn_tunnel, "Unknown %d"));
       break;
-    case ISAKMP_ATTR_EXT_SEQ_NBR:
-      proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_tf_attr_ext_seq_nbr, tvb, offset, optlen, ENC_BIG_ENDIAN);
-      proto_item_append_text(transform_attr_type_item," : %s", val_to_str(tvb_get_ntohs(tvb, offset), transform_attr_ext_seq_nbr_type, "Unknown %d"));
+    case IPSEC_ATTR_EXT_SEQ_NBR:
+      proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_ipsec_attr_ext_seq_nbr, tvb, offset, optlen, ENC_BIG_ENDIAN);
+      proto_item_append_text(transform_attr_type_item," : %s", val_to_str(tvb_get_ntohs(tvb, offset), ipsec_attr_ext_seq_nbr, "Unknown %d"));
       break;
-    case ISAKMP_ATTR_AUTH_KEY_LENGTH:
-      proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_tf_attr_auth_key_length, tvb, offset, optlen, ENC_BIG_ENDIAN);
+    case IPSEC_ATTR_AUTH_KEY_LENGTH:
+      proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_ipsec_attr_auth_key_length, tvb, offset, optlen, ENC_BIG_ENDIAN);
       proto_item_append_text(transform_attr_type_item," : %d", tvb_get_ntohs(tvb, offset));
       break;
-    case ISAKMP_ATTR_SIG_ENCO_ALGORITHM:
-      proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_tf_attr_sig_enco_algorithm, tvb, offset, optlen, ENC_NA);
+    case IPSEC_ATTR_SIG_ENCO_ALGORITHM:
+      proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_ipsec_attr_sig_enco_algorithm, tvb, offset, optlen, ENC_NA);
       break;
 
-    case ISAKMP_ATTR_ADDR_PRESERVATION:
-      proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_tf_attr_addr_preservation, tvb, offset, optlen, ENC_BIG_ENDIAN);
-      proto_item_append_text(transform_attr_type_item," : %s", val_to_str(tvb_get_ntohs(tvb, offset), transform_attr_addr_preservation_type, "Unknown %d"));
+    case IPSEC_ATTR_ADDR_PRESERVATION:
+      proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_ipsec_attr_addr_preservation, tvb, offset, optlen, ENC_BIG_ENDIAN);
+      proto_item_append_text(transform_attr_type_item," : %s", val_to_str(tvb_get_ntohs(tvb, offset), ipsec_attr_addr_preservation, "Unknown %d"));
       break;
 
-    case ISAKMP_ATTR_SA_DIRECTION:
-      proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_tf_attr_sa_direction, tvb, offset, optlen, ENC_BIG_ENDIAN);
-      proto_item_append_text(transform_attr_type_item," : %s", val_to_str(tvb_get_ntohs(tvb, offset), transform_attr_sa_direction_type, "Unknown %d"));
+    case IPSEC_ATTR_SA_DIRECTION:
+      proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_ipsec_attr_sa_direction, tvb, offset, optlen, ENC_BIG_ENDIAN);
+      proto_item_append_text(transform_attr_type_item," : %s", val_to_str(tvb_get_ntohs(tvb, offset), ipsec_attr_sa_direction, "Unknown %d"));
     default:
       /* No Default Action */
       break;
   }
 
-  return 2+len+optlen;
+  return headerlen + optlen;
 }
-
 
 /* Returns the number of bytes consumed by this option. */
 static int
-dissect_transform_ike_attribute(tvbuff_t *tvb, packet_info *pinfo, proto_tree *transform_attr_type_tree, int offset
+dissect_resp_lifetime_ipsec_attribute(tvbuff_t *tvb, packet_info *pinfo, proto_tree *transform_attr_type_tree, int offset)
+{
+  guint headerlen, optlen, transform_attr_type;
+  proto_item *transform_attr_type_item;
+  proto_tree *sub_transform_attr_type_tree;
+
+  dissect_attribute_header(tvb, transform_attr_type_tree, offset,
+                           hf_isakmp_resp_lifetime_ipsec_attr, ipsec_attr_type,
+                           &headerlen, &optlen, &transform_attr_type,
+                           &transform_attr_type_item, &sub_transform_attr_type_tree);
+
+  offset += headerlen;
+
+  if (optlen == 0)
+  {
+    expert_add_info(pinfo, transform_attr_type_item, &ei_isakmp_attribute_value_empty);
+    return headerlen;
+  }
+
+  switch(transform_attr_type) {
+    case IPSEC_ATTR_LIFE_TYPE:
+      proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_resp_lifetime_ipsec_attr_life_type, tvb, offset, optlen, ENC_BIG_ENDIAN);
+      proto_item_append_text(transform_attr_type_item," : %s", val_to_str(tvb_get_ntohs(tvb, offset), attr_life_type, "Unknown %d"));
+      break;
+    case IPSEC_ATTR_LIFE_DURATION:
+      dissect_life_duration(tvb, sub_transform_attr_type_tree, transform_attr_type_item, hf_isakmp_resp_lifetime_ipsec_attr_life_duration_uint32, hf_isakmp_resp_lifetime_ipsec_attr_life_duration_uint64, hf_isakmp_resp_lifetime_ipsec_attr_life_duration_bytes, offset, optlen);
+      break;
+    default:
+      /* No Default Action */
+      break;
+  }
+
+  return headerlen + optlen;
+}
+
+/* Returns the number of bytes consumed by this option. */
+static int
+dissect_ike_attribute(tvbuff_t *tvb, packet_info *pinfo, proto_tree *transform_attr_type_tree, int offset
                                                                                                 #ifdef HAVE_LIBGCRYPT
                                                                                                 , decrypt_data_t *decr
                                                                                                 #endif
 )
 {
-  guint optlen, transform_attr_type, len = 0;
+  guint headerlen, optlen, transform_attr_type;
   proto_item *transform_attr_type_item;
   proto_tree *sub_transform_attr_type_tree;
 
-  transform_attr_type = tvb_get_ntohs(tvb, offset);
-  optlen = tvb_get_ntohs(tvb, offset+2);
-  len = 2;
+  dissect_attribute_header(tvb, transform_attr_type_tree, offset,
+                           hf_isakmp_ike_attr, ike_attr_type,
+                           &headerlen, &optlen, &transform_attr_type,
+                           &transform_attr_type_item, &sub_transform_attr_type_tree);
 
-  /* is TV ? (Type/Value) ? */
-  if (transform_attr_type & 0x8000) {
-    transform_attr_type = transform_attr_type & 0x7fff;
-    len = 0;
-    optlen = 2;
-  }
+  offset += headerlen;
 
-
-  transform_attr_type_item = proto_tree_add_item(transform_attr_type_tree, hf_isakmp_ike_attr, tvb, offset, 2+len+optlen, ENC_NA);
-  proto_item_append_text(transform_attr_type_item," (t=%d,l=%d) %s",transform_attr_type, optlen, val_to_str(transform_attr_type,transform_ike_attr_type,"Unknown Attribute Type (%02d)") );
-  sub_transform_attr_type_tree = proto_item_add_subtree(transform_attr_type_item, ett_isakmp_tf_ike_attr);
-  proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_ike_attr_format, tvb, offset, 2, ENC_BIG_ENDIAN);
-  proto_tree_add_uint(sub_transform_attr_type_tree, hf_isakmp_ike_attr_type, tvb, offset, 2, transform_attr_type);
-
-  offset += 2;
-  if (len)
-  {
-    proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_ike_attr_length, tvb, offset, 2, ENC_BIG_ENDIAN);
-    offset += 2;
-  }
   if (optlen == 0)
   {
     expert_add_info(pinfo, transform_attr_type_item, &ei_isakmp_attribute_value_empty);
-    return 2+len;
+    return headerlen;
   }
-  proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_ike_attr_value, tvb, offset, optlen, ENC_NA);
 
   switch(transform_attr_type) {
     case IKE_ATTR_ENCRYPTION_ALGORITHM:
       proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_ike_attr_encryption_algorithm, tvb, offset, optlen, ENC_BIG_ENDIAN);
-      proto_item_append_text(transform_attr_type_item," : %s", val_to_str(tvb_get_ntohs(tvb, offset), transform_attr_enc_type, "Unknown %d"));
+      proto_item_append_text(transform_attr_type_item," : %s", val_to_str(tvb_get_ntohs(tvb, offset), ike_attr_enc_algo, "Unknown %d"));
 #ifdef HAVE_LIBGCRYPT
       decr->ike_encr_alg = tvb_get_ntohs(tvb, offset);
 #endif
       break;
     case IKE_ATTR_HASH_ALGORITHM:
       proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_ike_attr_hash_algorithm, tvb, offset, optlen, ENC_BIG_ENDIAN);
-      proto_item_append_text(transform_attr_type_item," : %s", val_to_str(tvb_get_ntohs(tvb, offset), transform_attr_hash_type, "Unknown %d"));
+      proto_item_append_text(transform_attr_type_item," : %s", val_to_str(tvb_get_ntohs(tvb, offset), ike_attr_hash_algo, "Unknown %d"));
 #ifdef HAVE_LIBGCRYPT
       decr->ike_hash_alg = tvb_get_ntohs(tvb, offset);
 #endif
       break;
     case IKE_ATTR_AUTHENTICATION_METHOD:
       proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_ike_attr_authentication_method, tvb, offset, optlen, ENC_BIG_ENDIAN);
-      proto_item_append_text(transform_attr_type_item," : %s", val_to_str(tvb_get_ntohs(tvb, offset), transform_attr_authmeth_type, "Unknown %d"));
+      proto_item_append_text(transform_attr_type_item," : %s", val_to_str(tvb_get_ntohs(tvb, offset), ike_attr_authmeth, "Unknown %d"));
 #ifdef HAVE_LIBGCRYPT
       decr->is_psk = tvb_get_ntohs(tvb, offset) == 0x01 ? TRUE : FALSE;
 #endif
       break;
     case IKE_ATTR_GROUP_DESCRIPTION:
       proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_ike_attr_group_description, tvb, offset, optlen, ENC_BIG_ENDIAN);
-      proto_item_append_text(transform_attr_type_item," : %s", val_to_str(tvb_get_ntohs(tvb, offset), transform_dh_group_type, "Unknown %d"));
+      proto_item_append_text(transform_attr_type_item," : %s", val_to_str(tvb_get_ntohs(tvb, offset), dh_group, "Unknown %d"));
 #ifdef HAVE_LIBGCRYPT
       decr->group = tvb_get_ntohs(tvb, offset);
 #endif
       break;
     case IKE_ATTR_GROUP_TYPE:
       proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_ike_attr_group_type, tvb, offset, optlen, ENC_BIG_ENDIAN);
-      proto_item_append_text(transform_attr_type_item," : %s", val_to_str(tvb_get_ntohs(tvb, offset), transform_attr_grp_type, "Unknown %d"));
+      proto_item_append_text(transform_attr_type_item," : %s", val_to_str(tvb_get_ntohs(tvb, offset), ike_attr_grp_type, "Unknown %d"));
       break;
     case IKE_ATTR_GROUP_PRIME:
       proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_ike_attr_group_prime, tvb, offset, optlen, ENC_NA);
@@ -3757,7 +3802,7 @@ dissect_transform_ike_attribute(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
       break;
     case IKE_ATTR_LIFE_TYPE:
       proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_ike_attr_life_type, tvb, offset, optlen, ENC_BIG_ENDIAN);
-      proto_item_append_text(transform_attr_type_item," : %s", val_to_str(tvb_get_ntohs(tvb, offset), transform_attr_sa_life_type, "Unknown %d"));
+      proto_item_append_text(transform_attr_type_item," : %s", val_to_str(tvb_get_ntohs(tvb, offset), attr_life_type, "Unknown %d"));
       break;
     case IKE_ATTR_LIFE_DURATION:
       dissect_life_duration(tvb, sub_transform_attr_type_tree, transform_attr_type_item, hf_isakmp_ike_attr_life_duration_uint32, hf_isakmp_ike_attr_life_duration_uint64, hf_isakmp_ike_attr_life_duration_bytes, offset, optlen);
@@ -3783,45 +3828,67 @@ dissect_transform_ike_attribute(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
       break;
   }
 
-  return 2+len+optlen;
+  return headerlen + optlen;
 }
+
 /* Returns the number of bytes consumed by this option. */
 static int
-dissect_transform_ike2_attribute(tvbuff_t *tvb, packet_info *pinfo, proto_tree *transform_attr_type_tree, int offset )
+dissect_resp_lifetime_ike_attribute(tvbuff_t *tvb, packet_info *pinfo, proto_tree *transform_attr_type_tree, int offset)
 {
-  guint optlen, transform_attr_type, len = 0;
+  guint headerlen, optlen, transform_attr_type;
   proto_item *transform_attr_type_item;
   proto_tree *sub_transform_attr_type_tree;
 
-  transform_attr_type = tvb_get_ntohs(tvb, offset);
-  optlen = tvb_get_ntohs(tvb, offset+2);
-  len = 2;
+  dissect_attribute_header(tvb, transform_attr_type_tree, offset,
+                           hf_isakmp_resp_lifetime_ike_attr, ike_attr_type,
+                           &headerlen, &optlen, &transform_attr_type,
+                           &transform_attr_type_item, &sub_transform_attr_type_tree);
 
-  /* is TV ? (Type/Value) ? */
-  if (transform_attr_type & 0x8000) {
-    transform_attr_type = transform_attr_type & 0x7fff;
-    len = 0;
-    optlen = 2;
-  }
+  offset += headerlen;
 
-  transform_attr_type_item = proto_tree_add_item(transform_attr_type_tree, hf_isakmp_ike2_attr, tvb, offset, 2+len+optlen, ENC_NA);
-  proto_item_append_text(transform_attr_type_item," (t=%d,l=%d) %s",transform_attr_type, optlen, val_to_str(transform_attr_type,transform_ike2_attr_type,"Unknown Attribute Type (%02d)") );
-  sub_transform_attr_type_tree = proto_item_add_subtree(transform_attr_type_item, ett_isakmp_tf_ike2_attr);
-  proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_ike2_attr_format, tvb, offset, 2, ENC_BIG_ENDIAN);
-  proto_tree_add_uint(sub_transform_attr_type_tree, hf_isakmp_ike2_attr_type, tvb, offset, 2, transform_attr_type);
-
-  offset += 2;
-  if (len)
-  {
-    proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_ike2_attr_length, tvb, offset, 2, ENC_BIG_ENDIAN);
-    offset += 2;
-  }
   if (optlen == 0)
   {
     expert_add_info(pinfo, transform_attr_type_item, &ei_isakmp_attribute_value_empty);
-    return 2+len;
+    return headerlen;
   }
-  proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_ike2_attr_value, tvb, offset, optlen, ENC_NA);
+
+  switch(transform_attr_type) {
+    case IKE_ATTR_LIFE_TYPE:
+      proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_resp_lifetime_ike_attr_life_type, tvb, offset, optlen, ENC_BIG_ENDIAN);
+      proto_item_append_text(transform_attr_type_item," : %s", val_to_str(tvb_get_ntohs(tvb, offset), attr_life_type, "Unknown %d"));
+      break;
+    case IKE_ATTR_LIFE_DURATION:
+      dissect_life_duration(tvb, sub_transform_attr_type_tree, transform_attr_type_item, hf_isakmp_resp_lifetime_ike_attr_life_duration_uint32, hf_isakmp_resp_lifetime_ike_attr_life_duration_uint64, hf_isakmp_resp_lifetime_ike_attr_life_duration_bytes, offset, optlen);
+      break;
+    default:
+      /* No Default Action */
+      break;
+  }
+
+  return headerlen + optlen;
+}
+
+/* Returns the number of bytes consumed by this option. */
+static int
+dissect_transform_ike2_attribute(tvbuff_t *tvb, packet_info *pinfo, proto_tree *transform_attr_type_tree, int offset)
+{
+  guint headerlen, optlen, transform_attr_type;
+  proto_item *transform_attr_type_item;
+  proto_tree *sub_transform_attr_type_tree;
+
+  dissect_attribute_header(tvb, transform_attr_type_tree, offset,
+                           hf_isakmp_ike2_attr, transform_ike2_attr_type,
+                           &headerlen, &optlen, &transform_attr_type,
+                           &transform_attr_type_item, &sub_transform_attr_type_tree);
+
+  offset += headerlen;
+
+  if (optlen == 0)
+  {
+    expert_add_info(pinfo, transform_attr_type_item, &ei_isakmp_attribute_value_empty);
+    return headerlen;
+  }
+
   switch(transform_attr_type) {
     case IKE2_ATTR_KEY_LENGTH:
       proto_tree_add_item(sub_transform_attr_type_tree, hf_isakmp_ike2_attr_key_length, tvb, offset, optlen, ENC_BIG_ENDIAN);
@@ -3832,8 +3899,9 @@ dissect_transform_ike2_attribute(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
       break;
   }
 
-  return 2+len+optlen;
+  return headerlen + optlen;
 }
+
 static void
 dissect_transform(tvbuff_t *tvb, packet_info *pinfo, int offset, int length, proto_tree *tree, int isakmp_version, int protocol_id, void* decr_data
 #ifndef HAVE_LIBGCRYPT
@@ -3895,16 +3963,16 @@ dissect_transform(tvbuff_t *tvb, packet_info *pinfo, int offset, int length, pro
       decr->ike_hash_alg = 0;
 #endif
        while (offset < offset_end) {
-         offset += dissect_transform_ike_attribute(tvb, pinfo, tree, offset
+         offset += dissect_ike_attribute(tvb, pinfo, tree, offset
 #ifdef HAVE_LIBGCRYPT
-                                                   , decr
+                                         , decr
 #endif
          );
        }
     }
     else {
        while (offset < offset_end) {
-         offset += dissect_transform_attribute(tvb, pinfo, tree, offset);
+         offset += dissect_ipsec_attribute(tvb, pinfo, tree, offset);
        }
     }
   }
@@ -4148,6 +4216,9 @@ dissect_certreq(tvbuff_t *tvb, int offset, int length, proto_tree *tree, int isa
 
   if (isakmp_version == 1)
   {
+    if (length == 0)
+      return;
+
     switch(cert_type){
       case 4:
         dissect_x509if_Name(FALSE, tvb, offset, &asn1_ctx, tree, hf_isakmp_certreq_authority_sig);
@@ -4427,17 +4498,23 @@ dissect_ikev2_fragmentation(tvbuff_t *tvb, int offset, proto_tree *tree,
 static void
 dissect_notif(tvbuff_t *tvb, packet_info *pinfo, int offset, int length, proto_tree *tree, int isakmp_version)
 {
+  guint32               doi = 0;
+  guint8                protocol_id;
   guint8                spi_size;
   guint16               msgtype;
+  proto_item            *data_item;
+  proto_tree            *data_tree;
   int                   offset_end = 0;
   offset_end = offset + length;
 
   if (isakmp_version == 1) {
+    doi = tvb_get_ntohl(tvb, offset);
     proto_tree_add_item(tree, hf_isakmp_notify_doi, tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
     length -= 4;
   }
 
+  protocol_id = tvb_get_guint8(tvb, offset);
   if (isakmp_version == 1)
   {
      proto_tree_add_item(tree, hf_isakmp_notify_protoid_v1, tvb, offset, 1, ENC_BIG_ENDIAN);
@@ -4477,11 +4554,25 @@ dissect_notif(tvbuff_t *tvb, packet_info *pinfo, int offset, int length, proto_t
 
   /* Notification Data */
 
-  proto_tree_add_item(tree, hf_isakmp_notify_data, tvb, offset, length, ENC_NA);
+  data_item = proto_tree_add_item(tree, hf_isakmp_notify_data, tvb, offset, length, ENC_NA);
+  data_tree = proto_item_add_subtree(data_item, ett_isakmp_notify_data);
 
   if (isakmp_version == 1)
   {
     switch (msgtype) {
+      case 24576: /* RESPONDER LIFETIME */
+        if (protocol_id == 1) {
+          /* Phase 1 */
+          while (offset < offset_end) {
+            offset += dissect_resp_lifetime_ike_attribute(tvb, pinfo, data_tree, offset);
+          }
+        } else if (protocol_id > 1 && doi == 1) {
+          /* Phase 2, IPsec DOI */
+          while (offset < offset_end) {
+            offset += dissect_resp_lifetime_ipsec_attribute(tvb, pinfo, data_tree, offset);
+          }
+        }
+        break;
       case 36136: /* DPD ARE YOU THERE */
         proto_tree_add_item(tree, hf_isakmp_notify_data_dpd_are_you_there, tvb, offset, length, ENC_BIG_ENDIAN);
         break;
@@ -4679,52 +4770,45 @@ dissect_vid(tvbuff_t *tvb, int offset, int length, proto_tree *tree)
   }
   return offset;
 }
+
 /* Returns the number of bytes consumed by this option. */
 static int
 dissect_config_attribute(tvbuff_t *tvb, packet_info *pinfo, proto_tree *cfg_attr_type_tree, int offset, int isakmp_version, gboolean is_request)
 {
-  guint optlen, cfg_attr_type, len = 0;
-  proto_item *cfg_attr_type_item = NULL;
-  proto_tree *sub_cfg_attr_type_tree = NULL;
+  const range_string *vs_cfgattr;
+  guint headerlen, optlen, cfg_attr_type;
+  proto_item *cfg_attr_type_item;
+  proto_tree *sub_cfg_attr_type_tree;
   guint i;
   const guint8* str;
 
-  cfg_attr_type = tvb_get_ntohs(tvb, offset);
-  optlen = tvb_get_ntohs(tvb, offset+2);
-  len = 2;
-
-  /* No Length ? */
-  if (cfg_attr_type & 0x8000) {
-    cfg_attr_type = cfg_attr_type & 0x7fff;
-    len = 0;
-    optlen = 2;
-  }
-
   if (isakmp_version == 1) {
-     cfg_attr_type_item = proto_tree_add_none_format(cfg_attr_type_tree, hf_isakmp_cfg_attr, tvb, offset, 2+len+optlen, "Attribute Type: (t=%d,l=%d) %s", cfg_attr_type, optlen, rval_to_str(cfg_attr_type,vs_v1_cfgattr,"Unknown Attribute Type (%02d)") );
-     sub_cfg_attr_type_tree = proto_item_add_subtree(cfg_attr_type_item, ett_isakmp_cfg_attr);
-     proto_tree_add_uint(sub_cfg_attr_type_tree, hf_isakmp_cfg_attr_type_v1, tvb, offset, 2, cfg_attr_type);
+    vs_cfgattr = vs_v1_cfgattr;
+    hf_isakmp_cfg_attr.type = hf_isakmp_cfg_attr_type_v1;
   } else if (isakmp_version == 2) {
-     cfg_attr_type_item = proto_tree_add_none_format(cfg_attr_type_tree, hf_isakmp_cfg_attr, tvb, offset, 2+len+optlen, "Attribute Type: (t=%d,l=%d) %s", cfg_attr_type, optlen, rval_to_str(cfg_attr_type,vs_v2_cfgattr,"Unknown Attribute Type (%02d)") );
-     sub_cfg_attr_type_tree = proto_item_add_subtree(cfg_attr_type_item, ett_isakmp_cfg_attr);
-     proto_tree_add_uint(sub_cfg_attr_type_tree, hf_isakmp_cfg_attr_type_v2, tvb, offset, 2, cfg_attr_type);
+    vs_cfgattr = vs_v2_cfgattr;
+    hf_isakmp_cfg_attr.type = hf_isakmp_cfg_attr_type_v2;
+  } else {
+    /* Fail gracefully in case of an unsupported isakmp_version. */
+    return 4;
   }
-  proto_tree_add_item(sub_cfg_attr_type_tree, hf_isakmp_cfg_attr_format, tvb, offset, 2, ENC_BIG_ENDIAN);
-  offset += 2;
-  if (len)
-  {
-     proto_tree_add_item(sub_cfg_attr_type_tree, hf_isakmp_cfg_attr_length, tvb, offset, 2, ENC_BIG_ENDIAN);
-     offset += 2;
-  }
+
+  dissect_attribute_header(tvb, cfg_attr_type_tree, offset,
+                           hf_isakmp_cfg_attr, vs_cfgattr,
+                           &headerlen, &optlen, &cfg_attr_type,
+                           &cfg_attr_type_item, &sub_cfg_attr_type_tree);
+
+  offset += headerlen;
+
   if (optlen == 0)
   {
-     /* Don't complain about zero length if part of a config request - values will be assigned and included in the response message */
-     if (!is_request) {
-       expert_add_info(pinfo, cfg_attr_type_item, &ei_isakmp_attribute_value_empty);
-     }
-     return 2+len;
+    /* Don't complain about zero length if part of a config request - values will be assigned and included in the response message */
+    if (!is_request) {
+      expert_add_info(pinfo, cfg_attr_type_item, &ei_isakmp_attribute_value_empty);
+    }
+    return headerlen;
   }
-  proto_tree_add_item(sub_cfg_attr_type_tree, hf_isakmp_cfg_attr_value, tvb, offset, optlen, ENC_NA);
+
   switch (cfg_attr_type) {
     case INTERNAL_IP4_ADDRESS: /* 1 */
       if (optlen%4 == 0)
@@ -4946,7 +5030,7 @@ dissect_config_attribute(tvbuff_t *tvb, packet_info *pinfo, proto_tree *cfg_attr
       break;
   }
 
-  return 2+len+optlen;
+  return headerlen + optlen;
 }
 
 static void
@@ -4967,6 +5051,9 @@ dissect_config(tvbuff_t *tvb, packet_info *pinfo, int offset, int length, proto_
     proto_tree_add_item(tree, hf_isakmp_cfg_type_v2,tvb, offset, 1, ENC_BIG_ENDIAN);
     offset += 4;
 
+  } else {
+    /* Skip attribute dissection for unknown IKE versions. */
+    return;
   }
 
   while (offset < offset_end) {
@@ -5343,7 +5430,9 @@ dissect_enc(tvbuff_t *tvb,
 
         encr_iv = (guchar *)wmem_alloc0(wmem_packet_scope(), encr_iv_len);
         memcpy( encr_iv + encr_iv_offset, key_info->encr_key + encr_key_len, key_info->encr_spec->salt_len );
-        memcpy( encr_iv + encr_iv_offset + key_info->encr_spec->salt_len, iv, iv_len );
+        if(iv) {
+          memcpy( encr_iv + encr_iv_offset + key_info->encr_spec->salt_len, iv, iv_len );
+        }
         if (key_info->encr_spec->gcry_mode == GCRY_CIPHER_MODE_CTR) {
           encr_iv[encr_iv_len-1] = 1;
           /* fallback for gcrypt not having AEAD ciphers */
@@ -5767,9 +5856,9 @@ proto_register_isakmp(void)
         FT_BYTES, BASE_NONE, NULL, 0x0,
         "ISAKMP Responder SPI", HFILL }},
     { &hf_isakmp_typepayload,
-      { "Type Payload", "isakmp.typepayload",
+      { "Payload", "isakmp.typepayload",
         FT_UINT8,BASE_RANGE_STRING | BASE_DEC, RVALS(payload_type), 0x0,
-        "ISAKMP Type Payload", HFILL }},
+        "ISAKMP Payload Type", HFILL }},
     { &hf_isakmp_nextpayload,
       { "Next payload", "isakmp.nextpayload",
         FT_UINT8, BASE_RANGE_STRING | BASE_DEC, RVALS(payload_type), 0x0,
@@ -5777,7 +5866,7 @@ proto_register_isakmp(void)
     { &hf_isakmp_criticalpayload,
       { "Critical Bit", "isakmp.criticalpayload",
         FT_BOOLEAN, 8,TFS(&criticalpayload), 0x80,
-        "ISAKMP (v2) Critical Payload", HFILL }},
+        "IKEv2 Critical Payload", HFILL }},
     { &hf_isakmp_extradata,
       { "Extra data", "isakmp.extradata",
         FT_BYTES, BASE_NONE, NULL, 0x0,
@@ -5901,11 +5990,11 @@ proto_register_isakmp(void)
     { &hf_isakmp_id_type_v1,
       { "ID type", "isakmp.id.type",
         FT_UINT8, BASE_RANGE_STRING | BASE_DEC, RVALS(vs_v1_id_type), 0x0,
-        "ISAKMP (v1) ID Type", HFILL }},
+        "IKEv1 ID Type", HFILL }},
     { &hf_isakmp_id_type_v2,
       { "ID type", "isakmp.id.type",
         FT_UINT8, BASE_RANGE_STRING | BASE_DEC, RVALS(vs_v2_id_type), 0x0,
-        "ISAKMP (v2) ID Type", HFILL }},
+        "IKEv2 ID Type", HFILL }},
     { &hf_isakmp_id_protoid,
       { "Protocol ID", "isakmp.id.protoid",
         FT_UINT8, BASE_DEC|BASE_EXT_STRING, &ipproto_val_ext, 0x0,
@@ -6097,23 +6186,23 @@ proto_register_isakmp(void)
         NULL, HFILL }},
 
         /* ROHC Attributes Type */
-    { &hf_isakmp_notify_data_rohc_attr,
+    { &hf_isakmp_notify_data_rohc_attr.all,
       { "ROHC Attribute Type", "isakmp.notify.data.rohc.attr",
         FT_NONE, BASE_NONE, NULL, 0x00,
         NULL, HFILL }},
-    { &hf_isakmp_notify_data_rohc_attr_type,
+    { &hf_isakmp_notify_data_rohc_attr.type,
       { "ROHC Attribute Type", "isakmp.notify.data.rohc.attr.type",
-        FT_UINT16, BASE_DEC, VALS(rohc_attr_type), 0x00,
+        FT_UINT16, BASE_RANGE_STRING | BASE_DEC, VALS(rohc_attr_type), 0x00,
         NULL, HFILL }},
-    { &hf_isakmp_notify_data_rohc_attr_format,
+    { &hf_isakmp_notify_data_rohc_attr.format,
       { "ROHC Format", "isakmp.notify.data.rohc.attr.format",
         FT_BOOLEAN, 16, TFS(&attribute_format), 0x8000,
         NULL, HFILL }},
-    { &hf_isakmp_notify_data_rohc_attr_length,
+    { &hf_isakmp_notify_data_rohc_attr.length,
       { "Length", "isakmp.notify.data.rohc.attr.length",
         FT_UINT16, BASE_DEC, NULL, 0x00,
         NULL, HFILL }},
-    { &hf_isakmp_notify_data_rohc_attr_value,
+    { &hf_isakmp_notify_data_rohc_attr.value,
       { "Value", "isakmp.notify.data.rohc.attr.value",
         FT_BYTES, BASE_NONE, NULL, 0x00,
         NULL, HFILL }},
@@ -6298,7 +6387,7 @@ proto_register_isakmp(void)
         NULL, HFILL }},
 
     { &hf_isakmp_num_spis,
-      { "Port", "isakmp.spinum",
+      { "Number of SPIs", "isakmp.spinum",
         FT_UINT16, BASE_DEC, NULL, 0x0,
         "ISAKMP Number of SPIs", HFILL }},
     { &hf_isakmp_hash,
@@ -6395,136 +6484,176 @@ proto_register_isakmp(void)
         FT_IPv6, BASE_NONE, NULL, 0x00,
         NULL, HFILL }},
 
-        /* Transform Attributes Type */
-    { &hf_isakmp_tf_attr,
-      { "Transform Attribute Type", "isakmp.tf.attr",
+    /* IPsec SA Attributes (ISAKMP Phase 2) */
+    { &hf_isakmp_ipsec_attr.all,
+      { "IPsec Attribute", "isakmp.ipsec.attr",
         FT_NONE, BASE_NONE, NULL, 0x00,
-        "ISAKMP Transform Attribute", HFILL }},
-    { &hf_isakmp_tf_attr_type_v1,
-      { "Transform Attribute Type", "isakmp.tf.attr.type_v1",
-        FT_UINT16, BASE_DEC, VALS(transform_isakmp_attr_type), 0x00,
-        "ISAKMP (v1) Transform Attribute type", HFILL }},
-    { &hf_isakmp_tf_attr_format,
-      { "Transform Format", "isakmp.tf.attr.format",
-        FT_BOOLEAN, 16, TFS(&attribute_format), 0x8000,
-        "ISAKMP Transform Attribute Format", HFILL }},
-    { &hf_isakmp_tf_attr_length,
-      { "Length", "isakmp.tf.attr.length",
-        FT_UINT16, BASE_DEC, NULL, 0x00,
-        "ISAKMP Tranform Attribute length", HFILL }},
-    { &hf_isakmp_tf_attr_value,
-      { "Value", "isakmp.tf.attr.value",
-        FT_BYTES, BASE_NONE, NULL, 0x00,
-        "ISAKMP Transform Attribute value", HFILL }},
-    { &hf_isakmp_tf_attr_life_type,
-      { "Life Type", "isakmp.tf.attr.life_type",
-        FT_UINT16, BASE_DEC, VALS(transform_attr_sa_life_type), 0x00,
         NULL, HFILL }},
-    { &hf_isakmp_tf_attr_life_duration_uint32,
-      { "Life Duration", "isakmp.tf.attr.life_duration",
+    { &hf_isakmp_ipsec_attr.type,
+      { "Type", "isakmp.ipsec.attr.type",
+        FT_UINT16, BASE_RANGE_STRING | BASE_DEC, VALS(ipsec_attr_type), 0x00,
+        "IPsec Attribute type", HFILL }},
+    { &hf_isakmp_ipsec_attr.format,
+      { "Format", "isakmp.ipsec.attr.format",
+        FT_BOOLEAN, 16, TFS(&attribute_format), 0x8000,
+        "IPsec Attribute format", HFILL }},
+    { &hf_isakmp_ipsec_attr.length,
+      { "Length", "isakmp.ipsec.attr.length",
+        FT_UINT16, BASE_DEC, NULL, 0x00,
+        "IPsec Attribute length", HFILL }},
+    { &hf_isakmp_ipsec_attr.value,
+      { "Value", "isakmp.ipsec.attr.value",
+        FT_BYTES, BASE_NONE, NULL, 0x00,
+        "IPsec Attribute value", HFILL }},
+    { &hf_isakmp_ipsec_attr_life_type,
+      { "Life Type", "isakmp.ipsec.attr.life_type",
+        FT_UINT16, BASE_DEC, VALS(attr_life_type), 0x00,
+        "The unit (seconds or kilobytes) of the associated Life Duration attribute.", HFILL }},
+    { &hf_isakmp_ipsec_attr_life_duration_uint32,
+      { "Life Duration", "isakmp.ipsec.attr.life_duration",
         FT_UINT32, BASE_DEC, NULL, 0x00,
         NULL, HFILL }},
-    { &hf_isakmp_tf_attr_life_duration_uint64,
-      { "Life Duration", "isakmp.tf.attr.life_duration64",
+    { &hf_isakmp_ipsec_attr_life_duration_uint64,
+      { "Life Duration", "isakmp.ipsec.attr.life_duration64",
         FT_UINT64, BASE_DEC, NULL, 0x00,
         NULL, HFILL }},
-    { &hf_isakmp_tf_attr_life_duration_bytes,
-      { "Life Duration", "isakmp.tf.attr.life_duration_bytes",
+    { &hf_isakmp_ipsec_attr_life_duration_bytes,
+      { "Life Duration", "isakmp.ipsec.attr.life_duration_bytes",
         FT_BYTES, BASE_NONE, NULL, 0x00,
         NULL, HFILL }},
-    { &hf_isakmp_tf_attr_group_description,
-      { "Group Description", "isakmp.tf.attr.group_description",
-        FT_UINT16, BASE_DEC, VALS(transform_dh_group_type), 0x00,
+    { &hf_isakmp_ipsec_attr_group_description,
+      { "Group Description", "isakmp.ipsec.attr.group_description",
+        FT_UINT16, BASE_DEC, VALS(dh_group), 0x00,
         NULL, HFILL }},
-    { &hf_isakmp_tf_attr_encap_mode,
-      { "Encapsulation Mode", "isakmp.tf.attr.encap_mode",
-        FT_UINT16, BASE_DEC, VALS(transform_attr_encap_type), 0x00,
+    { &hf_isakmp_ipsec_attr_encap_mode,
+      { "Encapsulation Mode", "isakmp.ipsec.attr.encap_mode",
+        FT_UINT16, BASE_DEC, VALS(ipsec_attr_encap_mode), 0x00,
         NULL, HFILL }},
-    { &hf_isakmp_tf_attr_auth_algorithm,
-      { "Authentication Algorithm", "isakmp.tf.attr.auth_algorithm",
-        FT_UINT16, BASE_DEC, VALS(transform_attr_auth_type), 0x00,
+    { &hf_isakmp_ipsec_attr_auth_algorithm,
+      { "Authentication Algorithm", "isakmp.ipsec.attr.auth_algorithm",
+        FT_UINT16, BASE_DEC, VALS(ipsec_attr_auth_algo), 0x00,
         NULL, HFILL }},
-    { &hf_isakmp_tf_attr_key_length,
-      { "Key Length", "isakmp.tf.attr.key_length",
+    { &hf_isakmp_ipsec_attr_key_length,
+      { "Key Length", "isakmp.ipsec.attr.key_length",
         FT_UINT16, BASE_DEC, NULL, 0x00,
         NULL, HFILL }},
-    { &hf_isakmp_tf_attr_key_rounds,
-      { "Key Rounds", "isakmp.tf.attr.key_rounds",
+    { &hf_isakmp_ipsec_attr_key_rounds,
+      { "Key Rounds", "isakmp.ipsec.attr.key_rounds",
         FT_UINT16, BASE_DEC, NULL, 0x00,
         NULL, HFILL }},
-    { &hf_isakmp_tf_attr_cmpr_dict_size,
-      { "Compress Dictionary Size", "isakmp.tf.attr.cmpr_dict_size",
+    { &hf_isakmp_ipsec_attr_cmpr_dict_size,
+      { "Compress Dictionary Size", "isakmp.ipsec.attr.cmpr_dict_size",
         FT_UINT16, BASE_DEC, NULL, 0x00,
         NULL, HFILL }},
-    { &hf_isakmp_tf_attr_cmpr_algorithm,
-      { "Compress Private Algorithm", "isakmp.tf.attr.cmpr_algorithm",
+    { &hf_isakmp_ipsec_attr_cmpr_algorithm,
+      { "Compress Private Algorithm", "isakmp.ipsec.attr.cmpr_algorithm",
         FT_BYTES, BASE_NONE, NULL, 0x00,
         NULL, HFILL }},
-    { &hf_isakmp_tf_attr_ecn_tunnel,
-      { "ECN Tunnel", "isakmp.tf.attr.ecn_tunnel",
-        FT_UINT16, BASE_DEC, VALS(transform_attr_ecn_type), 0x00,
+    { &hf_isakmp_ipsec_attr_ecn_tunnel,
+      { "ECN Tunnel", "isakmp.ipsec.attr.ecn_tunnel",
+        FT_UINT16, BASE_DEC, VALS(ipsec_attr_ecn_tunnel), 0x00,
         NULL, HFILL }},
-    { &hf_isakmp_tf_attr_ext_seq_nbr,
-      { "Extended (64-bit) Sequence Number", "isakmp.tf.attr.ext_seq_nbr",
-        FT_UINT16, BASE_DEC, VALS(transform_attr_ext_seq_nbr_type), 0x00,
+    { &hf_isakmp_ipsec_attr_ext_seq_nbr,
+      { "Extended (64-bit) Sequence Number", "isakmp.ipsec.attr.ext_seq_nbr",
+        FT_UINT16, BASE_DEC, VALS(ipsec_attr_ext_seq_nbr), 0x00,
         NULL, HFILL }},
-    { &hf_isakmp_tf_attr_auth_key_length,
-      { "Authentication Key Length", "isakmp.tf.attr.auth_key_length",
+    { &hf_isakmp_ipsec_attr_auth_key_length,
+      { "Authentication Key Length", "isakmp.ipsec.attr.auth_key_length",
         FT_UINT16, BASE_DEC, NULL, 0x00,
         NULL, HFILL }},
-    { &hf_isakmp_tf_attr_sig_enco_algorithm,
-      { "Signature Encoding Algorithm", "isakmp.tf.attr.sig_enco_algorithm",
+    { &hf_isakmp_ipsec_attr_sig_enco_algorithm,
+      { "Signature Encoding Algorithm", "isakmp.ipsec.attr.sig_enco_algorithm",
         FT_BYTES, BASE_NONE, NULL, 0x00,
         NULL, HFILL }},
-    { &hf_isakmp_tf_attr_addr_preservation,
-      { "Address Preservation", "isakmp.tf.attr.addr_preservation",
-        FT_UINT16, BASE_DEC, VALS(transform_attr_addr_preservation_type), 0x00,
+    { &hf_isakmp_ipsec_attr_addr_preservation,
+      { "Address Preservation", "isakmp.ipsec.attr.addr_preservation",
+        FT_UINT16, BASE_DEC, VALS(ipsec_attr_addr_preservation), 0x00,
         NULL, HFILL }},
-    { &hf_isakmp_tf_attr_sa_direction,
-      { "SA Direction", "isakmp.tf.attr.sa_direction",
-        FT_UINT16, BASE_DEC, VALS(transform_attr_sa_direction_type), 0x00,
+    { &hf_isakmp_ipsec_attr_sa_direction,
+      { "SA Direction", "isakmp.ipsec.attr.sa_direction",
+        FT_UINT16, BASE_DEC, VALS(ipsec_attr_sa_direction), 0x00,
         NULL, HFILL }},
 
-    { &hf_isakmp_ike_attr,
-      { "Transform IKE Attribute Type", "isakmp.ike.attr",
+    /* Responder Lifetime Notification for IPsec SA */
+    { &hf_isakmp_resp_lifetime_ipsec_attr.all,
+      { "IPsec Attribute", "isakmp.notify.data.resp_lifetime.ipsec.attr",
         FT_NONE, BASE_NONE, NULL, 0x00,
-        "IKE Transform Attribute", HFILL }},
-    { &hf_isakmp_ike_attr_type,
-      { "Transform IKE Attribute Type", "isakmp.ike.attr.type",
-        FT_UINT16, BASE_DEC, VALS(transform_ike_attr_type), 0x00,
-        "IKE Transform Attribute type", HFILL }},
-    { &hf_isakmp_ike_attr_format,
-      { "Transform IKE Format", "isakmp.ike.attr.format",
+        NULL, HFILL }},
+    { &hf_isakmp_resp_lifetime_ipsec_attr.type,
+      { "Type", "isakmp.notify.data.resp_lifetime.ipsec.attr.type",
+        FT_UINT16, BASE_RANGE_STRING | BASE_DEC, VALS(ipsec_attr_type), 0x00,
+        "IPsec Attribute type", HFILL }},
+    { &hf_isakmp_resp_lifetime_ipsec_attr.format,
+      { "Format", "isakmp.notify.data.resp_lifetime.ipsec.attr.format",
         FT_BOOLEAN, 16, TFS(&attribute_format), 0x8000,
-        "IKE Transform Attribute Format", HFILL }},
-    { &hf_isakmp_ike_attr_length,
+        "IPsec Attribute format", HFILL }},
+    { &hf_isakmp_resp_lifetime_ipsec_attr.length,
+      { "Length", "isakmp.notify.data.resp_lifetime.ipsec.attr.length",
+        FT_UINT16, BASE_DEC, NULL, 0x00,
+        "IPsec Attribute length", HFILL }},
+    { &hf_isakmp_resp_lifetime_ipsec_attr.value,
+      { "Value", "isakmp.notify.data.resp_lifetime.ipsec.attr.value",
+        FT_BYTES, BASE_NONE, NULL, 0x00,
+        "IPsec Attribute value", HFILL }},
+
+    { &hf_isakmp_resp_lifetime_ipsec_attr_life_type,
+      { "Life Type", "isakmp.notify.data.resp_lifetime.ipsec.attr.life_type",
+        FT_UINT16, BASE_DEC, VALS(attr_life_type), 0x00,
+        "The unit (seconds or kilobytes) of the associated Life Duration attribute.", HFILL }},
+    { &hf_isakmp_resp_lifetime_ipsec_attr_life_duration_uint32,
+      { "Life Duration", "isakmp.notify.data.resp_lifetime.ipsec.attr.life_duration",
+        FT_UINT32, BASE_DEC, NULL, 0x00,
+        NULL, HFILL }},
+    { &hf_isakmp_resp_lifetime_ipsec_attr_life_duration_uint64,
+      { "Life Duration", "isakmp.notify.data.resp_lifetime.ipsec.attr.life_duration64",
+        FT_UINT64, BASE_DEC, NULL, 0x00,
+        NULL, HFILL }},
+    { &hf_isakmp_resp_lifetime_ipsec_attr_life_duration_bytes,
+      { "Life Duration", "isakmp.notify.data.resp_lifetime.ipsec.attr.life_duration_bytes",
+        FT_BYTES, BASE_NONE, NULL, 0x00,
+        NULL, HFILL }},
+
+    /* IKEv1 SA Attributes (ISAKMP SA, Phase 1) */
+    { &hf_isakmp_ike_attr.all,
+      { "IKE Attribute", "isakmp.ike.attr",
+        FT_NONE, BASE_NONE, NULL, 0x00,
+        NULL, HFILL }},
+    { &hf_isakmp_ike_attr.type,
+      { "Type", "isakmp.ike.attr.type",
+        FT_UINT16, BASE_RANGE_STRING | BASE_DEC, VALS(ike_attr_type), 0x00,
+        "IKEv1 Attribute type", HFILL }},
+    { &hf_isakmp_ike_attr.format,
+      { "Format", "isakmp.ike.attr.format",
+        FT_BOOLEAN, 16, TFS(&attribute_format), 0x8000,
+        "IKEv1 Attribute format", HFILL }},
+    { &hf_isakmp_ike_attr.length,
       { "Length", "isakmp.ike.attr.length",
         FT_UINT16, BASE_DEC, NULL, 0x00,
-        "IKE Tranform Attribute length", HFILL }},
-    { &hf_isakmp_ike_attr_value,
+        "IKEv1 Attribute length", HFILL }},
+    { &hf_isakmp_ike_attr.value,
       { "Value", "isakmp.ike.attr.value",
         FT_BYTES, BASE_NONE, NULL, 0x00,
-        "IKE Transform Attribute value", HFILL }},
+        "IKEv1 Attribute value", HFILL }},
 
     { &hf_isakmp_ike_attr_encryption_algorithm,
       { "Encryption Algorithm", "isakmp.ike.attr.encryption_algorithm",
-        FT_UINT16, BASE_DEC, VALS(transform_attr_enc_type), 0x00,
+        FT_UINT16, BASE_DEC, VALS(ike_attr_enc_algo), 0x00,
         NULL, HFILL }},
     { &hf_isakmp_ike_attr_hash_algorithm,
       { "HASH Algorithm", "isakmp.ike.attr.hash_algorithm",
-        FT_UINT16, BASE_DEC, VALS(transform_attr_hash_type), 0x00,
+        FT_UINT16, BASE_DEC, VALS(ike_attr_hash_algo), 0x00,
         NULL, HFILL }},
     { &hf_isakmp_ike_attr_authentication_method,
       { "Authentication Method", "isakmp.ike.attr.authentication_method",
-        FT_UINT16, BASE_DEC, VALS(transform_attr_authmeth_type), 0x00,
+        FT_UINT16, BASE_DEC, VALS(ike_attr_authmeth), 0x00,
         NULL, HFILL }},
     { &hf_isakmp_ike_attr_group_description,
       { "Group Description", "isakmp.ike.attr.group_description",
-        FT_UINT16, BASE_DEC, VALS(transform_dh_group_type), 0x00,
+        FT_UINT16, BASE_DEC, VALS(dh_group), 0x00,
         NULL, HFILL }},
     { &hf_isakmp_ike_attr_group_type,
       { "Groupe Type", "isakmp.ike.attr.group_type",
-        FT_UINT16, BASE_DEC, VALS(transform_attr_grp_type), 0x00,
+        FT_UINT16, BASE_DEC, VALS(ike_attr_grp_type), 0x00,
         NULL, HFILL }},
     { &hf_isakmp_ike_attr_group_prime,
       { "Groupe Prime", "isakmp.ike.attr.group_prime",
@@ -6548,8 +6677,8 @@ proto_register_isakmp(void)
         NULL, HFILL }},
     { &hf_isakmp_ike_attr_life_type,
       { "Life Type", "isakmp.ike.attr.life_type",
-        FT_UINT16, BASE_DEC, VALS(transform_attr_sa_life_type), 0x00,
-        NULL, HFILL }},
+        FT_UINT16, BASE_DEC, VALS(attr_life_type), 0x00,
+        "The unit (seconds or kilobytes) of the associated Life Duration attribute.", HFILL }},
     { &hf_isakmp_ike_attr_life_duration_uint32,
       { "Life Duration", "isakmp.ike.attr.life_duration",
         FT_UINT32, BASE_DEC, NULL, 0x00,
@@ -6579,6 +6708,46 @@ proto_register_isakmp(void)
         FT_BYTES, BASE_NONE, NULL, 0x00,
         NULL, HFILL }},
 
+    /* Responder Lifetime Notification for IKEv1 SA */
+    { &hf_isakmp_resp_lifetime_ike_attr.all,
+      { "IKE Attribute", "isakmp.notify.data.resp_lifetime.ike.attr",
+        FT_NONE, BASE_NONE, NULL, 0x00,
+        NULL, HFILL }},
+    { &hf_isakmp_resp_lifetime_ike_attr.type,
+      { "Type", "isakmp.notify.data.resp_lifetime.ike.attr.type",
+        FT_UINT16, BASE_RANGE_STRING | BASE_DEC, VALS(ike_attr_type), 0x00,
+        "IKEv1 Attribute type", HFILL }},
+    { &hf_isakmp_resp_lifetime_ike_attr.format,
+      { "Format", "isakmp.notify.data.resp_lifetime.ike.attr.format",
+        FT_BOOLEAN, 16, TFS(&attribute_format), 0x8000,
+        "IKEv1 Attribute format", HFILL }},
+    { &hf_isakmp_resp_lifetime_ike_attr.length,
+      { "Length", "isakmp.notify.data.resp_lifetime.ike.attr.length",
+        FT_UINT16, BASE_DEC, NULL, 0x00,
+        "IKEv1 Attribute length", HFILL }},
+    { &hf_isakmp_resp_lifetime_ike_attr.value,
+      { "Value", "isakmp.notify.data.resp_lifetime.ike.attr.value",
+        FT_BYTES, BASE_NONE, NULL, 0x00,
+        "IKEv1 Attribute value", HFILL }},
+
+    { &hf_isakmp_resp_lifetime_ike_attr_life_type,
+      { "Life Type", "isakmp.notify.data.resp_lifetime.ike.attr.life_type",
+        FT_UINT16, BASE_DEC, VALS(attr_life_type), 0x00,
+        "The unit (seconds or kilobytes) of the associated Life Duration attribute.", HFILL }},
+    { &hf_isakmp_resp_lifetime_ike_attr_life_duration_uint32,
+      { "Life Duration", "isakmp.notify.data.resp_lifetime.ike.attr.life_duration",
+        FT_UINT32, BASE_DEC, NULL, 0x00,
+        NULL, HFILL }},
+    { &hf_isakmp_resp_lifetime_ike_attr_life_duration_uint64,
+      { "Life Duration", "isakmp.notify.data.resp_lifetime.ike.attr.life_duration64",
+        FT_UINT64, BASE_DEC, NULL, 0x00,
+        NULL, HFILL }},
+    { &hf_isakmp_resp_lifetime_ike_attr_life_duration_bytes,
+      { "Life Duration", "isakmp.notify.data.resp_lifetime.ike.attr.life_duration_bytes",
+        FT_BYTES, BASE_NONE, NULL, 0x00,
+        NULL, HFILL }},
+
+    /* IKEv2 Transform */
     { &hf_isakmp_trans_type,
       { "Transform Type", "isakmp.tf.type",
         FT_UINT8, BASE_RANGE_STRING | BASE_DEC, RVALS(transform_ike2_type), 0x00,
@@ -6598,7 +6767,7 @@ proto_register_isakmp(void)
         NULL, HFILL }},
     { &hf_isakmp_trans_dh,
       { "Transform ID (D-H)", "isakmp.tf.id.dh",
-        FT_UINT16, BASE_DEC, VALS(transform_dh_group_type), 0x00,
+        FT_UINT16, BASE_DEC, VALS(dh_group), 0x00,
         NULL, HFILL }},
     { &hf_isakmp_trans_esn,
       { "Transform ID (ESN)", "isakmp.tf.id.esn",
@@ -6608,26 +6777,28 @@ proto_register_isakmp(void)
       { "Transform ID", "isakmp.tf.id",
         FT_UINT16, BASE_DEC, NULL, 0x00,
         NULL, HFILL }},
-    { &hf_isakmp_ike2_attr,
-      { "Transform IKE2 Attribute Type", "isakmp.ike2.attr",
+
+    /* IKEv2 Transform Attributes */
+    { &hf_isakmp_ike2_attr.all,
+      { "Transform Attribute", "isakmp.ike2.attr",
         FT_NONE, BASE_NONE, NULL, 0x00,
-        "IKE2 Transform Attribute", HFILL }},
-    { &hf_isakmp_ike2_attr_type,
-      { "Transform IKE2 Attribute Type", "isakmp.ike2.attr.type",
-        FT_UINT16, BASE_DEC, VALS(transform_ike2_attr_type), 0x00,
-        "IKE2 Transform Attribute type", HFILL }},
-    { &hf_isakmp_ike2_attr_format,
-      { "Transform IKE2 Format", "isakmp.ike2.attr.format",
+        "IKEv2 Transform Attribute", HFILL }},
+    { &hf_isakmp_ike2_attr.type,
+      { "Type", "isakmp.ike2.attr.type",
+        FT_UINT16, BASE_RANGE_STRING | BASE_DEC, VALS(transform_ike2_attr_type), 0x00,
+        "IKEv2 Transform Attribute type", HFILL }},
+    { &hf_isakmp_ike2_attr.format,
+      { "Format", "isakmp.ike2.attr.format",
         FT_BOOLEAN, 16, TFS(&attribute_format), 0x8000,
-        "IKE2 Transform Attribute Format", HFILL }},
-    { &hf_isakmp_ike2_attr_length,
+        "IKEv2 Transform Attribute format", HFILL }},
+    { &hf_isakmp_ike2_attr.length,
       { "Length", "isakmp.ike2.attr.length",
         FT_UINT16, BASE_DEC, NULL, 0x00,
-        "IKE2 Tranform Attribute length", HFILL }},
-    { &hf_isakmp_ike2_attr_value,
+        "IKEv2 Transform Attribute length", HFILL }},
+    { &hf_isakmp_ike2_attr.value,
       { "Value", "isakmp.ike2.attr.value",
         FT_BYTES, BASE_NONE, NULL, 0x00,
-        "IKE2 Transform Attribute value", HFILL }},
+        "IKEv2 Transform Attribute value", HFILL }},
     { &hf_isakmp_ike2_attr_key_length,
       { "Key Length", "isakmp.ike2.attr.key_length",
         FT_UINT16, BASE_DEC, NULL, 0x00,
@@ -6636,7 +6807,7 @@ proto_register_isakmp(void)
 
     { &hf_isakmp_key_exch_dh_group,
       { "DH Group #", "isakmp.key_exchange.dh_group",
-        FT_UINT16, BASE_DEC, VALS(transform_dh_group_type), 0x00,
+        FT_UINT16, BASE_DEC, VALS(dh_group), 0x00,
         NULL, HFILL }},
     { &hf_isakmp_key_exch_data,
       { "Key Exchange Data", "isakmp.key_exchange.data",
@@ -6652,43 +6823,45 @@ proto_register_isakmp(void)
         FT_BYTES, BASE_NONE, NULL, 0x00,
         "Generic Secure Password Method", HFILL }},
 
+     /* Config Payload */
     { &hf_isakmp_cfg_type_v1,
       { "Type", "isakmp.cfg.type",
          FT_UINT8, BASE_RANGE_STRING | BASE_DEC, RVALS(vs_v1_cfgtype), 0x0,
-         "ISAKMP (v1) Config Type", HFILL }},
+         "IKEv1 Config Type", HFILL }},
     { &hf_isakmp_cfg_identifier,
       { "Identifier", "isakmp.cfg.identifier",
          FT_UINT16, BASE_DEC, NULL, 0x0,
-         "ISAKMP (v1) Config Identifier", HFILL }},
+         "IKEv1 Config Identifier", HFILL }},
     { &hf_isakmp_cfg_type_v2,
       { "Type", "isakmp.cfg.type",
          FT_UINT8, BASE_RANGE_STRING | BASE_DEC, RVALS(vs_v2_cfgtype), 0x0,
-         "ISAKMP (v2) Config Type", HFILL }},
-        /* Config Attributes Type */
-    { &hf_isakmp_cfg_attr,
-      { "Config Attribute Type", "isakmp.cfg.attr",
+         "IKEv2 Config Type", HFILL }},
+
+     /* Config Attributes */
+    { &hf_isakmp_cfg_attr.all,
+      { "Config Attribute", "isakmp.cfg.attr",
         FT_NONE, BASE_NONE, NULL, 0x00,
-        "ISAKMP Config Attribute", HFILL }},
+        NULL, HFILL }},
     { &hf_isakmp_cfg_attr_type_v1,
       { "Type", "isakmp.cfg.attr.type",
         FT_UINT16, BASE_RANGE_STRING | BASE_DEC, RVALS(vs_v1_cfgattr), 0x00,
-        "ISAKMP (v1) Config Attribute type", HFILL }},
+        "IKEv1 Config Attribute type", HFILL }},
     { &hf_isakmp_cfg_attr_type_v2,
       { "Type", "isakmp.cfg.attr.type",
         FT_UINT16, BASE_RANGE_STRING | BASE_DEC, RVALS(vs_v2_cfgattr), 0x00,
-        "ISAKMP (v2) Config Attribute type", HFILL }},
-    { &hf_isakmp_cfg_attr_format,
-      { "Config Attribute Format", "isakmp.cfg.attr.format",
+        "IKEv2 Config Attribute type", HFILL }},
+    { &hf_isakmp_cfg_attr.format,
+      { "Format", "isakmp.cfg.attr.format",
         FT_BOOLEAN, 16, TFS(&attribute_format), 0x8000,
-        "ISAKMP Config Attribute Format", HFILL }},
-    { &hf_isakmp_cfg_attr_length,
+        "Config Attribute format", HFILL }},
+    { &hf_isakmp_cfg_attr.length,
       { "Length", "isakmp.cfg.attr.length",
         FT_UINT16, BASE_DEC, NULL, 0x00,
-        "ISAKMP Config Attribute length", HFILL }},
-    { &hf_isakmp_cfg_attr_value,
+        "Config Attribute length", HFILL }},
+    { &hf_isakmp_cfg_attr.value,
       { "Value", "isakmp.cfg.attr.value",
         FT_BYTES, BASE_NONE, NULL, 0x00,
-        "ISAKMP Config Attribute value", HFILL }},
+        "Config Attribute value", HFILL }},
     { &hf_isakmp_cfg_attr_internal_ip4_address,
       { "INTERNAL IP4 ADDRESS", "isakmp.cfg.attr.internal_ip4_address",
         FT_IPv4, BASE_NONE, NULL, 0x00,
@@ -6874,12 +7047,9 @@ proto_register_isakmp(void)
     &ett_isakmp_fragment,
     &ett_isakmp_fragments,
     &ett_isakmp_sa,
-    &ett_isakmp_tf_attr,
-    &ett_isakmp_tf_ike_attr,
-    &ett_isakmp_tf_ike2_attr,
+    &ett_isakmp_attr,
     &ett_isakmp_id,
-    &ett_isakmp_cfg_attr,
-    &ett_isakmp_rohc_attr,
+    &ett_isakmp_notify_data,
 #ifdef HAVE_LIBGCRYPT
     &ett_isakmp_decrypted_data,
     &ett_isakmp_decrypted_payloads
@@ -6980,8 +7150,8 @@ proto_reg_handoff_isakmp(void)
 
   isakmp_handle = find_dissector("isakmp");
   eap_handle = find_dissector_add_dependency("eap", proto_isakmp);
-  dissector_add_uint("udp.port", UDP_PORT_ISAKMP, isakmp_handle);
-  dissector_add_uint("tcp.port", TCP_PORT_ISAKMP, isakmp_handle);
+  dissector_add_uint_with_preference("udp.port", UDP_PORT_ISAKMP, isakmp_handle);
+  dissector_add_uint_with_preference("tcp.port", TCP_PORT_ISAKMP, isakmp_handle);
 }
 
 /*

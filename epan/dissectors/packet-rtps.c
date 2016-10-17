@@ -244,6 +244,7 @@ static int hf_rtps_locator_filter_list_filter_exp   = -1;
 static int hf_rtps_extra_flags                      = -1;
 static int hf_rtps_param_builtin_endpoint_set_flags = -1;
 static int hf_rtps_param_vendor_builtin_endpoint_set_flags = -1;
+static int hf_rtps_param_endpoint_security_attributes      = -1;
 static int hf_rtps_param_plugin_promiscuity_kind    = -1;
 static int hf_rtps_param_service_kind               = -1;
 
@@ -417,6 +418,10 @@ static int hf_rtps_flag_service_request_writer                  = -1;
 static int hf_rtps_flag_service_request_reader                  = -1;
 static int hf_rtps_flag_locator_ping_writer                     = -1;
 static int hf_rtps_flag_locator_ping_reader                     = -1;
+static int hf_rtps_flag_security_access_protected               = -1;
+static int hf_rtps_flag_security_discovery_protected            = -1;
+static int hf_rtps_flag_security_submessage_protected           = -1;
+static int hf_rtps_flag_security_payload_protected              = -1;
 static int hf_rtps_sm_rti_crc_number                            = -1;
 static int hf_rtps_sm_rti_crc_result                            = -1;
 
@@ -614,6 +619,7 @@ static const value_string rtps_locator_kind_vals[] = {
   { LOCATOR_KIND_UDPV4,        "LOCATOR_KIND_UDPV4" },
   { LOCATOR_KIND_UDPV6,        "LOCATOR_KIND_UDPV6" },
   { LOCATOR_KIND_INVALID,      "LOCATOR_KIND_INVALID" },
+  { LOCATOR_KIND_DTLS,         "LOCATOR_KIND_DTLS" },
   { LOCATOR_KIND_TCPV4_LAN,    "LOCATOR_KIND_TCPV4_LAN" },
   { LOCATOR_KIND_TCPV4_WAN,    "LOCATOR_KIND_TCPV4_WAN" },
   { LOCATOR_KIND_TLSV4_LAN,    "LOCATOR_KIND_TLSV4_LAN" },
@@ -776,6 +782,8 @@ static const value_string parameter_id_vals[] = {
 };
 
 static const value_string parameter_id_inline_qos_rti[] = {
+  { PID_RELATED_ORIGINAL_WRITER_INFO,   "PID_RELATED_ORIGINAL_WRITER_INFO" },
+  { PID_RELATED_SOURCE_GUID,            "PID_RELATED_SOURCE_GUID" },
   { PID_RELATED_READER_GUID,            "PID_RELATED_READER_GUID" },
   { PID_SOURCE_GUID,                    "PID_SOURCE_GUID" },
   { PID_TOPIC_QUERY_GUID,               "PID_TOPIC_QUERY_GUID" },
@@ -894,6 +902,7 @@ static const value_string parameter_id_rti_vals[] = {
   { PID_ENDPOINT_PROPERTY_CHANGE_EPOCH, "PID_ENDPOINT_PROPERTY_CHANGE_EPOCH" },
   { PID_REACHABILITY_LEASE_DURATION,    "PID_REACHABILITY_LEASE_DURATION" },
   { PID_VENDOR_BUILTIN_ENDPOINT_SET,    "PID_VENDOR_BUILTIN_ENDPOINT_SET" },
+  { PID_ENDPOINT_SECURITY_ATTRIBUTES,   "PID_ENDPOINT_SECURITY_ATTRIBUTES" },
   { 0, NULL }
 };
 static const value_string parameter_id_toc_vals[] = {
@@ -1457,6 +1466,14 @@ static const int* VENDOR_BUILTIN_ENDPOINT_FLAGS[] = {
   NULL
 };
 
+static const int* ENDPOINT_SECURITY_ATTRIBUTES[] = {
+  &hf_rtps_flag_security_payload_protected,            /* Bit 3 */
+  &hf_rtps_flag_security_submessage_protected,         /* Bit 2 */
+  &hf_rtps_flag_security_discovery_protected,          /* Bit 1 */
+  &hf_rtps_flag_security_access_protected,             /* Bit 0 */
+  NULL
+};
+
 typedef struct _endpoint_guid {
   guint32 host_id;
   guint32 app_id;
@@ -1708,6 +1725,14 @@ void rtps_util_add_locator_t(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb
       proto_item_append_text(tree, " (%s, %s)",
               val_to_str(kind, rtps_locator_kind_vals, "%02x"),
               tvb_ip6_to_str(tvb, offset + 8));
+      break;
+    }
+    case LOCATOR_KIND_DTLS: {
+      proto_tree_add_int(locator_tree, hf_rtps_locator_port, tvb, offset+4, 4, port);
+      proto_tree_add_item(locator_tree, hf_rtps_locator_ipv6, tvb, offset+8, 16, ENC_NA);
+      proto_item_append_text(tree, " (%s, %s:%d)",
+              val_to_str(kind, rtps_locator_kind_vals, "%02x"),
+              tvb_ip6_to_str(tvb, offset + 8), port);
       break;
     }
     /* Default case, we already have the locator kind so don't do anything */
@@ -3440,7 +3465,8 @@ gint rtps_util_add_seq_octets(proto_tree *tree, packet_info *pinfo, tvbuff_t *tv
   ti = proto_tree_add_uint_format_value(tree, hf_rtps_sequence_size, tvb, offset, 4, seq_length, "%d octets", seq_length);
 
   offset += 4;
-  if (param_length < 4 + (int)seq_length) {
+  /* param length -1 means not specified */
+  if (param_length != -1 && param_length < 4 + (int)seq_length) {
     expert_add_info_format(pinfo, ti, &ei_rtps_parameter_value_invalid, "ERROR: Parameter value too small");
     return offset + seq_length;;
   }
@@ -3452,9 +3478,9 @@ gint rtps_util_add_seq_octets(proto_tree *tree, packet_info *pinfo, tvbuff_t *tv
 
 static gint rtps_util_add_data_holder(proto_tree *tree, tvbuff_t * tvb, packet_info * pinfo,
         gint offset, gboolean little_endian, gint seq_index, gint alignment_zero) {
-  proto_tree * data_holder_tree, * properties_tree, * property_tree, * seq_values_tree;
-  proto_item * ti, * data_holder;
-  guint32 seq_size, param_id, param_length, i;
+  proto_tree * data_holder_tree, * properties_tree, * property_tree;
+  proto_item * tii, * ti, * data_holder;
+  guint32 seq_size, i;
   gint offset_tmp, data_holder_begin;
 
   data_holder_tree = proto_tree_add_subtree_format(tree, tvb, offset,
@@ -3464,98 +3490,43 @@ static gint rtps_util_add_data_holder(proto_tree *tree, tvbuff_t * tvb, packet_i
           hf_rtps_pgm_data_holder_class_id, little_endian);
   LONG_ALIGN_ZERO(offset, alignment_zero);
 
-  properties_tree = proto_tree_add_subtree_format(data_holder_tree, tvb, offset,
-      -1, ett_rtps_data_holder_properties, &ti, "String Properties");
   offset_tmp = offset;
-  rtps_util_dissect_parameter_header(tvb, &offset, little_endian, &param_id, &param_length);
-  proto_item_set_len(ti, offset - offset_tmp + param_length);
-  if (param_length > 0 ) {
-    gint32 local_offset;
-    local_offset = offset;
-    seq_size = NEXT_guint32(tvb, local_offset, little_endian);
-    local_offset += 4;
-    for(i = 0; i < seq_size; i++) {
-      property_tree = proto_tree_add_subtree_format(properties_tree, tvb, local_offset,
-                                              -1, ett_rtps_property_tree, &ti, "Property [%d]", i);
-      local_offset = rtps_util_add_string(property_tree, tvb, local_offset,
+  properties_tree = proto_tree_add_subtree_format(data_holder_tree, tvb, offset,
+      -1, ett_rtps_data_holder_properties, &tii, "String Properties");
+  seq_size = NEXT_guint32(tvb, offset, little_endian);
+  offset += 4;
+  for(i = 0; i < seq_size; i++) {
+    gint local_offset = offset;
+    property_tree = proto_tree_add_subtree_format(properties_tree, tvb, offset,
+             -1, ett_rtps_property_tree, &ti, "Property [%d]", i);
+    offset = rtps_util_add_string(property_tree, tvb, offset,
                     hf_rtps_property_name, little_endian);
-      local_offset = rtps_util_add_string(property_tree, tvb, local_offset,
+    offset = rtps_util_add_string(property_tree, tvb, offset,
                     hf_rtps_property_value, little_endian);
-    }
+    proto_item_set_len(ti, offset - local_offset);
   }
+  proto_item_set_len(tii, offset - offset_tmp);
 
-  offset += param_length;
   offset_tmp = offset;
   properties_tree = proto_tree_add_subtree_format(data_holder_tree, tvb, offset,
-                                  -1, ett_rtps_data_holder_properties, &ti, "Binary Properties");
-  rtps_util_dissect_parameter_header(tvb, &offset, little_endian, &param_id, &param_length);
-  proto_item_set_len(ti, offset - offset_tmp + param_length);
-  if (param_length > 0 ) {
-    gint32 local_offset;
-    local_offset = offset;
-    seq_size = NEXT_guint32(tvb, local_offset, little_endian);
-    local_offset += 4;
-    for(i = 0; i < seq_size; i++) {
-      LONG_ALIGN(local_offset);
-      property_tree = proto_tree_add_subtree_format(properties_tree, tvb, local_offset,
+             -1, ett_rtps_data_holder_properties, &tii, "Binary Properties");
+  seq_size = NEXT_guint32(tvb, offset, little_endian);
+  offset += 4;
+  for(i = 0; i < seq_size; i++) {
+    gint local_offset = offset;
+    LONG_ALIGN(offset);
+    property_tree = proto_tree_add_subtree_format(properties_tree, tvb, offset,
                     -1, ett_rtps_property_tree, &ti, "Property [%d]", i);
-      local_offset = rtps_util_add_string(property_tree, tvb, local_offset,
+    offset = rtps_util_add_string(property_tree, tvb, offset,
                     hf_rtps_property_name, little_endian);
-      local_offset = rtps_util_add_seq_octets(property_tree, pinfo, tvb, local_offset,
-                    little_endian, param_length, hf_rtps_param_user_data);
-    }
+    offset = rtps_util_add_seq_octets(property_tree, pinfo, tvb, offset,
+                    little_endian, -1, hf_rtps_param_user_data);
+    proto_item_set_len(ti, offset - local_offset);
   }
+  proto_item_set_len(tii, offset - offset_tmp);
+  proto_item_set_len(data_holder, offset - offset_tmp);
 
-  offset += param_length;
-  offset_tmp = offset;
-  seq_values_tree = proto_tree_add_subtree_format(data_holder_tree, tvb, offset,
-                                      -1, ett_rtps_seq_string, &ti, "String Values");
-  rtps_util_dissect_parameter_header(tvb, &offset, little_endian, &param_id, &param_length);
-  proto_item_set_len(ti, offset - offset_tmp + param_length);
-  if (param_length > 0 ) {
-    rtps_util_add_seq_string(seq_values_tree, tvb, offset, little_endian, param_length,
-                hf_rtps_pgm_data_holder_stringseq_size, hf_rtps_pgm_data_holder_stringseq_name,
-                "Sequence");
-  }
-
-  offset += param_length;
-  offset_tmp = offset;
-  seq_values_tree = proto_tree_add_subtree_format(data_holder_tree, tvb, offset,
-                                      -1, ett_rtps_seq_string, &ti, "Binary value 1");
-  rtps_util_dissect_parameter_header(tvb, &offset, little_endian, &param_id, &param_length);
-  proto_item_set_len(ti, offset - offset_tmp + param_length);
-  if (param_length > 0 ) {
-    rtps_util_add_seq_octets(seq_values_tree, pinfo, tvb, offset, little_endian, param_length,
-                hf_rtps_param_user_data);
-  }
-
-  offset += param_length;
-  offset_tmp = offset;
-  seq_values_tree = proto_tree_add_subtree_format(data_holder_tree, tvb, offset,
-                                      -1, ett_rtps_seq_string, &ti, "Binary value 2");
-  rtps_util_dissect_parameter_header(tvb, &offset, little_endian, &param_id, &param_length);
-  proto_item_set_len(ti, offset - offset_tmp + param_length);
-  if (param_length > 0 ) {
-    rtps_util_add_seq_octets(seq_values_tree, pinfo, tvb, offset, little_endian, param_length,
-                hf_rtps_param_user_data);
-  }
-
-  offset += param_length;
-  offset_tmp = offset;
-  properties_tree = proto_tree_add_subtree_format(data_holder_tree, tvb, offset,
-                                      -1, ett_rtps_seq_string, &ti, "Long Long Sequence");
-  rtps_util_dissect_parameter_header(tvb, &offset, little_endian, &param_id, &param_length);
-  proto_item_set_len(ti, offset - offset_tmp + param_length);
-  if (param_length > 0 ) {
-    seq_size = NEXT_guint32(tvb, offset, little_endian);
-    for (i = 0; i < seq_size; i++) {
-      proto_tree_add_item(properties_tree, hf_rtps_pgm_data_holder_long_long, tvb,
-              offset + 4 + 8 * i, 8, little_endian);
-    }
-  }
-  offset += param_length;
   proto_item_set_len(data_holder, offset - data_holder_begin);
-
   return offset;
 }
 
@@ -4100,6 +4071,16 @@ static gboolean dissect_parameter_sequence_rti(proto_tree *rtps_parameter_tree, 
       break;
     }
 
+    case PID_ENDPOINT_SECURITY_ATTRIBUTES: {
+      guint32 flags;
+      ENSURE_LENGTH(4);
+      flags = tvb_get_guint32(tvb, offset, little_endian ? ENC_LITTLE_ENDIAN : ENC_BIG_ENDIAN);
+      proto_tree_add_bitmask_value(rtps_parameter_tree, tvb, offset,
+                hf_rtps_param_endpoint_security_attributes, ett_rtps_flags,
+                ENDPOINT_SECURITY_ATTRIBUTES, flags);
+      break;
+    }
+
     case PID_TOPIC_QUERY_PUBLICATION: {
       ENSURE_LENGTH(8);
       proto_tree_add_item(rtps_parameter_tree, hf_rtps_param_topic_query_publication_enable,
@@ -4154,6 +4135,15 @@ static gboolean dissect_parameter_sequence_rti(proto_tree *rtps_parameter_tree, 
       break;
     }
 
+    case PID_RELATED_SOURCE_GUID: {
+      ENSURE_LENGTH(16);
+      /* PID_RELATED_SOURCE_GUID */
+      rtps_util_add_generic_guid_v2(rtps_parameter_tree, tvb, offset,
+                  hf_rtps_endpoint_guid, hf_rtps_param_host_id, hf_rtps_param_app_id,
+                  hf_rtps_param_instance_id, hf_rtps_param_entity, hf_rtps_param_entity_key,
+                  hf_rtps_param_hf_entity_kind);
+      break;
+    }
     /* 0...2...........7...............15.............23...............31
     * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
     * | PID_TRANSPORT_INFO_LIST       |            length             |
@@ -4348,9 +4338,21 @@ static gboolean dissect_parameter_sequence_rti(proto_tree *rtps_parameter_tree, 
     * +---------------+---------------+---------------+---------------+
     */
     case PID_DOMAIN_ID: {
+      if (is_inline_qos) { /* PID_RELATED_ORIGINAL_WRITER_INFO */
+        ENSURE_LENGTH(16);
+        rtps_util_add_guid_prefix_v2(rtps_parameter_tree, tvb, offset, hf_rtps_sm_guid_prefix,
+                    hf_rtps_sm_host_id, hf_rtps_sm_app_id, hf_rtps_sm_instance_id, 0);
+        rtps_util_add_entity_id(rtps_parameter_tree, tvb, offset+12, hf_rtps_sm_entity_id,
+                    hf_rtps_sm_entity_id_key, hf_rtps_sm_entity_id_kind, ett_rtps_entity,
+                    "virtualGUIDSuffix", NULL);
+        /* Sequence number */
+        rtps_util_add_seq_number(rtps_parameter_tree, tvb, offset+16,
+                            little_endian, "virtualSeqNumber");
+      } else {
       ENSURE_LENGTH(4);
       proto_tree_add_item(rtps_parameter_tree, hf_rtps_domain_id, tvb, offset, 4,
         little_endian ? ENC_LITTLE_ENDIAN : ENC_BIG_ENDIAN);
+      }
       break;
     }
 
@@ -9401,7 +9403,7 @@ static gboolean dissect_rtps(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
                               tvb, offset + 1, 1, flags);
         proto_tree_add_uint(rtps_submessage_tree,
                                 hf_rtps_sm_octets_to_next_header,
-                                tvb, offset + 2, 2, next_submsg);
+                                tvb, offset + 2, 2, octets_to_next_header);
       }
     }
 
@@ -10809,6 +10811,13 @@ void proto_register_rtps(void) {
         HFILL }
     },
 
+    { &hf_rtps_param_endpoint_security_attributes,
+      { "Flags", "rtps.param.endpoint_security_attributes",
+        FT_UINT32, BASE_HEX, NULL, 0,
+        "bitmask representing the flags in PID_ENDPOINT_SECURITY_ATTRIBUTES",
+        HFILL }
+    },
+
     { &hf_rtps_param_plugin_promiscuity_kind, {
         "promiscuityKind", "rtps.param.plugin_promiscuity_kind",
         FT_UINT32, BASE_HEX, VALS(plugin_promiscuity_kind_vals), 0, NULL, HFILL }
@@ -11335,6 +11344,22 @@ void proto_register_rtps(void) {
         "Locator Ping Reader", "rtps.flag.locator_ping_reader",
         FT_BOOLEAN, 32, TFS(&tfs_set_notset), 0x00000008, NULL, HFILL }
     },
+    { &hf_rtps_flag_security_access_protected, {
+        "Access Protected" ,"rtps.flag.security.access_protected",
+        FT_BOOLEAN, 32, TFS(&tfs_set_notset), 0x00000001, NULL, HFILL }
+    },
+    { &hf_rtps_flag_security_discovery_protected, {
+        "Discovery Protected", "rtps.flag.security.discovery_protected",
+        FT_BOOLEAN, 32, TFS(&tfs_set_notset), 0x00000002, NULL, HFILL }
+    },
+    { &hf_rtps_flag_security_submessage_protected, {
+        "Submessage Protected", "rtps.flag.security.submessage_protected",
+        FT_BOOLEAN, 32, TFS(&tfs_set_notset), 0x00000004, NULL, HFILL }
+    },
+    { &hf_rtps_flag_security_payload_protected, {
+        "Payload Protected", "rtps.flag.security.payload_protected",
+        FT_BOOLEAN, 32, TFS(&tfs_set_notset), 0x00000008, NULL, HFILL }
+    },
     { &hf_rtps_param_enable_authentication,
       { "Authentication enabled", "rtps.secure.enable_authentication",
         FT_BOOLEAN, 32, TFS(&tfs_true_false), 0, NULL, HFILL }
@@ -11557,7 +11582,7 @@ void proto_register_rtps(void) {
   register_init_routine(rtps_init);
 
   rtps_type_name_table = register_dissector_table("rtps.type_name", "RTPS Type Name",
-          proto_rtps, FT_STRING, BASE_NONE, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
+          proto_rtps, FT_STRING, BASE_NONE);
 }
 
 

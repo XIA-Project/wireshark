@@ -1520,7 +1520,7 @@ proto_register_ipx(void)
 
 		{ &hf_msg_sigchar,
 		{ "Signature Char",			"ipxmsg.sigchar",
-		  FT_UINT8,	BASE_DEC,	VALS(ipxmsg_sigchar_vals),	0x0,
+		  FT_CHAR,	BASE_HEX,	VALS(ipxmsg_sigchar_vals),	0x0,
 		  NULL, HFILL }}
 	};
 
@@ -1573,11 +1573,11 @@ proto_register_ipx(void)
 	proto_register_subtree_array(ett, array_length(ett));
 
 	ipx_type_dissector_table = register_dissector_table("ipx.packet_type",
-	    "IPX packet type", proto_ipx, FT_UINT8, BASE_HEX, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
+	    "IPX packet type", proto_ipx, FT_UINT8, BASE_HEX);
 	ipx_socket_dissector_table = register_dissector_table("ipx.socket",
-	    "IPX socket", proto_ipx, FT_UINT16, BASE_HEX, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
+	    "IPX socket", proto_ipx, FT_UINT16, BASE_HEX);
 	spx_socket_dissector_table = register_dissector_table("spx.socket",
-	    "SPX socket", proto_spx, FT_UINT16, BASE_HEX, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
+	    "SPX socket", proto_spx, FT_UINT16, BASE_HEX);
 
 	register_init_routine(&spx_init_protocol);
 	register_postseq_cleanup_routine(&spx_postseq_cleanup);
@@ -1594,7 +1594,7 @@ proto_reg_handoff_ipx(void)
 	dissector_handle_t serialization_handle, ipxmsg_handle;
 
 	ipx_handle = find_dissector("ipx");
-	dissector_add_uint("udp.port", UDP_PORT_IPX, ipx_handle);
+	dissector_add_uint_with_preference("udp.port", UDP_PORT_IPX, ipx_handle);
 	dissector_add_uint("ethertype", ETHERTYPE_IPX, ipx_handle);
 	dissector_add_uint("chdlc.protocol", ETHERTYPE_IPX, ipx_handle);
 	dissector_add_uint("ppp.protocol", PPP_IPX, ipx_handle);

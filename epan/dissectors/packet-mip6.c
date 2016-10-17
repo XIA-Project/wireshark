@@ -5426,7 +5426,7 @@ proto_register_mip6(void)
     expert_mip6 = expert_register_protocol(proto_mip6);
     expert_register_field_array(expert_mip6, ei, array_length(ei));
 
-    mip6_vsm_dissector_table = register_dissector_table("mip6.vsm", "Mobile IPv6 vendor specific option", proto_mip6, FT_UINT32, BASE_DEC, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
+    mip6_vsm_dissector_table = register_dissector_table("mip6.vsm", "Mobile IPv6 vendor specific option", proto_mip6, FT_UINT32, BASE_DEC);
 }
 
 void
@@ -5436,7 +5436,7 @@ proto_reg_handoff_mip6(void)
     dissector_add_uint("ip.proto", IP_PROTO_MIPV6, mip6_handle);
 
     /* Add support for PMIPv6 control messages over IPV4 */
-    dissector_add_uint("udp.port", UDP_PORT_PMIP6_CNTL, mip6_handle);
+    dissector_add_uint_with_preference("udp.port", UDP_PORT_PMIP6_CNTL, mip6_handle);
     ip_dissector_table = find_dissector_table("ip.proto");
 
     dissector_add_uint("mip6.vsm", VENDOR_THE3GPP, create_dissector_handle(dissect_mip6_opt_vsm_3gpp, proto_mip6));

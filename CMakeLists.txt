@@ -21,6 +21,20 @@
 
 project(Wireshark C CXX)
 
+# Updated by make-version.pl
+set(GIT_REVISION 0)
+set(PROJECT_MAJOR_VERSION 2)
+set(PROJECT_MINOR_VERSION 3)
+set(PROJECT_PATCH_VERSION 0)
+set(PROJECT_BUILD_VERSION ${GIT_REVISION})
+set(PROJECT_VERSION_EXTENSION "")
+
+if(DEFINED ENV{WIRESHARK_VERSION_EXTRA})
+	set(PROJECT_VERSION_EXTENSION "$ENV{WIRESHARK_VERSION_EXTRA}")
+endif()
+
+set(PROJECT_VERSION "${PROJECT_MAJOR_VERSION}.${PROJECT_MINOR_VERSION}.${PROJECT_PATCH_VERSION}${PROJECT_VERSION_EXTENSION}")
+
 message(STATUS "Generating build using CMake ${CMAKE_VERSION}")
 if(WIN32)
 	# Needed for proper Qt linking. See
@@ -174,20 +188,6 @@ endif()
 #Defines CMAKE_INSTALL_BINDIR, CMAKE_INSTALL_DATADIR, etc ...
 include(CMakeInstallDirs)
 
-# Updated by make-version.pl
-set(GIT_REVISION 0)
-set(PROJECT_MAJOR_VERSION 2)
-set(PROJECT_MINOR_VERSION 3)
-set(PROJECT_PATCH_VERSION 0)
-set(PROJECT_BUILD_VERSION ${GIT_REVISION})
-set(PROJECT_VERSION_EXTENSION "")
-
-if(DEFINED ENV{WIRESHARK_VERSION_EXTRA})
-	set(PROJECT_VERSION_EXTENSION "$ENV{WIRESHARK_VERSION_EXTRA}")
-endif()
-
-set(PROJECT_VERSION "${PROJECT_MAJOR_VERSION}.${PROJECT_MINOR_VERSION}.${PROJECT_PATCH_VERSION}${PROJECT_VERSION_EXTENSION}")
-
 # Banner shown at top right of Qt welcome screen.
 if(DEFINED ENV{WIRESHARK_VERSION_FLAVOR})
 	set(VERSION_FLAVOR "$ENV{WIRESHARK_VERSION_FLAVOR}")
@@ -308,7 +308,9 @@ if( CMAKE_C_COMPILER_ID MATCHES "MSVC")
 	#  when compiling Wireshark sources. (Selected from "level 4" warnings).
 	## 4295: array is too small to include a terminating null character
 	## 4189: local variable is initialized but not referenced
-	set(WARNINGS_CFLAGS "/w34295 /w34189")
+	# Disable warnings about about use of flexible array members:
+	## 4200: nonstandard extension used : zero-sized array in struct/union
+	set(WARNINGS_CFLAGS "/w34295 /w34189 /wd4200")
 
 	set(WIRESHARK_COMMON_FLAGS
 		${LOCAL_CFLAGS}
@@ -341,6 +343,43 @@ else()
 		else()
 			message(FATAL_ERROR "CMAKE_OSX_DEPLOYMENT_TARGET only applies when building for OS X")
 		endif()
+	endif()
+
+	if(CMAKE_VERSION VERSION_LESS "3.1")
+		# Many modern compilers use c99 by default, but for older ones
+		# (like GCC 4.4.7), -std=gnu99 is required to avoid errors about
+		# use constructs like "for (int i = 0; i < n; i++) ;"
+		#
+		# Older versions of IBM XL C may require -qlanglvl=extc99.
+		# With V7.0, the "xlc" command defaults to C89; with 10.1,
+		# it defaults to C99 (both with IBM syntax extensions).
+		#
+		# HP's manual for HP C/HP-UX B.11.11.04 (the tenth
+		# edition of the manual), for PA-RISC, "documents
+		# new HP C features that support C99 industry standards".
+		# The manual for Version A.06.25 for Itanium mentions an
+		# -AC99 flag to support C99, but says it's the default;
+		# some older versions might require -AC99.
+		#
+		# As of Sun Studio 8, the compiler appears to default
+		# to supporting some C99 language features, but not
+		# C99 library differences from C89; -xc99 will give
+		# you both.  The earlier Sun Forte Developer 6 update 2
+		# might or might not support thosee C99 language features
+		# by default, and doesn't speak of library differences;
+		# if it doesn't support the language features by default,
+		# -xc99 will support them.
+		#
+		if(CMAKE_C_COMPILER_ID MATCHES "GNU")
+			set(CMAKE_C_FLAGS "-std=gnu99 ${CMAKE_C_FLAGS}")
+		endif()
+	else()
+		#
+		# Current versions of CMake do not support options to
+		# request C99 for XL C, HP C, or Oracle C.  (They may
+		# not be necessary for current versions.)
+		#
+		set(CMAKE_C_STANDARD 99)
 	endif()
 
 	if(CMAKE_C_COMPILER_ID MATCHES "Clang")
@@ -380,7 +419,6 @@ else()
 	set(C_WARN_FLAGS
 		# The following are C only, not C++
 		-Wc++-compat
-		-Wdeclaration-after-statement
 		-Wshadow
 		-Wno-pointer-sign
 		-Wold-style-definition
@@ -391,8 +429,6 @@ else()
 		# The Qt headers generate a ton of shortening errors on 64-bit systems
 		# so only enable this for C for now.
 		-Wshorten-64-to-32
-		# Clang only
-		-Wc99-extensions
 	)
 
 	set(CXX_WARN_FLAGS
@@ -557,12 +593,19 @@ if(ENABLE_ASAN)
 	endif()
 	set(CMAKE_C_FLAGS "-fsanitize=address ${CMAKE_C_FLAGS}")
 	set(CMAKE_CXX_FLAGS "-fsanitize=address ${CMAKE_CXX_FLAGS}")
+	# Disable ASAN for build-time tools, e.g. lemon
+	check_c_compiler_flag(-fno-sanitize=all C__fno_sanitize_all_VALID)
+	if(C__fno_sanitize_all_VALID)
+		set(NO_SANITIZE_CFLAGS "-fno-sanitize=all")
+		set(NO_SANITIZE_LDFLAGS "-fno-sanitize=all")
+	endif()
 endif()
 
+set(WERROR_COMMON_FLAGS "")
+set(NO_ERROR_DEPRECATED_DECLARATIONS_COMPILE_FLAGS "")
 if(NOT DISABLE_WERROR AND NOT ENABLE_EXTRA_COMPILER_WARNINGS)
 	if(CMAKE_C_COMPILER_ID MATCHES "MSVC")
 		set(WERROR_COMMON_FLAGS "/WX")
-		set(NO_ERROR_DEPRECATED_DECLARATIONS_COMPILE_FLAGS)
 	else()
 		check_c_compiler_flag(-Werror WERROR)
 		if (WERROR)
@@ -570,8 +613,6 @@ if(NOT DISABLE_WERROR AND NOT ENABLE_EXTRA_COMPILER_WARNINGS)
 			set(NO_ERROR_DEPRECATED_DECLARATIONS_COMPILE_FLAGS "-Wno-error=deprecated-declarations")
 		endif()
 	endif()
-else()
-	set(WERROR_COMMON_FLAGS FALSE)
 endif()
 
 #
@@ -668,7 +709,7 @@ endif()
 # - set HAVE_XXX
 
 #The minimum package list
-set(PACKAGELIST Gettext M Git GLIB2 GMODULE2 GTHREAD2 LEX YACC Perl SED SH PythonInterp)
+set(PACKAGELIST Gettext M Git GLIB2 GMODULE2 GTHREAD2 LEX YACC Perl SED SH PythonInterp NGHTTP2)
 set(LEX_REQUIRED TRUE)
 set(GLIB2_REQUIRED TRUE)
 set(GLIB2_FIND_REQUIRED TRUE)
@@ -898,6 +939,9 @@ if(HAVE_LIBGEOIP)
 endif()
 if(LIBSSH_FOUND)
 	set(HAVE_LIBSSH 1)
+endif()
+if(NGHTTP2_FOUND)
+	set(HAVE_NGHTTP2 1)
 endif()
 if(HAVE_LIBCARES)
 	set(HAVE_C_ARES 1)
@@ -1362,6 +1406,7 @@ set(INSTALL_FILES
 	${CMAKE_BINARY_DIR}/doc/AUTHORS-SHORT
 	${CMAKE_BINARY_DIR}/doc/asn2deb.html
 	${CMAKE_BINARY_DIR}/doc/androiddump.html
+	${CMAKE_BINARY_DIR}/doc/udpdump.html
 	${CMAKE_BINARY_DIR}/doc/capinfos.html
 	${CMAKE_BINARY_DIR}/doc/captype.html
 	${CMAKE_BINARY_DIR}/doc/ciscodump.html
@@ -1506,6 +1551,13 @@ if(WIN32)
 				"${_dll_output_dir}"
 		)
 	endif(LUA_FOUND)
+	if (NGHTTP2_FOUND)
+		add_custom_command(TARGET copy_cli_dlls PRE_BUILD
+			COMMAND ${CMAKE_COMMAND} -E copy_if_different
+				"${NGHTTP2_DLL_DIR}/${NGHTTP2_DLL}"
+				"${_dll_output_dir}"
+		)
+	endif(NGHTTP2_FOUND)
 	if (SMI_FOUND)
 		# Wireshark.nsi wants SMI_DIR which is the base SMI directory
 		get_filename_component(SMI_DIR ${SMI_DLL_DIR} DIRECTORY)
@@ -1792,15 +1844,15 @@ if(ENABLE_APPLICATION_BUNDLE)
 	)
 
 	# Wireshark.app/Contents/Resources/share/man/man1
-	set(BUNDLE_RESOURCE_SHARE_MAN1_FILES ${MAN1_FILES})
 	set_source_files_properties(${BUNDLE_RESOURCE_SHARE_MAN1_FILES} PROPERTIES
 		MACOSX_PACKAGE_LOCATION Resources/share/man/man1
+		GENERATED 1
 	)
 
 	# Wireshark.app/Contents/Resources/share/man/man1
-	set(BUNDLE_RESOURCE_SHARE_MAN4_FILES ${MAN4_FILES})
 	set_source_files_properties(${BUNDLE_RESOURCE_SHARE_MAN4_FILES} PROPERTIES
 		MACOSX_PACKAGE_LOCATION Resources/share/man/man4
+		GENERATED 1
 	)
 
 	# INSTALL_FILES and INSTALL_DIRS are handled by copy_data_files
@@ -2470,6 +2522,24 @@ elseif (BUILD_ciscodump)
 	#message( WARNING "Cannot find libssh, cannot build ciscodump" )
 endif()
 
+if(ENABLE_EXTCAP AND BUILD_udpdump)
+	set(udpdump_LIBS
+		${GLIB2_LIBRARIES}
+		${CMAKE_DL_LIBS}
+		${LIBEPAN_LIBS}
+		writecap
+	)
+	set(udpdump_FILES
+		extcap/udpdump.c
+		extcap/extcap-base.c
+	)
+
+	add_executable(udpdump WIN32 ${udpdump_FILES})
+	set_extcap_executable_properties(udpdump)
+	target_link_libraries(udpdump ${udpdump_LIBS})
+	install(TARGETS udpdump RUNTIME DESTINATION ${EXTCAP_DIR})
+endif()
+
 if(ENABLE_EXTCAP AND BUILD_randpktdump)
 	set(randpktdump_LIBS
 		randpkt_core
@@ -2552,6 +2622,7 @@ set(CLEAN_FILES
 	${dftest_FILES}
 	${randpkt_FILES}
 	${randpktdump_FILES}
+	${udpdump_FILES}
 	${text2pcap_CLEAN_FILES}
 	${mergecap_FILES}
 	${capinfos_FILES}
@@ -2561,15 +2632,14 @@ set(CLEAN_FILES
 	${androiddump_FILES}
 	${sshdump_FILES}
 	${ciscodump_FILES}
+	${udpdump_FILES}
 )
 
-if (WERROR_COMMON_FLAGS)
-	set_source_files_properties(
-		${CLEAN_FILES}
-		PROPERTIES
-		COMPILE_FLAGS ${WERROR_COMMON_FLAGS}
-	)
-endif()
+set_source_files_properties(
+	${CLEAN_FILES}
+	PROPERTIES
+	COMPILE_FLAGS "${WERROR_COMMON_FLAGS}"
+)
 
 install(
 	FILES
@@ -2711,6 +2781,25 @@ CHECKAPI(
 	  ${WIRESHARK_SRC}
 	  ${TSHARK_TAP_SRC}
 )
+
+find_program(SHELLCHECK_EXECUTABLE shellcheck
+	DOC "Path to the shellcheck utility."
+)
+if (NOT "${SHELLCHECK_EXECUTABLE}" STREQUAL "SHELLCHECK_EXECUTABLE-NOTFOUND")
+	add_custom_target(shellcheck)
+	set_target_properties(shellcheck PROPERTIES FOLDER "Tests")
+	# --external-sources requires 0.4.0 or later.
+	add_custom_command(TARGET shellcheck POST_BUILD
+		COMMAND shellcheck --external-sources
+			tools/fuzz-test.sh
+			tools/randpkt-test.sh
+			tools/runa2x.sh
+			tools/test-captures.sh
+			tools/valgrind-wireshark.sh
+		WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+	)
+endif()
+
 
 #
 # Editor modelines  -  http://www.wireshark.org/tools/modelines.html

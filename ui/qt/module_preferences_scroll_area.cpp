@@ -42,10 +42,6 @@
 #include <QRadioButton>
 #include <QScrollBar>
 #include <QSpacerItem>
-#if QT_VERSION < QT_VERSION_CHECK(5, 0, 0)
-// Qt::escape
-#include <QTextDocument>
-#endif
 
 Q_DECLARE_METATYPE(pref_t *)
 
@@ -63,7 +59,7 @@ static const QString title_to_shortcut(const char *title) {
 extern "C" {
 // Callbacks prefs routines
 
-/* show a single preference on the GtkGrid of a preference page */
+/* Add a single preference to the QVBoxLayout of a preference page */
 static guint
 pref_show(pref_t *pref, gpointer layout_ptr)
 {
@@ -72,17 +68,13 @@ pref_show(pref_t *pref, gpointer layout_ptr)
     if (!pref || !vb) return 0;
 
     // Convert the pref description from plain text to rich text.
-    QString description;
-#if QT_VERSION < QT_VERSION_CHECK(5, 0, 0)
-    description = Qt::escape(pref->description);
-#else
-    description = QString(pref->description).toHtmlEscaped();
-#endif
+    QString description = html_escape(pref->description);
     description.replace('\n', "<br>");
     QString tooltip = QString("<span>%1</span>").arg(description);
 
     switch (pref->type) {
     case PREF_UINT:
+    case PREF_DECODE_AS_UINT:
     {
         QHBoxLayout *hb = new QHBoxLayout();
         QLabel *label = new QLabel(pref->title);
@@ -159,6 +151,7 @@ pref_show(pref_t *pref, gpointer layout_ptr)
         vb->addLayout(hb);
         break;
     }
+    case PREF_DECODE_AS_RANGE:
     case PREF_RANGE:
     {
         QHBoxLayout *hb = new QHBoxLayout();
@@ -178,6 +171,7 @@ pref_show(pref_t *pref, gpointer layout_ptr)
     {
         QLabel *label = new QLabel(pref->title);
         label->setToolTip(tooltip);
+        label->setWordWrap(true);
         vb->addWidget(label);
         break;
     }
@@ -259,6 +253,9 @@ ModulePreferencesScrollArea::ModulePreferencesScrollArea(module_t *module, QWidg
         if (!pref) continue;
 
         switch (pref->type) {
+        case PREF_DECODE_AS_UINT:
+            connect(le, SIGNAL(textEdited(QString)), this, SLOT(uintLineEditTextEdited(QString)));
+            break;
         case PREF_UINT:
             connect(le, SIGNAL(textEdited(QString)), this, SLOT(uintLineEditTextEdited(QString)));
             break;
@@ -268,6 +265,7 @@ ModulePreferencesScrollArea::ModulePreferencesScrollArea(module_t *module, QWidg
             connect(le, SIGNAL(textEdited(QString)), this, SLOT(stringLineEditTextEdited(QString)));
             break;
         case PREF_RANGE:
+        case PREF_DECODE_AS_RANGE:
             connect(le, SIGNAL(textEdited(QString)), this, SLOT(rangeSyntaxLineEditTextEdited(QString)));
             break;
         default:

@@ -32,6 +32,7 @@
 #include <epan/expert.h>
 #include <epan/prefs.h>
 #include <epan/uat.h>
+#include <wsutil/bits_ctz.h>
 #include "packet-zbee.h"
 #include "packet-zbee-nwk.h"
 #include "packet-zbee-security.h"
@@ -102,6 +103,9 @@ typedef struct {
 
     /* Src ID. */
     guint32 source_id;
+
+    /* GPD Endpoint */
+    guint8 endpoint;
 
     /* Security Frame Counter. */
     guint32 security_frame_counter;
@@ -213,6 +217,9 @@ static int hf_zbee_nwk_gp_fc_ext_sec_level = -1;
 /* ZGPD Src ID. */
 static int hf_zbee_nwk_gp_zgpd_src_id = -1;
 
+/* ZGPD Endpoint */
+static int hf_zbee_nwk_gp_zgpd_endpoint = -1;
+
 /* Security frame counter. */
 static int hf_zbee_nwk_gp_security_frame_counter = -1;
 
@@ -259,6 +266,7 @@ static int hf_zbee_nwk_gp_cmd_comm_rep_opt_sec_key_present = -1;
 static int hf_zbee_nwk_gp_cmd_comm_rep_opt_sec_level = -1;
 static int hf_zbee_nwk_gp_cmd_comm_rep_opt_sec_type = -1;
 static int hf_zbee_nwk_gp_cmd_comm_rep_pan_id = -1;
+static int hf_zbee_nwk_gp_cmd_comm_rep_frame_counter = -1;
 
 /* Attribute reporting. */
 static int hf_zbee_nwk_gp_cmd_attr_report_cluster_id = -1;
@@ -833,6 +841,7 @@ dissect_zbee_nwk_gp_cmd_commissioning_reply(tvbuff_t *tvb, packet_info *pinfo _U
     zbee_nwk_green_power_packet *packet _U_, guint offset)
 {
     guint8 cr_options;
+    guint8 cr_sec_level;
 
     static const int * options[] = {
         &hf_zbee_nwk_gp_cmd_comm_rep_opt_panid_present,
@@ -862,6 +871,16 @@ dissect_zbee_nwk_gp_cmd_commissioning_reply(tvbuff_t *tvb, packet_info *pinfo _U
     if ((cr_options & ZBEE_NWK_GP_CMD_COMMISSIONING_REP_OPT_KEY_ENCR) && (cr_options &
         ZBEE_NWK_GP_CMD_COMMISSIONING_REP_OPT_SEC_KEY_PRESENT)) {
         proto_tree_add_item(tree, hf_zbee_nwk_gp_cmd_comm_gpd_sec_key_mic, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+        offset += 4;
+    }
+    /* Parse and display Frame Counter */
+    cr_sec_level = (cr_options & ZBEE_NWK_GP_CMD_COMMISSIONING_REP_OPT_SEC_LEVEL) >>
+        ws_ctz(ZBEE_NWK_GP_CMD_COMMISSIONING_REP_OPT_SEC_LEVEL);
+    if ((cr_options & ZBEE_NWK_GP_CMD_COMMISSIONING_REP_OPT_KEY_ENCR) &&
+        (cr_options & ZBEE_NWK_GP_CMD_COMMISSIONING_REP_OPT_SEC_KEY_PRESENT) &&
+        ((cr_sec_level == ZBEE_NWK_GP_SECURITY_LEVEL_FULL) ||
+        (cr_sec_level == ZBEE_NWK_GP_SECURITY_LEVEL_FULLENCR))) {
+        proto_tree_add_item(tree, hf_zbee_nwk_gp_cmd_comm_rep_frame_counter, tvb, offset, 4, ENC_LITTLE_ENDIAN);
         offset += 4;
     }
     return offset;
@@ -1245,18 +1264,29 @@ dissect_zbee_nwk_gp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *d
         col_append_fstr(pinfo->cinfo, COL_INFO, ", GPD Src ID: 0x%04x", packet.source_id);
         offset += 4;
     }
+    if (packet.application_id == ZBEE_NWK_GP_APP_ID_ZGP) {
+        /* Display GPD endpoint */
+        packet.endpoint = tvb_get_guint8(tvb, offset);
+        proto_tree_add_item(nwk_tree, hf_zbee_nwk_gp_zgpd_endpoint, tvb, offset, 1, ENC_LITTLE_ENDIAN);
+        proto_item_append_text(proto_root, ", Endpoint: %d", packet.endpoint);
+
+        col_append_fstr(pinfo->cinfo, COL_INFO, ", Endpoint: %d", packet.endpoint);
+        offset += 1;
+    }
     /* Display Security Frame Counter. */
     packet.mic_size = 0;
     if (packet.nwk_frame_control_extension) {
-        if (packet.application_id == ZBEE_NWK_GP_APP_ID_DEFAULT || packet.application_id == ZBEE_NWK_GP_APP_ID_ZGP) {
-            if (packet.security_level == ZBEE_NWK_GP_SECURITY_LEVEL_1LSB) {
+        if (packet.application_id == ZBEE_NWK_GP_APP_ID_DEFAULT || packet.application_id == ZBEE_NWK_GP_APP_ID_ZGP
+            || packet.application_id == ZBEE_NWK_GP_APP_ID_LPED) {
+            if (packet.security_level == ZBEE_NWK_GP_SECURITY_LEVEL_1LSB
+                && packet.application_id != ZBEE_NWK_GP_APP_ID_LPED) {
                 packet.mic_size = 2;
             } else if (packet.security_level == ZBEE_NWK_GP_SECURITY_LEVEL_FULL || packet.security_level ==
                 ZBEE_NWK_GP_SECURITY_LEVEL_FULLENCR) {
                 /* Get Security Frame Counter and display it. */
                 packet.mic_size = 4;
                 packet.security_frame_counter = tvb_get_letohl(tvb, offset);
-                    proto_tree_add_item(nwk_tree, hf_zbee_nwk_gp_security_frame_counter, tvb, offset, 4,
+                proto_tree_add_item(nwk_tree, hf_zbee_nwk_gp_security_frame_counter, tvb, offset, 4,
                     ENC_LITTLE_ENDIAN);
                 offset += 4;
             }
@@ -1456,6 +1486,9 @@ proto_register_zbee_nwk_gp(void)
             { "Src ID", "zbee_nwk_gp.source_id", FT_UINT32, BASE_HEX, VALS(zbee_nwk_gp_src_id_names), 0x0, NULL,
                 HFILL }},
 
+        { &hf_zbee_nwk_gp_zgpd_endpoint,
+            { "Endpoint", "zbee_nwk_gp.endpoint", FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL }},
+
         { &hf_zbee_nwk_gp_security_frame_counter,
             { "Security Frame Counter", "zbee_nwk_gp.security_frame_counter", FT_UINT32, BASE_DEC, NULL, 0x0, NULL,
                 HFILL }},
@@ -1598,7 +1631,10 @@ proto_register_zbee_nwk_gp(void)
                 ZBEE_NWK_GP_CMD_COMMISSIONING_REP_OPT_KEY_TYPE, NULL, HFILL }},
 
         { &hf_zbee_nwk_gp_cmd_comm_rep_pan_id,
-            { "Manufacturer ID", "zbee_nwk_gp.cmd.comm_reply.pan_id", FT_UINT16, BASE_HEX, NULL, 0x0, NULL, HFILL }},
+            { "PAN ID", "zbee_nwk_gp.cmd.comm_reply.pan_id", FT_UINT16, BASE_HEX, NULL, 0x0, NULL, HFILL }},
+
+        { &hf_zbee_nwk_gp_cmd_comm_rep_frame_counter,
+            { "Frame Counter", "zbee_nwk_gp.cmd.comm_reply.frame_counter", FT_UINT32, BASE_HEX, NULL, 0x0, NULL, HFILL }},
 
         { &hf_zbee_nwk_gp_cmd_attr_report_cluster_id,
             { "ZigBee Cluster ID", "zbee_nwk_gp.cmd.comm.attr_report", FT_UINT16, BASE_HEX, VALS(zbee_aps_cid_names),

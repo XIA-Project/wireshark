@@ -237,9 +237,14 @@ static const int *netlink_header_standard_flags[] = {
 
 
 int
-dissect_netlink_attributes(tvbuff_t *tvb, header_field_info *hfi_type, int ett, void *data, proto_tree *tree, int offset, int length, netlink_attributes_cb_t cb)
+dissect_netlink_attributes(tvbuff_t *tvb, header_field_info *hfi_type, int ett, void *data, struct packet_netlink_data *nl_data, proto_tree *tree, int offset, int length, netlink_attributes_cb_t cb)
 {
+	int encoding;
 	int padding = (4 - offset) & 3;
+
+	DISSECTOR_ASSERT(nl_data);
+
+	encoding = nl_data->encoding;
 
 	/* align to 4 */
 	offset += padding;
@@ -255,7 +260,7 @@ dissect_netlink_attributes(tvbuff_t *tvb, header_field_info *hfi_type, int ett, 
 		proto_item *ti, *type_item;
 		proto_tree *attr_tree, *type_tree;
 
-		rta_len = tvb_get_letohs(tvb, offset);
+		rta_len = tvb_get_guint16(tvb, offset, encoding);
 		if (rta_len < 4) {
 			/* XXX invalid expert */
 			break;
@@ -266,16 +271,16 @@ dissect_netlink_attributes(tvbuff_t *tvb, header_field_info *hfi_type, int ett, 
 
 		attr_tree = proto_tree_add_subtree(tree, tvb, offset, rta_len, ett, &ti, "Attribute");
 
-		proto_tree_add_item(attr_tree, &hfi_netlink_attr_len, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+		proto_tree_add_item(attr_tree, &hfi_netlink_attr_len, tvb, offset, 2, encoding);
 		offset += 2;
 
-		rta_type = tvb_get_letohs(tvb, offset);
+		rta_type = tvb_get_guint16(tvb, offset, encoding);
 		type = rta_type & NLA_TYPE_MASK;
-		type_item = proto_tree_add_item(attr_tree, &hfi_netlink_attr_type, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+		type_item = proto_tree_add_item(attr_tree, &hfi_netlink_attr_type, tvb, offset, 2, encoding);
 		type_tree = proto_item_add_subtree(type_item, ett_netlink_attr_type);
-		proto_tree_add_item(type_tree, &hfi_netlink_attr_type_nested, tvb, offset, 2, ENC_LITTLE_ENDIAN);
-		proto_tree_add_item(type_tree, &hfi_netlink_attr_type_net_byteorder, tvb, offset, 2, ENC_LITTLE_ENDIAN);
-		proto_tree_add_item(type_tree, hfi_type, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+		proto_tree_add_item(type_tree, &hfi_netlink_attr_type_nested, tvb, offset, 2, encoding);
+		proto_tree_add_item(type_tree, &hfi_netlink_attr_type_net_byteorder, tvb, offset, 2, encoding);
+		proto_tree_add_item(type_tree, hfi_type, tvb, offset, 2, encoding);
 		offset += 2;
 
 		if (rta_type & NLA_F_NESTED)
@@ -319,7 +324,7 @@ dissect_netlink_hdr(tvbuff_t *tvb, proto_tree *tree, int offset, int encoding, g
 	offset += 4;
 
 	pi_type = proto_tree_add_item(fh_hdr, &hfi_netlink_hdr_type, tvb, offset, 2, encoding);
-	hdr_type = tvb_get_letohs(tvb, offset);
+	hdr_type = tvb_get_guint16(tvb, offset, encoding);
 	if (hdr_type >= WS_NLMSG_MIN_TYPE) {
 		proto_item_set_text(pi_type, "Message type: Protocol-specific (0x%04x)", hdr_type);
 	}
@@ -379,6 +384,8 @@ dissect_netlink(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *_data
 	proto_tree *fh_tree;
 
 	int offset;
+	int encoding;
+	guint len_rem, len_le, len_be;
 
 	hatype = tvb_get_ntohs(tvb, 2);
 	if (hatype != ARPHRD_NETLINK)
@@ -406,6 +413,23 @@ dissect_netlink(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *_data
 
 	/* DISSECTOR_ASSERT(offset == 16); */
 
+	/*
+	 * We are unable to detect the endianness, we have to guess. Compare
+	 * the size of the inner package with the size of the outer package,
+	 * take the endianness in which the inner package length is closer to
+	 * the size of the outer package. Normally we have packages with less
+	 * than 10KB here so the sizes are very huge in the wrong endianness.
+	 */
+	len_rem = tvb_reported_length_remaining(tvb, offset);
+	len_le = tvb_get_letohl(tvb, offset);
+	len_be = tvb_get_ntohl(tvb, offset);
+	#define abs_diff(a, b) ((a) > (b) ? (a) - (b) : (b) - (a))
+	if (abs_diff(len_be, len_rem) < abs_diff(len_le, len_rem)) {
+		encoding = ENC_BIG_ENDIAN;
+	} else {
+		encoding = ENC_LITTLE_ENDIAN;
+	}
+
 	while (tvb_reported_length_remaining(tvb, offset) >= 16) {
 		struct packet_netlink_data data;
 
@@ -416,9 +440,7 @@ dissect_netlink(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *_data
 		proto_tree *fh_msg;
 
 
-		int encoding = ENC_LITTLE_ENDIAN; /* XXX */
-
-		pkt_len = tvb_get_letohl(tvb, offset);
+		pkt_len = tvb_get_guint32(tvb, offset, encoding);
 
 		pkt_end_offset = offset + pkt_len;
 
@@ -531,7 +553,7 @@ proto_register_netlink(void)
 		"netlink.protocol",
 		"Linux netlink protocol type",
 		proto_netlink, FT_UINT16,
-		BASE_HEX, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE
+		BASE_HEX
 	);
 	register_dissector("netlink", dissect_netlink, proto_netlink);
 }

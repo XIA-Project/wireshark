@@ -83,7 +83,6 @@ static xml_ns_t *root_ns;
 
 static gboolean pref_heuristic_unicode    = FALSE;
 
-static range_t *global_xml_tcp_range = NULL;
 static range_t *xml_tcp_range        = NULL;
 
 
@@ -200,6 +199,7 @@ dissect_xml(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 
     tt = tvbparse_init(tvb, 0, -1, stack, want_ignore);
     current_frame->start_offset = 0;
+    current_frame->length = tvb_captured_length(tvb);
 
     root_ns = NULL;
 
@@ -338,6 +338,7 @@ static void after_token(void *tvbparse_data, const void *wanted_data _U_, tvbpar
         new_frame->last_item      = pi;
         new_frame->tree           = NULL;
         new_frame->start_offset   = tok->offset;
+        new_frame->length         = tok->len;
         new_frame->ns             = NULL;
         new_frame->pinfo          = current_frame->pinfo;
     }
@@ -382,6 +383,7 @@ static void before_xmpli(void *tvbparse_data, const void *wanted_data _U_, tvbpa
     new_frame->last_item      = pi;
     new_frame->tree           = pt;
     new_frame->start_offset   = tok->offset;
+    new_frame->length         = tok->len;
     new_frame->ns             = ns;
     new_frame->pinfo          = current_frame->pinfo;
 
@@ -471,6 +473,7 @@ static void before_tag(void *tvbparse_data, const void *wanted_data _U_, tvbpars
     new_frame->last_item      = pi;
     new_frame->tree           = pt;
     new_frame->start_offset   = tok->offset;
+    new_frame->length         = tok->len;
     new_frame->ns             = ns;
     new_frame->pinfo          = current_frame->pinfo;
 
@@ -507,6 +510,7 @@ static void after_untag(void *tvbparse_data, const void *wanted_data _U_, tvbpar
     xml_frame_t *current_frame = (xml_frame_t *)g_ptr_array_index(stack, stack->len - 1);
 
     proto_item_set_len(current_frame->item, (tok->offset - current_frame->start_offset) + tok->len);
+    current_frame->length = (tok->offset - current_frame->start_offset) + tok->len;
 
     proto_tree_add_format_text(current_frame->tree, tok->tvb, tok->offset, tok->len);
 
@@ -542,6 +546,7 @@ static void before_dtd_doctype(void *tvbparse_data, const void *wanted_data _U_,
     new_frame->last_item      = dtd_item;
     new_frame->tree           = proto_item_add_subtree(dtd_item, ett_dtd);
     new_frame->start_offset   = tok->offset;
+    new_frame->length         = tok->len;
     new_frame->ns             = NULL;
     new_frame->pinfo          = current_frame->pinfo;
 
@@ -620,6 +625,7 @@ static void after_attrib(void *tvbparse_data, const void *wanted_data _U_, tvbpa
     new_frame->last_item      = pi;
     new_frame->tree           = NULL;
     new_frame->start_offset   = tok->offset;
+    new_frame->length         = tok->len;
     new_frame->ns             = NULL;
     new_frame->pinfo          = current_frame->pinfo;
 
@@ -1076,7 +1082,7 @@ static void register_dtd(dtd_build_data_t *dtd_data, GString *errors)
             free_elements(NULL, element, NULL);
         } else {
             g_hash_table_insert(elements, (gpointer)element->name, element);
-            g_ptr_array_add(element_names, g_strdup(element->name));
+            g_ptr_array_add(element_names, wmem_strdup(wmem_epan_scope(), element->name));
         }
 
         g_free(nl);
@@ -1179,8 +1185,6 @@ static void register_dtd(dtd_build_data_t *dtd_data, GString *errors)
                                               hfs, etts, dtd_data->proto_name);
                 g_hash_table_insert(root_element->elements, (gpointer)fresh->name, fresh);
             }
-
-            g_free(curr_name);
         }
 
     } else {
@@ -1225,19 +1229,21 @@ static void register_dtd(dtd_build_data_t *dtd_data, GString *errors)
      */
     if( dtd_data->proto_name ) {
         gint *ett_p;
+        gchar *full_name, *short_name;
 
-        if ( ! dtd_data->description) {
-            dtd_data->description = wmem_strdup(wmem_epan_scope(), root_name);
+        if (dtd_data->description) {
+            full_name = wmem_strdup(wmem_epan_scope(), dtd_data->description);
+        } else {
+            full_name = wmem_strdup(wmem_epan_scope(), root_name);
         }
+        short_name = wmem_strdup(wmem_epan_scope(), dtd_data->proto_name);
 
         ett_p = &root_element->ett;
         g_array_append_val(etts, ett_p);
 
         add_xml_field(hfs, &root_element->hf_cdata, root_element->name, root_element->fqn);
 
-        root_element->hf_tag = proto_register_protocol(dtd_data->description,
-                                                       dtd_data->proto_name,
-                                                       dtd_data->proto_name);
+        root_element->hf_tag = proto_register_protocol(full_name, short_name, short_name);
         proto_register_field_array(root_element->hf_tag, (hf_register_info*)wmem_array_get_raw(hfs), wmem_array_get_count(hfs));
         proto_register_subtree_array((gint **)g_array_data(etts), etts->len);
 
@@ -1246,8 +1252,6 @@ static void register_dtd(dtd_build_data_t *dtd_data, GString *errors)
             dtd_data->media_type = NULL;
         }
 
-        dtd_data->description = NULL;
-        dtd_data->proto_name  = NULL;
         g_array_free(etts, TRUE);
     }
 
@@ -1360,14 +1364,6 @@ static void init_xml_names(void)
     g_free(dummy);
 }
 
-static void apply_prefs(void)
-{
-    dissector_delete_uint_range("tcp.port", xml_tcp_range, xml_handle);
-    g_free(xml_tcp_range);
-    xml_tcp_range = range_copy(global_xml_tcp_range);
-    dissector_add_uint_range("tcp.port", xml_tcp_range, xml_handle);
-}
-
 void
 proto_register_xml(void)
 {
@@ -1450,12 +1446,9 @@ proto_register_xml(void)
     expert_xml = expert_register_protocol(xml_ns.hf_tag);
     expert_register_field_array(expert_xml, ei, array_length(ei));
 
-    xml_module = prefs_register_protocol(xml_ns.hf_tag, apply_prefs);
+    xml_module = prefs_register_protocol(xml_ns.hf_tag, NULL);
     prefs_register_obsolete_preference(xml_module, "heuristic");
     prefs_register_obsolete_preference(xml_module, "heuristic_tcp");
-    prefs_register_range_preference(xml_module, "tcp.port", "TCP Ports",
-                                    "TCP Ports range",
-                                    &global_xml_tcp_range, 65535);
     prefs_register_obsolete_preference(xml_module, "heuristic_udp");
     /* XXX - UCS-2, or UTF-16? */
     prefs_register_bool_preference(xml_module, "heuristic_unicode", "Use Unicode in heuristics",
@@ -1485,6 +1478,7 @@ proto_reg_handoff_xml(void)
     xml_handle = find_dissector("xml");
 
     g_hash_table_foreach(media_types, add_dissector_media, NULL);
+    dissector_add_uint_range_with_preference("tcp.port", "", xml_handle);
 
     heur_dissector_add("http",  dissect_xml_heur, "XML in HTTP", "xml_http", xml_ns.hf_tag, HEURISTIC_DISABLE);
     heur_dissector_add("sip",   dissect_xml_heur, "XML in SIP", "xml_sip", xml_ns.hf_tag, HEURISTIC_DISABLE);

@@ -35,7 +35,6 @@
 
 #include "qt_ui_utils.h"
 #include "wireshark_application.h"
-#include "interface_tree.h"
 
 #include <QClipboard>
 #include <QDir>
@@ -66,8 +65,6 @@ MainWelcome::MainWelcome(QWidget *parent) :
     welcome_ui_->setupUi(this);
 
     recent_files_ = welcome_ui_->recentList;
-
-    welcome_ui_->interfaceTree->resetColumnCount();
 
     welcome_ui_->captureFilterComboBox->setEnabled(false);
 
@@ -140,7 +137,6 @@ MainWelcome::MainWelcome(QWidget *parent) :
 
 #ifdef Q_OS_MAC
     recent_files_->setAttribute(Qt::WA_MacShowFocusRect, false);
-    welcome_ui_->interfaceTree->setAttribute(Qt::WA_MacShowFocusRect, false);
 #endif
 
     welcome_ui_->openFrame->hide();
@@ -165,15 +161,12 @@ MainWelcome::MainWelcome(QWidget *parent) :
 
     connect(wsApp, SIGNAL(updateRecentItemStatus(const QString &, qint64, bool)), this, SLOT(updateRecentFiles()));
     connect(wsApp, SIGNAL(appInitialized()), this, SLOT(appInitialized()));
-    connect(welcome_ui_->interfaceTree, SIGNAL(itemDoubleClicked(QTreeWidgetItem*,int)),
-            this, SLOT(interfaceDoubleClicked(QTreeWidgetItem*,int)));
-#ifdef HAVE_EXTCAP
-    connect(welcome_ui_->interfaceTree, SIGNAL(itemClicked(QTreeWidgetItem*,int)),
-            this, SLOT(interfaceClicked(QTreeWidgetItem*,int)));
-#endif
-    connect(welcome_ui_->interfaceTree, SIGNAL(itemSelectionChanged()),
+    connect(wsApp, SIGNAL(localInterfaceListChanged()), this, SLOT(interfaceListChanged()));
+    connect(welcome_ui_->interfaceFrame, SIGNAL(itemSelectionChanged()),
             welcome_ui_->captureFilterComboBox, SIGNAL(interfacesChanged()));
-    connect(welcome_ui_->interfaceTree, SIGNAL(itemSelectionChanged()), this, SLOT(interfaceSelected()));
+    connect(welcome_ui_->interfaceFrame, SIGNAL(typeSelectionChanged()),
+                    this, SLOT(interfaceListChanged()));
+    connect(welcome_ui_->interfaceFrame, SIGNAL(itemSelectionChanged()), this, SLOT(interfaceSelected()));
     connect(welcome_ui_->captureFilterComboBox->lineEdit(), SIGNAL(textEdited(QString)),
             this, SLOT(captureFilterTextEdited(QString)));
     connect(welcome_ui_->captureFilterComboBox, SIGNAL(pushFilterSyntaxStatus(const QString&)),
@@ -194,6 +187,36 @@ MainWelcome::MainWelcome(QWidget *parent) :
     welcome_ui_->childContainer->setGraphicsEffect(blur);
 #endif
 
+    welcome_ui_->btnInterfaceType->setStyleSheet(
+            "QPushButton {"
+#ifdef Q_OS_MAC
+            "  border: 1px solid gray;"
+#else
+            "  border: 1px solid palette(shadow);"
+#endif
+            "  border-radius: 3px;"
+            "  padding: 0px 0px 0px 0px;"
+            "  margin-left: 0px;"
+            "  min-width: 20em;"
+            " }"
+
+            "QPushButton::drop-down {"
+            "  subcontrol-origin: padding;"
+            "  subcontrol-position: top right;"
+            "  width: 16px;"
+            "  border-left-width: 0px;"
+            " }"
+
+            "QPushButton::down-arrow {"
+            "  image: url(:/icons/toolbar/14x14/x-filter-dropdown.png);"
+            " }"
+
+            "QPushButton::down-arrow:on { /* shift the arrow when popup is open */"
+            "  top: 1px;"
+            "  left: 1px;"
+            "}"
+            );
+
     splash_overlay_ = new SplashOverlay(this);
 }
 
@@ -202,9 +225,9 @@ MainWelcome::~MainWelcome()
     delete welcome_ui_;
 }
 
-InterfaceTree *MainWelcome::getInterfaceTree()
+InterfaceFrame *MainWelcome::getInterfaceFrame()
 {
-    return welcome_ui_->interfaceTree;
+    return welcome_ui_->interfaceFrame;
 }
 
 const QString MainWelcome::captureFilter()
@@ -218,6 +241,15 @@ void MainWelcome::setCaptureFilter(const QString capture_filter)
     // CaptureInterfacesDialog. We need to find a good way to handle
     // multiple filters.
     welcome_ui_->captureFilterComboBox->lineEdit()->setText(capture_filter);
+}
+
+void MainWelcome::interfaceListChanged()
+{
+    QString btnText = QString(tr("%1 Interfaces shown, %2 hidden"))
+            .arg(welcome_ui_->interfaceFrame->interfacesPresent())
+            .arg(welcome_ui_->interfaceFrame->interfacesHidden());
+    welcome_ui_->btnInterfaceType->setText(btnText);
+    welcome_ui_->btnInterfaceType->setMenu(welcome_ui_->interfaceFrame->getSelectionMenu());
 }
 
 void MainWelcome::appInitialized()
@@ -247,10 +279,9 @@ void MainWelcome::appInitialized()
     welcome_ui_->captureFilterComboBox->lineEdit()->setText(global_capture_opts.default_options.cfilter);
 #endif // HAVE_LIBPCAP
 
-    // Trigger interfacesUpdated.
-    welcome_ui_->interfaceTree->selectedInterfaceChanged();
-
     welcome_ui_->captureFilterComboBox->setEnabled(true);
+
+    interfaceListChanged();
 
     delete splash_overlay_;
     splash_overlay_ = NULL;
@@ -286,7 +317,6 @@ void MainWelcome::captureFilterTextEdited(const QString capture_filter)
             //                update_filter_string(device.name, filter_text);
         }
     }
-    welcome_ui_->interfaceTree->updateToolTips();
 }
 #else
 // No-op if we don't have capturing.
@@ -314,40 +344,17 @@ void MainWelcome::interfaceSelected()
     }
 }
 
-void MainWelcome::interfaceDoubleClicked(QTreeWidgetItem *item, int)
-{
-    if (item) {
 #ifdef HAVE_EXTCAP
-        QString extcap_string = QVariant(item->data(IFTREE_COL_EXTCAP, Qt::UserRole)).toString();
-        /* We trust the string here. If this interface is really extcap, the string is
-         * being checked immediatly before the dialog is being generated */
-        if (extcap_string.length() > 0) {
-            QString device_name = QVariant(item->data(IFTREE_COL_NAME, Qt::UserRole)).toString();
-            /* this checks if configuration is required and not yet provided or saved via prefs */
-            if (extcap_has_configuration((const char *)(device_name.toStdString().c_str()), TRUE)) {
-                emit showExtcapOptions(device_name);
-                return;
-            }
-        }
-#endif
-        emit startCapture();
-    }
+void MainWelcome::on_interfaceFrame_showExtcapOptions(QString device_name)
+{
+    emit showExtcapOptions(device_name);
 }
+#endif
 
-#ifdef HAVE_EXTCAP
-void MainWelcome::interfaceClicked(QTreeWidgetItem *item, int column)
+void MainWelcome::on_interfaceFrame_startCapture()
 {
-    if (column == IFTREE_COL_EXTCAP) {
-        QString extcap_string = QVariant(item->data(IFTREE_COL_EXTCAP, Qt::UserRole)).toString();
-        /* We trust the string here. If this interface is really extcap, the string is
-         * being checked immediatly before the dialog is being generated */
-        if (extcap_string.length() > 0) {
-            QString device_name = QVariant(item->data(IFTREE_COL_NAME, Qt::UserRole)).toString();
-            emit showExtcapOptions(device_name);
-        }
-    }
+    emit startCapture();
 }
-#endif
 
 void MainWelcome::updateRecentFiles() {
     QString itemLabel;
@@ -358,6 +365,13 @@ void MainWelcome::updateRecentFiles() {
     if (!recent_files_->selectedItems().isEmpty()) {
         rfItem = recent_files_->selectedItems().first();
         selectedFilename = rfItem->data(Qt::UserRole).toString();
+    }
+
+    if (wsApp->recentItems().count() == 0) {
+       // Recent menu has been cleared, remove all recent files.
+       while (recent_files_->count()) {
+          delete recent_files_->item(0);
+       }
     }
 
     int rfRow = 0;
@@ -397,7 +411,7 @@ void MainWelcome::updateRecentFiles() {
     }
 
     int row = recent_files_->count();
-    while (row > 0 && row > (int) prefs.gui_recent_files_count_max) {
+    while (row > 0 && (row > (int) prefs.gui_recent_files_count_max || row > rfRow)) {
         row--;
         delete recent_files_->item(row);
     }
@@ -457,14 +471,20 @@ void MainWelcome::showRecentContextMenu(QPoint pos)
     recent_ctx_menu_->clear();
 
     QString cf_path = li->data(Qt::UserRole).toString();
-    QAction *show_action = recent_ctx_menu_->addAction(show_in_str_);
 
+    QAction *show_action = recent_ctx_menu_->addAction(show_in_str_);
     show_action->setData(cf_path);
     connect(show_action, SIGNAL(triggered(bool)), this, SLOT(showRecentFolder()));
 
     QAction *copy_action = recent_ctx_menu_->addAction(tr("Copy file path"));
     copy_action->setData(cf_path);
     connect(copy_action, SIGNAL(triggered(bool)), this, SLOT(copyRecentPath()));
+
+    recent_ctx_menu_->addSeparator();
+
+    QAction *remove_action = recent_ctx_menu_->addAction(tr("Remove"));
+    remove_action->setData(cf_path);
+    connect(remove_action, SIGNAL(triggered(bool)), this, SLOT(removeRecentPath()));
 
     recent_ctx_menu_->exec(recent_files_->mapToGlobal(pos));
 }
@@ -487,6 +507,17 @@ void MainWelcome::copyRecentPath()
     if (cf_path.isEmpty()) return;
 
     wsApp->clipboard()->setText(cf_path);
+}
+
+void MainWelcome::removeRecentPath()
+{
+    QAction *ria = qobject_cast<QAction*>(sender());
+    if (!ria) return;
+
+    QString cf_path = ria->data().toString();
+    if (cf_path.isEmpty()) return;
+
+    wsApp->removeRecentItem(cf_path);
 }
 
 /*

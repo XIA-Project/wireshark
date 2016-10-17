@@ -126,6 +126,7 @@ const value_string gre_typevals[] = {
     { ETHERTYPE_ARP,       "ARP" },
     { SAP_OSINL5,          "OSI"},
     { GRE_WCCP,            "WCCP"},
+    { GRE_CISCO_CDP,       "CDP (Cisco)"},
     { GRE_NHRP,            "NHRP"},
     { GRE_ERSPAN_88BE,     "ERSPAN"},
     { GRE_ERSPAN_22EB,     "ERSPAN"},
@@ -746,7 +747,7 @@ proto_register_gre(void)
 
     /* subdissector code */
     gre_dissector_table = register_dissector_table("gre.proto",
-                                                   "GRE protocol type", proto_gre, FT_UINT16, BASE_HEX, DISSECTOR_TABLE_ALLOW_DUPLICATE);
+                                                   "GRE protocol type", proto_gre, FT_UINT16, BASE_HEX);
 }
 
 void

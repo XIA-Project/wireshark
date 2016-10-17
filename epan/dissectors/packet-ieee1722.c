@@ -51,7 +51,6 @@ void proto_reg_handoff_1722_aaf(void);
 void proto_register_1722_61883(void);
 void proto_reg_handoff_1722_61883(void);
 
-
 /**************************************************************************************************/
 /* 1722                                                                                           */
 /*                                                                                                */
@@ -63,7 +62,6 @@ void proto_reg_handoff_1722_61883(void);
 /* Bit Field Masks */
 #define IEEE_1722_SV_MASK        0x80
 #define IEEE_1722_VER_MASK       0x70
-#define IEEE_1722_SUBTYPE_MASK   0x7F
 
 /**************************************************************************************************/
 /* subtype IEC 61883                                                                              */
@@ -482,7 +480,7 @@ void proto_register_1722(void)
     static hf_register_info hf[] = {
         { &hf_1722_subtype,
             { "AVBTP Subtype", "ieee1722.subtype",
-              FT_UINT8, BASE_HEX | BASE_RANGE_STRING, RVALS(subtype_range_rvals), IEEE_1722_SUBTYPE_MASK, NULL, HFILL }
+              FT_UINT8, BASE_HEX | BASE_RANGE_STRING, RVALS(subtype_range_rvals), 0x00, NULL, HFILL }
         },
         { &hf_1722_svfield,
             { "AVTP Stream ID Valid", "ieee1722.svfield",
@@ -507,7 +505,7 @@ void proto_register_1722(void)
 
     /* Sub-dissector for 1772.1, 1722 AAF, 1722 CRF, 1722 61883 */
     avb_dissector_table = register_dissector_table("ieee1722.subtype",
-                          "IEEE1722 AVBTP Subtype", proto_1722, FT_UINT8, BASE_HEX, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
+                          "IEEE1722 AVBTP Subtype", proto_1722, FT_UINT8, BASE_HEX);
 }
 
 void proto_reg_handoff_1722(void)
@@ -1066,7 +1064,6 @@ static int dissect_1722_aaf (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
     {
         proto_tree_add_item(ti_aaf_tree, hf_1722_aaf_nominal_sample_rate, tvb, offset, 2, ENC_BIG_ENDIAN);
         ti_channels_per_frame = proto_tree_add_item_ret_uint(ti_aaf_tree, hf_1722_aaf_channels_per_frame, tvb, offset, 2, ENC_BIG_ENDIAN, &channels_per_frame);
-        channels_per_frame &= IEEE_1722_CHANNEL_PER_FRAME_MASK;
         if (channels_per_frame == 0)
         {
             expert_add_info(pinfo, ti_channels_per_frame, &ei_aaf_channels_per_frame);

@@ -57,7 +57,6 @@ ERROR_INTERFACE	= 2
 ERROR_FIFO 		= 3
 ERROR_DELAY		= 4
 
-doExit = False
 globalinterface = 0
 
 """
@@ -86,10 +85,6 @@ class ArgumentParser(argparse.ArgumentParser):
 			exc.argument = self._get_action_from_name(exc.argument_name)
 			raise exc
 		super(ArgumentParser, self).error(message)
-
-def signalHandler(signal, frame):
-	global doExit
-	doExit = True
 
 #### EXTCAP FUNCTIONALITY
 
@@ -123,7 +118,7 @@ def extcap_config(interface):
 
 
 def extcap_interfaces():
-	print ("extcap {version=1.0}")
+	print ("extcap {version=1.0}{help=http://www.wireshark.org}")
 	print ("interface {value=example1}{display=Example interface usage for extcap}")
 
 def extcap_dlts(interface):
@@ -147,21 +142,16 @@ Extcap capture routine
 def unsigned(n):
 	return int(n) & 0xFFFFFFFF
 
-def append_bytes(ba, blist):
-	for c in range(0, len(blist)):
-		ba.append(blist[c])
-	return ba
-
 def pcap_fake_header():
 
 	header = bytearray()
-	header = append_bytes(header, struct.pack('<L', int ('a1b2c3d4', 16) ))
-	header = append_bytes(header, struct.pack('<H', unsigned(2)) ) # Pcap Major Version
-	header = append_bytes(header, struct.pack('<H', unsigned(4)) ) # Pcap Minor Version
-	header = append_bytes(header, struct.pack('<I', int(0))) # Timezone
-	header = append_bytes(header, struct.pack('<I', int(0))) # Accurancy of timestamps
-	header = append_bytes(header, struct.pack('<L', int ('0000ffff', 16) )) # Max Length of capture frame
-	header = append_bytes(header, struct.pack('<L', unsigned(1))) # Ethernet
+	header += struct.pack('<L', int ('a1b2c3d4', 16 ))
+	header += struct.pack('<H', unsigned(2) ) # Pcap Major Version
+	header += struct.pack('<H', unsigned(4) ) # Pcap Minor Version
+	header += struct.pack('<I', int(0)) # Timezone
+	header += struct.pack('<I', int(0)) # Accurancy of timestamps
+	header += struct.pack('<L', int ('0000ffff', 16 )) # Max Length of capture frame
+	header += struct.pack('<L', unsigned(1)) # Ethernet
 	return header
 
 # Calculates and returns the IP checksum based on the given IP Header
@@ -183,81 +173,62 @@ def pcap_fake_package ( message, fake_ip ):
 	caplength = len(message) + 14 + 20
 	timestamp = int(time.time())
 
-	pcap = append_bytes(pcap, struct.pack('<L', unsigned(timestamp) ) ) # timestamp seconds
-	pcap = append_bytes(pcap, struct.pack('<L', 0x00 ) ) # timestamp nanoseconds
-	pcap = append_bytes(pcap, struct.pack('<L', unsigned(caplength) ) ) # length captured
-	pcap = append_bytes(pcap, struct.pack('<L', unsigned(caplength) ) ) # length in frame
+	pcap += struct.pack('<L', unsigned(timestamp ) ) # timestamp seconds
+	pcap += struct.pack('<L', 0x00  ) # timestamp nanoseconds
+	pcap += struct.pack('<L', unsigned(caplength ) ) # length captured
+	pcap += struct.pack('<L', unsigned(caplength ) ) # length in frame
 
 # ETH
-	pcap = append_bytes(pcap, struct.pack('h', 0 )) # source mac
-	pcap = append_bytes(pcap, struct.pack('h', 0 )) # source mac
-	pcap = append_bytes(pcap, struct.pack('h', 0 )) # source mac
-	pcap = append_bytes(pcap, struct.pack('h', 0 )) # dest mac
-	pcap = append_bytes(pcap, struct.pack('h', 0 )) # dest mac
-	pcap = append_bytes(pcap, struct.pack('h', 0 )) # dest mac
-	pcap = append_bytes(pcap, struct.pack('<h', unsigned(8) )) # protocol (ip)
+	pcap += struct.pack('h', 0 ) # source mac
+	pcap += struct.pack('h', 0 ) # source mac
+	pcap += struct.pack('h', 0 ) # source mac
+	pcap += struct.pack('h', 0 ) # dest mac
+	pcap += struct.pack('h', 0 ) # dest mac
+	pcap += struct.pack('h', 0 ) # dest mac
+	pcap += struct.pack('<h', unsigned(8 )) # protocol (ip)
 
 # IP
-	pcap = append_bytes(pcap, struct.pack('b', int ( '45', 16) )) # IP version
-	pcap = append_bytes(pcap, struct.pack('b', int ( '0', 16) )) #
-	pcap = append_bytes(pcap, struct.pack('>H', unsigned(len(message)+20) )) # length of data + payload
-	pcap = append_bytes(pcap, struct.pack('<H', int ( '0', 16) )) # Identification
-	pcap = append_bytes(pcap, struct.pack('b', int ( '40', 16) )) # Don't fragment
-	pcap = append_bytes(pcap, struct.pack('b', int ( '0', 16) )) # Fragment Offset
-	pcap = append_bytes(pcap, struct.pack('b', int ( '40', 16) ))
-	pcap = append_bytes(pcap, struct.pack('B', 0xFE )) # Protocol (2 = unspecified)
-	pcap = append_bytes(pcap, struct.pack('<H', int ( '0000', 16) )) # Checksum
+	pcap += struct.pack('b', int ( '45', 16 )) # IP version
+	pcap += struct.pack('b', int ( '0', 16 )) #
+	pcap += struct.pack('>H', unsigned(len(message)+20) ) # length of data + payload
+	pcap += struct.pack('<H', int ( '0', 16 )) # Identification
+	pcap += struct.pack('b', int ( '40', 16 )) # Don't fragment
+	pcap += struct.pack('b', int ( '0', 16 )) # Fragment Offset
+	pcap += struct.pack('b', int ( '40', 16 ))
+	pcap += struct.pack('B', 0xFE ) # Protocol (2 = unspecified)
+	pcap += struct.pack('<H', int ( '0000', 16 )) # Checksum
 
 	parts = fake_ip.split('.')
 	ipadr = (int(parts[0]) << 24) + (int(parts[1]) << 16) + (int(parts[2]) << 8) + int(parts[3])
-	pcap = append_bytes(pcap, struct.pack('>L', ipadr )) # Source IP
-	pcap = append_bytes(pcap, struct.pack('>L', int ( '7F000001', 16) )) # Dest IP
+	pcap += struct.pack('>L', ipadr ) # Source IP
+	pcap += struct.pack('>L', int ( '7F000001', 16 )) # Dest IP
 
-	pcap = append_bytes(pcap, message)
+	pcap += message
 	return pcap
 
 def extcap_capture(interface, fifo, delay, verify, message, remote, fake_ip):
-	global doExit
-
-	signal.signal(signal.SIGINT, signalHandler)
-	signal.signal(signal.SIGTERM , signalHandler)
-
 	tdelay = delay if delay != 0 else 5
 
-	try:
-		os.stat(fifo)
-	except OSError:
-		doExit = True
-		print ( "Fifo does not exist, exiting!" )
+	if not os.path.exists(fifo):
+		print ( "Fifo does not exist, exiting!", file=sys.stderr )
+		sys.exit(1)
 
-	fh = open(fifo, 'w+b', 0 )
-	fh.write (pcap_fake_header())
+	with open(fifo, 'wb', 0 ) as fh:
+		fh.write (pcap_fake_header())
 
-	while doExit == False:
-		out = str( "%s|%04X%s|%s" % ( remote.strip(), len(message), message, verify ) )
-		try:
+		while True:
+			out = ("%s|%04X%s|%s" % ( remote.strip(), len(message), message, verify )).encode("utf8")
 			fh.write (pcap_fake_package(out, fake_ip))
 			time.sleep(tdelay)
-		except IOError:
-			doExit = True
 
-	fh.close()
+def extcap_close_fifo(fifo):
+	if not os.path.exists(fifo):
+		print ( "Fifo does not exist!", file=sys.stderr )
+		return
 
-def extcap_close_fifo(interface, fifo):
-	global doExit
-
-	signal.signal(signal.SIGINT, signalHandler)
-	signal.signal(signal.SIGTERM , signalHandler)
-
-	tdelay = delay if delay != 0 else 5
-
-	try:
-		os.stat(fifo)
-	except OSError:
-		doExit = True
-		print ( "Fifo does not exist!" )
-
-	fh = open(fifo, 'w+b', 0 )
+	# This is apparently needed to workaround an issue on Windows/macOS
+	# where the message cannot be read. (really?)
+	fh = open(fifo, 'wb', 0 )
 	fh.close()
 
 ####
@@ -296,7 +267,7 @@ if __name__ == '__main__':
 
 	try:
 		args, unknown = parser.parse_known_args()
-	except argparse.ArgumentError, exc:
+	except argparse.ArgumentError as exc:
 		print( "%s: %s" % ( exc.argument.dest, exc.message ), file=sys.stderr)
 		fifo_found = 0
 		fifo = ""
@@ -306,7 +277,7 @@ if __name__ == '__main__':
 			elif ( fifo_found == 1 ):
 				fifo = arg
 				break
-		extcap_close_fifo("", fifo)
+		extcap_close_fifo(fifo)
 		sys.exit(ERROR_ARG)
 
 	if ( len(sys.argv) <= 1 ):
@@ -345,10 +316,13 @@ if __name__ == '__main__':
 		# The following code demonstrates error management with extcap
 		if args.delay > 5:
 			print("Value for delay [%d] too high" % args.delay, file=sys.stderr)
-			extcap_close_fifo(interface, args.fifo)
+			extcap_close_fifo(args.fifo)
 			sys.exit(ERROR_DELAY)
 
-		extcap_capture(interface, args.fifo, args.delay, args.verify, message, args.remote, fake_ip)
+		try:
+			extcap_capture(interface, args.fifo, args.delay, args.verify, message, args.remote, fake_ip)
+		except KeyboardInterrupt:
+			pass
 	else:
 		usage()
 		sys.exit(ERROR_USAGE)

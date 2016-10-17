@@ -69,10 +69,12 @@ AC_CONFIG_LIBOBJ_DIR([wsutil])
 #
 # Checks for programs used in the main build process.
 #
-AC_PROG_CC_STDC
-if test "$ac_cv_prog_cc_stdc" = "no"
+# See doc/README.developer for allowed C99 features
+#
+AC_PROG_CC_C99
+if test "$ac_cv_prog_cc_c99" = "no"
 then
-	AC_MSG_ERROR([The C compiler does not support standard C])
+	AC_MSG_ERROR([The C compiler does not support C99])
 fi
 AC_PROG_CPP
 
@@ -542,6 +544,10 @@ AC_SUBST(HAVE_OSX_PACKAGING)
 AC_CHECK_PROG(have_sw_vers, sw_vers, "yes", "no")
 AM_CONDITIONAL(NOT_OS_X, test "x$have_sw_vers" = "xno")
 
+# Shellcheck
+AC_CHECK_PROG(HAVE_SHELLCHECK, shellcheck, "yes", "no")
+AM_CONDITIONAL(HAVE_SHELLCHECK, test x$HAVE_SHELLCHECK = xyes)
+
 #
 # Check compiler vendor. For GCC this will be 'gnu' and for Clang 'clang'.
 #
@@ -589,7 +595,6 @@ AC_WIRESHARK_COMPILER_FLAGS_CHECK(-Wheader-guard)
 # The following are C only, not C++
 #
 AC_WIRESHARK_COMPILER_FLAGS_CHECK(-Wc++-compat, C)
-AC_WIRESHARK_COMPILER_FLAGS_CHECK(-Wdeclaration-after-statement, C)
 AC_WIRESHARK_COMPILER_FLAGS_CHECK(-Wunused-const-variable, C)
 
 #
@@ -690,9 +695,6 @@ then
 	fi
 fi
 
-#Clang only
-AC_WIRESHARK_COMPILER_FLAGS_CHECK(-Wc99-extensions, C)
-
 #
 # Try to add some additional checks to CFLAGS.
 # These are not enabled by default, because the warnings they produce
@@ -782,7 +784,21 @@ AC_ARG_ENABLE(asan,
 	# XXX shouldn't this also be added to LDFLAGS?
 	AC_WIRESHARK_COMPILER_FLAGS_CHECK(-fsanitize=address)
 
+	# Disable ASAN for build-time tools, e.g. lemon
+	WS_CFLAGS_saved="$WS_CFLAGS"
+	WS_LDFLAGS_saved="$WS_LDFLAGS"
+	AC_WIRESHARK_COMPILER_FLAGS_CHECK(-fno-sanitize=all, C)
+	if test "x$can_add_to_cflags" = "xyes"
+	then
+		NO_SANITIZE_CFLAGS="-fno-sanitize=all"
+		NO_SANITIZE_LDFLAGS="-fno-sanitize=all"
+	fi
+	WS_CFLAGS="$WS_CFLAGS_saved"
+	WS_LDFLAGS="$WS_LDFLAGS_saved"
+
 ])
+AC_SUBST(NO_SANITIZE_CFLAGS)
+AC_SUBST(NO_SANITIZE_LDFLAGS)
 
 # Add check hf conflict..
 #
@@ -2317,6 +2333,31 @@ else
 fi
 AC_SUBST(LIBSSH_LIBS)
 
+dnl nghttp2 Check
+NGHTTP2_LIBS=''
+AC_MSG_CHECKING(whether to use the nghttp2 HPACK library if available)
+
+AC_ARG_WITH(nghttp2,
+  AC_HELP_STRING( [--with-nghttp2@<:@=DIR@:>@],
+		  [use nghttp2 (located in directory DIR, if supplied) @<:@default=yes, if present@:>@]),
+[
+if   test "x$withval" = "xno";  then
+	want_nghttp2=no
+elif test "x$withval" = "xyes"; then
+	want_nghttp2=yes
+elif test -d "$withval"; then
+	want_nghttp2=yes
+	AC_WIRESHARK_ADD_DASH_L(WS_LDFLAGS, ${withval}/lib)
+fi
+])
+if test "x$want_nghttp2" = "xno"; then
+	AC_MSG_RESULT(no)
+else
+	AC_MSG_RESULT(yes)
+	AC_WIRESHARK_NGHTTP2_CHECK
+fi
+AC_SUBST(NGHTTP2_LIBS)
+
 dnl Checks for typedefs, structures, and compiler characteristics.
 # AC_C_CONST
 
@@ -2614,6 +2655,33 @@ fi
 AC_SUBST(randpktdump_bin)
 AC_SUBST(randpktdump_man)
 
+dnl udpdump check
+AC_MSG_CHECKING(whether to build udpdump)
+
+AC_ARG_ENABLE(udpdump,
+	AC_HELP_STRING( [--enable-udpdump],
+		[build udpdump @<:@default=yes@:>@]),
+	[],[enable_udpdump=yes])
+
+if test "x$have_extcap" != xyes; then
+	AC_MSG_RESULT([no, extcap disabled])
+	enable_udpdump=no
+elif test "x$enable_udpdump" = "xyes" ; then
+	AC_MSG_RESULT(yes)
+else
+	AC_MSG_RESULT(no)
+fi
+
+if test "x$enable_udpdump" = "xyes" ; then
+	udpdump_bin="udpdump\$(EXEEXT)"
+	udpdump_man="udpdump.1"
+else
+	udpdump_bin=""
+	udpdump_man=""
+fi
+AC_SUBST(udpdump_bin)
+AC_SUBST(udpdump_man)
+
 AM_CONDITIONAL(ENABLE_STATIC, test x$enable_static = xyes)
 if test x$enable_static = xyes -a x$have_plugins = xyes
 then
@@ -2724,6 +2792,7 @@ AC_CONFIG_FILES(
   epan/dissectors/asn1/lppa/Makefile
   epan/dissectors/asn1/lppe/Makefile
   epan/dissectors/asn1/lte-rrc/Makefile
+  epan/dissectors/asn1/m2ap/Makefile
   epan/dissectors/asn1/m3ap/Makefile
   epan/dissectors/asn1/mms/Makefile
   epan/dissectors/asn1/mpeg-audio/Makefile
@@ -2791,7 +2860,6 @@ AC_CONFIG_FILES(
   epan/dissectors/Makefile
   epan/dissectors/dcerpc/Makefile
   epan/ftypes/Makefile
-  epan/nghttp2/Makefile
   epan/wmem/Makefile
   epan/wslua/Makefile
   extcap/Makefile
@@ -2816,6 +2884,7 @@ AC_CONFIG_FILES(
   packaging/svr4/Makefile
   packaging/svr4/checkinstall
   packaging/svr4/pkginfo
+  packaging/wix/Makefile
   plugins/Makefile
   plugins/docsis/Makefile
   plugins/easy_codec/Makefile
@@ -2948,6 +3017,12 @@ else
 	ssh_userauth_agent_message="no"
 fi
 
+if test "x$have_good_nghttp2" = "xyes" ; then
+	nghttp2_message="yes"
+else
+	nghttp2_message="no"
+fi
+
 echo ""
 echo "  CPPFLAGS: $WS_CPPFLAGS $CPPFLAGS"
 echo ""
@@ -2980,6 +3055,7 @@ echo "                  Build androiddump : $enable_androiddump"
 echo "                      Build sshdump : $enable_sshdump"
 echo "                    Build ciscodump : $enable_ciscodump"
 echo "                  Build randpktdump : $enable_randpktdump"
+echo "                      Build udpdump : $enable_udpdump"
 echo "                        Build echld : $have_echld"
 echo ""
 echo "   Save files as pcap-ng by default : $enable_pcap_ng_default"
@@ -3006,4 +3082,5 @@ echo "                 Use libssh library : $libssh_message"
 echo "            Have ssh_userauth_agent : $ssh_userauth_agent_message"
 echo "                     Use nl library : $libnl_message"
 echo "              Use SBC codec library : $have_sbc"
+echo "                Use nghttp2 library : $nghttp2_message"
 #echo "       Use GDK-Pixbuf with GResource: $have_gresource_pixbuf"

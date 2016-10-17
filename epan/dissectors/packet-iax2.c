@@ -3200,9 +3200,9 @@ proto_register_iax2(void)
   register_dissector("iax2", dissect_iax2, proto_iax2);
 
   iax2_codec_dissector_table = register_dissector_table(
-    "iax2.codec", "IAX codec number", proto_iax2, FT_UINT32, BASE_HEX, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
+    "iax2.codec", "IAX codec number", proto_iax2, FT_UINT32, BASE_HEX);
   iax2_dataformat_dissector_table = register_dissector_table(
-    "iax2.dataformat", "IAX dataformat number", proto_iax2, FT_UINT32, BASE_HEX, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
+    "iax2.dataformat", "IAX dataformat number", proto_iax2, FT_UINT32, BASE_HEX);
 
   /* register our init routine to be called at the start of a capture,
      to clear out our hash tables etc */
@@ -3216,7 +3216,7 @@ proto_reg_handoff_iax2(void)
 {
   dissector_handle_t v110_handle;
 
-  dissector_add_uint("udp.port", IAX2_PORT, find_dissector("iax2"));
+  dissector_add_uint_with_preference("udp.port", IAX2_PORT, find_dissector("iax2"));
   v110_handle =  find_dissector("v110");
   if (v110_handle)
     dissector_add_uint("iax2.dataformat", AST_DATAFORMAT_V110, v110_handle);

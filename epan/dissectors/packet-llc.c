@@ -47,11 +47,7 @@ void proto_register_basicxid(void);
 void proto_register_llc(void);
 void proto_reg_handoff_llc(void);
 
-#define UDP_PORT_LLC1   12000
-#define UDP_PORT_LLC2   12001
-#define UDP_PORT_LLC3   12002
-#define UDP_PORT_LLC4   12003
-#define UDP_PORT_LLC5   12004
+#define UDP_PORT_LLC_RANGE   "12000-12004"
 
 static int proto_llc = -1;
 static int hf_llc_dsap = -1;
@@ -236,7 +232,7 @@ llc_add_oui(guint32 oui, const char *table_name, const char *table_ui_name,
 
 	new_info = (oui_info_t *)g_malloc(sizeof (oui_info_t));
 	new_info->table = register_dissector_table(table_name,
-	    table_ui_name, proto, FT_UINT16, BASE_HEX, DISSECTOR_TABLE_ALLOW_DUPLICATE);
+	    table_ui_name, proto, FT_UINT16, BASE_HEX);
 	new_info->field_info = hf_item;
 
 	/*
@@ -813,9 +809,9 @@ proto_register_llc(void)
 
 	/* subdissector code */
 	dsap_subdissector_table = register_dissector_table("llc.dsap",
-	  "LLC SAP", proto_llc, FT_UINT8, BASE_HEX, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
+	  "LLC SAP", proto_llc, FT_UINT8, BASE_HEX);
 	xid_subdissector_table = register_dissector_table("llc.xid_dsap",
-	  "LLC XID SAP", proto_llc, FT_UINT8, BASE_HEX, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
+	  "LLC XID SAP", proto_llc, FT_UINT8, BASE_HEX);
 	register_capture_dissector_table("llc.dsap", "LLC");
 
 	register_dissector("llc", dissect_llc, proto_llc);
@@ -885,11 +881,7 @@ proto_reg_handoff_llc(void)
 	/* RFC 2043 */
 	dissector_add_uint("ppp.protocol", PPP_LLC, llc_handle);
 	/* RFC 2353 */
-	dissector_add_uint("udp.port", UDP_PORT_LLC1, llc_handle);
-	dissector_add_uint("udp.port", UDP_PORT_LLC2, llc_handle);
-	dissector_add_uint("udp.port", UDP_PORT_LLC3, llc_handle);
-	dissector_add_uint("udp.port", UDP_PORT_LLC4, llc_handle);
-	dissector_add_uint("udp.port", UDP_PORT_LLC5, llc_handle);
+	dissector_add_uint_range_with_preference("udp.port", UDP_PORT_LLC_RANGE, llc_handle);
 	/* IP-over-FC when we have the full FC frame */
 	dissector_add_uint("fc.ftype", FC_FTYPE_IP, llc_handle);
 

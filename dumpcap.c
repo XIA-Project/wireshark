@@ -56,6 +56,7 @@
 
 #include <wsutil/cmdarg_err.h>
 #include <wsutil/crash_info.h>
+#include <wsutil/strtoi.h>
 #include <ws_version_info.h>
 
 #ifndef HAVE_GETOPT_LONG
@@ -105,6 +106,7 @@
 #include "wsutil/tempfile.h"
 #include "log.h"
 #include "wsutil/file_util.h"
+#include "wsutil/cpu_info.h"
 #include "wsutil/os_version_info.h"
 #include "wsutil/str_util.h"
 #include "wsutil/inet_addr.h"
@@ -2411,16 +2413,19 @@ capture_loop_init_output(capture_options *capture_opts, loop_data *ld, char *err
     if (ld->pdh) {
         if (capture_opts->use_pcapng) {
             char    *appname;
+            GString *cpu_info_str;
             GString *os_info_str;
 
+            cpu_info_str = g_string_new("");
             os_info_str = g_string_new("");
+            get_cpu_info(cpu_info_str);
             get_os_version_info(os_info_str);
 
             appname = g_strdup_printf("Dumpcap (Wireshark) %s", get_ws_vcs_version_info());
             successful = pcapng_write_session_header_block(ld->pdh,
-                                (const char *)capture_opts->capture_comment,   /* Comment*/
-                                NULL,                        /* HW*/
-                                os_info_str->str,            /* OS*/
+                                (const char *)capture_opts->capture_comment,   /* Comment */
+                                cpu_info_str->str,           /* HW */
+                                os_info_str->str,            /* OS */
                                 appname,
                                 -1,                          /* section_length */
                                 &ld->bytes_written,
@@ -2910,18 +2915,21 @@ do_file_switch_or_stop(capture_options *capture_opts,
             global_ld.bytes_written = 0;
             if (capture_opts->use_pcapng) {
                 char    *appname;
+                GString *cpu_info_str;
                 GString *os_info_str;
 
+                cpu_info_str = g_string_new("");
                 os_info_str = g_string_new("");
+                get_cpu_info(cpu_info_str);
                 get_os_version_info(os_info_str);
 
                 appname = g_strdup_printf("Dumpcap (Wireshark) %s", get_ws_vcs_version_info());
                 successful = pcapng_write_session_header_block(global_ld.pdh,
-                                NULL,                        /* Comment */
-                                NULL,                        /* HW */
+                                (const char *)capture_opts->capture_comment,   /* Comment */
+                                cpu_info_str->str,           /* HW */
                                 os_info_str->str,            /* OS */
                                 appname,
-                                                                -1,                          /* section_length */
+                                -1,                          /* section_length */
                                 &(global_ld.bytes_written),
                                 &global_ld.err);
                 g_free(appname);
@@ -3676,33 +3684,34 @@ capture_loop_queue_packet_cb(u_char *pcap_opts_p, const struct pcap_pkthdr *phdr
 static int
 set_80211_channel(const char *iface, const char *opt)
 {
-    int freq = 0;
+    guint32 freq = 0;
     int type = -1;
-    int center_freq1 = -1;
-    int center_freq2 = -1;
+    guint32 center_freq1 = 0;
+    guint32 center_freq2 = 0;
     int args;
-    int ret;
+    int ret = 0;
     gchar **options = NULL;
 
     options = g_strsplit_set(opt, ",", 4);
     for (args = 0; options[args]; args++);
 
     if (options[0])
-        freq = atoi(options[0]);
+        freq = get_nonzero_guint32(options[0], "802.11 channel frequency");
 
     if (args >= 1 && options[1]) {
         type = ws80211_str_to_chan_type(options[1]);
         if (type == -1) {
+            cmdarg_err("\"%s\" is not a valid 802.11 channel type", options[1]);
             ret = EINVAL;
             goto out;
         }
     }
 
     if (args >= 2 && options[2])
-        center_freq1 = atoi(options[2]);
+        center_freq1 = get_nonzero_guint32(options[2], "VHT center frequency");
 
     if (args >= 3 && options[3])
-        center_freq2 = atoi(options[3]);
+        center_freq2 = get_nonzero_guint32(options[3], "VHT center frequency 2");
 
     ret = ws80211_init();
     if (ret) {
@@ -3720,7 +3729,6 @@ set_80211_channel(const char *iface, const char *opt)
 
     if (capture_child)
         pipe_write_block(2, SP_SUCCESS, NULL);
-    ret = 0;
 
 out:
     g_strfreev(options);
@@ -3801,6 +3809,8 @@ main(int argc, char *argv[])
            "\n"
            "%s",
         get_ws_vcs_version_info(), comp_info_str->str, runtime_info_str->str);
+    g_string_free(comp_info_str, TRUE);
+    g_string_free(runtime_info_str, TRUE);
 
 #ifdef _WIN32
     arg_list_utf_16to8(argc, argv);
@@ -4101,13 +4111,13 @@ main(int argc, char *argv[])
             exit_main(0);
             break;
         case 'v':        /* Show version and exit */
-        {
+            comp_info_str = get_compiled_version_info(NULL, get_dumpcap_compiled_info);
+            runtime_info_str = get_runtime_version_info(get_dumpcap_runtime_info);
             show_version("Dumpcap (Wireshark)", comp_info_str, runtime_info_str);
             g_string_free(comp_info_str, TRUE);
             g_string_free(runtime_info_str, TRUE);
             exit_main(0);
             break;
-        }
         /*** capture option specific ***/
         case 'a':        /* autostop criteria */
         case 'b':        /* Ringbuffer option */

@@ -75,6 +75,7 @@
 #include <epan/disabled_protos.h>
 #include <epan/prefs.h>
 #include <epan/column.h>
+#include <epan/decode_as.h>
 #include <epan/print.h>
 #include <epan/addr_resolv.h>
 #ifdef HAVE_LIBPCAP
@@ -791,7 +792,7 @@ main(int argc, char *argv[])
 
   /* Scan for plugins.  This does *not* call their registration routines;
      that's done later. */
-  scan_plugins();
+  scan_plugins(REPORT_LOAD_FAILURE);
 
   /* Register all libwiretap plugin modules. */
   register_all_wiretap_modules();
@@ -813,6 +814,9 @@ main(int argc, char *argv[])
      by stats_tree_stat.c and need to registered before that */
 #ifdef HAVE_PLUGINS
   register_all_plugin_tap_listeners();
+#endif
+#ifdef HAVE_EXTCAP
+  extcap_register_preferences();
 #endif
   register_all_tap_listeners();
   conversation_table_set_gui_info(init_iousers);
@@ -1310,10 +1314,10 @@ main(int argc, char *argv[])
        * cruft getting in the way. Makes the results of running
        * $ ./tools/valgrind-wireshark -n
        * much more useful. */
+      epan_cleanup();
 #ifdef HAVE_EXTCAP
       extcap_cleanup();
 #endif
-      epan_cleanup();
       return 0;
     case 'O':        /* Only output these protocols */
       /* already processed; just ignore it now */
@@ -1732,10 +1736,10 @@ main(int argc, char *argv[])
     if (!dfilter_compile(rfilter, &rfcode, &err_msg)) {
       cmdarg_err("%s", err_msg);
       g_free(err_msg);
+      epan_cleanup();
 #ifdef HAVE_EXTCAP
       extcap_cleanup();
 #endif
-      epan_cleanup();
 #ifdef HAVE_PCAP_OPEN_DEAD
       {
         pcap_t *pc;
@@ -1761,10 +1765,10 @@ main(int argc, char *argv[])
     if (!dfilter_compile(dfilter, &dfcode, &err_msg)) {
       cmdarg_err("%s", err_msg);
       g_free(err_msg);
+      epan_cleanup();
 #ifdef HAVE_EXTCAP
       extcap_cleanup();
 #endif
-      epan_cleanup();
 #ifdef HAVE_PCAP_OPEN_DEAD
       {
         pcap_t *pc;
@@ -1875,10 +1879,10 @@ main(int argc, char *argv[])
      * We're reading a capture file.
      */
     if (cf_open(&cfile, cf_name, in_file_type, FALSE, &err) != CF_OK) {
+      epan_cleanup();
 #ifdef HAVE_EXTCAP
       extcap_cleanup();
 #endif
-      epan_cleanup();
       return 2;
     }
 
@@ -2039,10 +2043,10 @@ main(int argc, char *argv[])
   draw_tap_listeners(TRUE);
   funnel_dump_all_text_windows();
   epan_free(cfile.epan);
+  epan_cleanup();
 #ifdef HAVE_EXTCAP
   extcap_cleanup();
 #endif
-  epan_cleanup();
 
   output_fields_free(output_fields);
   output_fields = NULL;
@@ -3595,8 +3599,8 @@ print_columns(capture_file *cf)
     switch (col_item->col_fmt) {
     case COL_NUMBER:
       column_len = col_len = strlen(col_item->col_data);
-      if (column_len < 3)
-        column_len = 3;
+      if (column_len < 5)
+        column_len = 5;
       line_bufp = get_line_buf(buf_offset + column_len);
       put_spaces_string(line_bufp + buf_offset, col_item->col_data, col_len, column_len);
       break;

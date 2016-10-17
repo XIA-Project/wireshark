@@ -372,8 +372,9 @@ wtap_open_return_val peektagged_open(wtap *wth, int *err, gchar **err_info)
     }
 
     /* skip 8 zero bytes */
-    if (file_seek (wth->fh, 8L, SEEK_CUR, err) == -1)
-        return WTAP_OPEN_NOT_MINE;
+    if (!wtap_read_bytes (wth->fh, NULL, 8, err, err_info)) {
+        return WTAP_OPEN_ERROR;
+    }
 
     /*
      * This is an Peek tagged file.
@@ -852,7 +853,7 @@ static gboolean peektagged_read(wtap *wth, int *err, gchar **err_info,
 
     if (skip_len != 0) {
         /* Skip extra junk at the end of the packet data. */
-        if (!file_skip(wth->fh, skip_len, err))
+        if (!wtap_read_bytes(wth->fh, NULL, skip_len, err, err_info))
             return FALSE;
     }
 

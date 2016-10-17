@@ -61,8 +61,6 @@
 /* #define DEBUG_CONVERSATION */
 #include "conversation_debug.h"
 
-#define TCP_PORT_SIP 5060
-#define UDP_PORT_SIP 5060
 #define TLS_PORT_SIP 5061
 #define DEFAULT_SIP_PORT_RANGE "5060"
 
@@ -75,6 +73,9 @@ static gint exported_pdu_tap = -1;
 static dissector_handle_t sigcomp_handle;
 static dissector_handle_t sip_diag_handle;
 static dissector_handle_t sip_uri_userinfo_handle;
+static dissector_handle_t sip_via_branch_handle;
+/* Dissector to dissect the text part of an reason code */
+static dissector_handle_t sip_reason_code_handle;
 
 /* Initialize the protocol and registered fields */
 static gint proto_sip                     = -1;
@@ -196,7 +197,10 @@ static gint hf_sip_rack_cseq_no           = -1;
 static gint hf_sip_rack_cseq_method       = -1;
 
 static gint hf_sip_reason_protocols       = -1;
-static gint hf_sip_reason_cause           = -1;
+static gint hf_sip_reason_cause_q850      = -1;
+static gint hf_sip_reason_cause_sip       = -1;
+static gint hf_sip_reason_cause_other     = -1;
+static gint hf_sip_reason_text            = -1;
 
 static gint hf_sip_msg_body               = -1;
 static gint hf_sip_sec_mechanism          = -1;
@@ -851,7 +855,6 @@ typedef enum {
 
 /* Preferences */
 static guint sip_tls_port = TLS_PORT_SIP;
-static range_t *global_sip_tcp_port_range;
 
 /* global_sip_raw_text determines whether we are going to display       */
 /* the raw text of the SIP message, much like the MEGACO dissector does.    */
@@ -2001,14 +2004,23 @@ dissect_sip_authorization_item(tvbuff_t *tvb, proto_tree *tree, gint start_offse
     return current_offset;
 }
 
-/* Dissect the details of a Reason header */
+/* Dissect the details of a Reason header
+ * Reason            =  "Reason" HCOLON reason-value *(COMMA reason-value)
+ * reason-value      =  protocol *(SEMI reason-params)
+ * protocol          =  "SIP" / "Q.850" / token
+ * reason-params     =  protocol-cause / reason-text / reason-extension
+ * protocol-cause    =  "cause" EQUAL cause
+ * cause             =  1*DIGIT
+ * reason-text       =  "text" EQUAL quoted-string
+ * reason-extension  =  generic-param
+ */
 static void
-dissect_sip_reason_header(tvbuff_t *tvb, proto_tree *tree, gint start_offset, gint line_end_offset){
+dissect_sip_reason_header(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, gint start_offset, gint line_end_offset){
 
-    gint  current_offset, semi_colon_offset, length;
+    gint  current_offset, semi_colon_offset, length, end_quote_offset;
     const guint8 *param_name = NULL;
     guint cause_value;
-    proto_item* ti;
+    sip_reason_code_info_t sip_reason_code_info;
 
         /* skip Spaces and Tabs */
     start_offset = tvb_skip_wsp(tvb, start_offset, line_end_offset - start_offset);
@@ -2027,20 +2039,57 @@ dissect_sip_reason_header(tvbuff_t *tvb, proto_tree *tree, gint start_offset, gi
 
     length = semi_colon_offset - current_offset;
     proto_tree_add_item_ret_string(tree, hf_sip_reason_protocols, tvb, start_offset, length, ENC_UTF_8|ENC_NA, wmem_packet_scope(), &param_name);
+    current_offset = tvb_find_guint8(tvb, semi_colon_offset, line_end_offset - semi_colon_offset, '=') + 1;
+    /* Do we have a text parameter too? */
+    semi_colon_offset = tvb_find_guint8(tvb, current_offset, line_end_offset - current_offset, ';');
 
-    if (g_ascii_strcasecmp(param_name, "Q.850") == 0){
-        current_offset = tvb_find_guint8(tvb, semi_colon_offset, line_end_offset-semi_colon_offset, '=')+1;
+    if (semi_colon_offset == -1){
         length = line_end_offset - current_offset;
-
-        /* q850_cause_code_vals */
-        cause_value = (guint)strtoul(tvb_get_string_enc(wmem_packet_scope(), tvb, current_offset, length, ENC_UTF_8|ENC_NA), NULL, 10);
-        ti = proto_tree_add_uint(tree, hf_sip_reason_cause, tvb, current_offset, 1, cause_value);
-        /*, "Cause: %u(0x%x)[%s]", cause_value, cause_value,
-            val_to_str_ext(cause_value, &q850_cause_code_vals_ext, "Unknown (%d)" )); */
-        proto_item_set_len(ti, length);
-
+    } else {
+        /* Text parmeter exist, set length accordingly */
+        length = semi_colon_offset - current_offset;
     }
 
+    /* Get cause value */
+    cause_value = (guint)strtoul(tvb_get_string_enc(wmem_packet_scope(), tvb, current_offset, length, ENC_UTF_8 | ENC_NA), NULL, 10);
+
+    if (g_ascii_strcasecmp(param_name, "Q.850") == 0){
+        proto_tree_add_uint(tree, hf_sip_reason_cause_q850, tvb, current_offset, length, cause_value);
+        sip_reason_code_info.protocol_type_num = SIP_PROTO_Q850;
+    }
+    else if (g_ascii_strcasecmp(param_name, "SIP") == 0) {
+        proto_tree_add_uint(tree, hf_sip_reason_cause_sip, tvb, current_offset, length, cause_value);
+        sip_reason_code_info.protocol_type_num = SIP_PROTO_SIP;
+    }
+    else {
+        proto_tree_add_uint(tree, hf_sip_reason_cause_other, tvb, current_offset, length, cause_value);
+        sip_reason_code_info.protocol_type_num = SIP_PROTO_OTHER;
+    }
+
+    if (semi_colon_offset == -1)
+        /* Nothing to parse */
+        return;
+
+    /* reason-text       =  "text" EQUAL quoted-string */
+    current_offset = tvb_find_guint8(tvb, semi_colon_offset, line_end_offset - semi_colon_offset, '"') + 1;
+    if (current_offset == -1)
+        /* Nothing to parse */
+        return;
+    end_quote_offset = tvb_find_guint8(tvb, current_offset, line_end_offset - current_offset, '"');
+    if (end_quote_offset == -1)
+        /* Nothing to parse */
+        return;
+    length = end_quote_offset - current_offset;
+    proto_tree_add_item(tree, hf_sip_reason_text, tvb, current_offset, length, ENC_UTF_8 | ENC_NA);
+
+    if (sip_reason_code_handle) {
+        tvbuff_t *next_tvb;
+
+        sip_reason_code_info.cause_value = cause_value;
+
+        next_tvb = tvb_new_subset_length(tvb, current_offset, length);
+        call_dissector_with_data(sip_reason_code_handle, next_tvb, pinfo, tree, &sip_reason_code_info);
+    }
 }
 
 /* Dissect the details of a security client header
@@ -2263,7 +2312,7 @@ static void dissect_sip_route_header(tvbuff_t *tvb, proto_tree *tree, packet_inf
  * ttl               =  1*3DIGIT ; 0 to 255
  *
  */
-static void dissect_sip_via_header(tvbuff_t *tvb, proto_tree *tree, gint start_offset, gint line_end_offset)
+static void dissect_sip_via_header(tvbuff_t *tvb, proto_tree *tree, gint start_offset, gint line_end_offset, packet_info *pinfo)
 {
     gint  current_offset;
     gint  address_start_offset;
@@ -2509,6 +2558,14 @@ static void dissect_sip_via_header(tvbuff_t *tvb, proto_tree *tree, gint start_o
                         proto_tree_add_item(tree, *(via_parameter->hf_item), tvb,
                                             parameter_name_end+1, current_offset-parameter_name_end-1,
                                             ENC_UTF_8|ENC_NA);
+
+                        if (sip_via_branch_handle && g_ascii_strcasecmp (param_name, "branch") == 0)
+                        {
+                            tvbuff_t *next_tvb;
+                            next_tvb = tvb_new_subset(tvb, parameter_name_end + 1, current_offset - parameter_name_end - 1, current_offset - parameter_name_end - 1);
+
+                            call_dissector (sip_via_branch_handle, next_tvb, pinfo, tree);
+                        }
                     }
                     else
                     {
@@ -3837,7 +3894,7 @@ dissect_sip_common(tvbuff_t *tvb, int offset, int remaining_length, packet_info 
                             sip_proto_set_format_text(hdr_tree, sip_element_item, tvb, offset, linelen);
 
                             via_tree = proto_item_add_subtree(sip_element_item, ett_sip_via);
-                            dissect_sip_via_header(tvb, via_tree, value_offset, line_end_offset);
+                            dissect_sip_via_header(tvb, via_tree, value_offset, line_end_offset, pinfo);
                         }
                         break;
                     case POS_REASON:
@@ -3849,7 +3906,7 @@ dissect_sip_common(tvbuff_t *tvb, int offset, int remaining_length, packet_info 
                             sip_proto_set_format_text(hdr_tree, sip_element_item, tvb, offset, linelen);
 
                             reason_tree = proto_item_add_subtree(sip_element_item, ett_sip_reason);
-                            dissect_sip_reason_header(tvb, reason_tree, value_offset, line_end_offset);
+                            dissect_sip_reason_header(tvb, reason_tree, pinfo, value_offset, line_end_offset);
                         }
                         break;
                     case POS_CONTENT_ENCODING:
@@ -6404,10 +6461,25 @@ void proto_register_sip(void)
             FT_STRING, BASE_NONE, NULL, 0x0,
             NULL, HFILL}
         },
-        { &hf_sip_reason_cause,
-          { "Cause",  "sip.reason_cause",
+        { &hf_sip_reason_cause_q850,
+          { "Cause",  "sip.reason_cause_q850",
             FT_UINT32, BASE_DEC_HEX|BASE_EXT_STRING, &q850_cause_code_vals_ext, 0x0,
             NULL, HFILL}
+        },
+        { &hf_sip_reason_cause_sip,
+          { "Cause",  "sip.reason_cause_sip",
+            FT_UINT32, BASE_DEC, VALS(response_code_vals), 0x0,
+            NULL, HFILL }
+        },
+        { &hf_sip_reason_cause_other,
+        { "Cause",  "sip.reason_cause_other",
+            FT_UINT32, BASE_DEC, NULL, 0x0,
+            NULL, HFILL }
+        },
+        { &hf_sip_reason_text,
+        { "Text",  "sip.reason_text",
+            FT_STRING, BASE_NONE, NULL, 0x0,
+            NULL, HFILL }
         },
         { &hf_sip_msg_body,
           { "Message Body",           "sip.msg_body",
@@ -6579,8 +6651,7 @@ void proto_register_sip(void)
     };
 
         /* Register the protocol name and description */
-    proto_sip = proto_register_protocol("Session Initiation Protocol",
-                                        "SIP", "sip");
+    proto_sip = proto_register_protocol("Session Initiation Protocol", "SIP", "sip");
     proto_raw_sip = proto_register_protocol("Session Initiation Protocol (SIP as raw text)",
                                             "Raw_SIP", "raw_sip");
     register_dissector("sip", dissect_sip, proto_sip);
@@ -6597,13 +6668,6 @@ void proto_register_sip(void)
     proto_register_field_array(proto_raw_sip, raw_hf, array_length(raw_hf));
 
     sip_module = prefs_register_protocol(proto_sip, proto_reg_handoff_sip);
-    range_convert_str(&global_sip_tcp_port_range, DEFAULT_SIP_PORT_RANGE, MAX_UDP_PORT);
-
-
-    prefs_register_range_preference(sip_module, "tcp.ports", "SIP TCP ports",
-        "TCP ports to be decoded as SIP (default: "
-        DEFAULT_SIP_PORT_RANGE ")",
-        &global_sip_tcp_port_range, MAX_UDP_PORT);
 
     prefs_register_uint_preference(sip_module, "tls.port",
         "SIP TLS Port",
@@ -6684,15 +6748,13 @@ void proto_register_sip(void)
         "A table to define custom SIP header for which fields can be setup and used for filtering/data extraction etc.",
         sip_custom_headers_uat);
 
-    prefs_register_obsolete_preference(sip_module, "tcp.port");
-
     register_init_routine(&sip_init_protocol);
     register_cleanup_routine(&sip_cleanup_protocol);
     heur_subdissector_list = register_heur_dissector_list("sip", proto_sip);
     /* Register for tapping */
     sip_tap = register_tap("sip");
 
-    ext_hdr_subdissector_table = register_dissector_table("sip.hdr", "SIP Extension header", proto_sip, FT_STRING, BASE_NONE, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
+    ext_hdr_subdissector_table = register_dissector_table("sip.hdr", "SIP Extension header", proto_sip, FT_STRING, BASE_NONE);
 
     register_stat_tap_table_ui(&sip_stat_table);
 
@@ -6714,8 +6776,6 @@ void proto_register_sip(void)
 void
 proto_reg_handoff_sip(void)
 {
-    static range_t *sip_tcp_port_range;
-
     static guint saved_sip_tls_port;
     static gboolean sip_prefs_initialized = FALSE;
 
@@ -6726,11 +6786,16 @@ proto_reg_handoff_sip(void)
         sigcomp_handle = find_dissector_add_dependency("sigcomp", proto_sip);
         sip_diag_handle = find_dissector("sip.diagnostic");
         sip_uri_userinfo_handle = find_dissector("sip.uri_userinfo");
+        sip_via_branch_handle = find_dissector("sip.via_branch");
+        /* Check for a dissector to parse Reason Code texts */
+        sip_reason_code_handle = find_dissector("sip.reason_code");
         /* SIP content type and internet media type used by other dissectors are the same */
         media_type_dissector_table = find_dissector_table("media_type");
 
-        dissector_add_uint("udp.port", UDP_PORT_SIP, sip_handle);
+        dissector_add_uint_range_with_preference("udp.port", DEFAULT_SIP_PORT_RANGE, sip_handle);
         dissector_add_string("media_type", "message/sip", sip_handle);
+
+        dissector_add_uint_range_with_preference("tcp.port", DEFAULT_SIP_PORT_RANGE, sip_tcp_handle);
 
         heur_dissector_add("udp", dissect_sip_heur, "SIP over UDP", "sip_udp", proto_sip, HEURISTIC_ENABLE);
         heur_dissector_add("tcp", dissect_sip_tcp_heur, "SIP over TCP", "sip_tcp", proto_sip, HEURISTIC_ENABLE);
@@ -6738,14 +6803,9 @@ proto_reg_handoff_sip(void)
         heur_dissector_add("stun", dissect_sip_heur, "SIP over TURN", "sip_stun", proto_sip, HEURISTIC_ENABLE);
         sip_prefs_initialized = TRUE;
     } else {
-        dissector_delete_uint_range("tcp.port", sip_tcp_port_range, sip_tcp_handle);
-        g_free(sip_tcp_port_range);
         ssl_dissector_delete(saved_sip_tls_port, sip_tcp_handle);
     }
     /* Set our port number for future use */
-    sip_tcp_port_range = range_copy(global_sip_tcp_port_range);
-    dissector_add_uint_range("tcp.port", sip_tcp_port_range, sip_tcp_handle);
-    saved_sip_tls_port = sip_tls_port;
     ssl_dissector_add(saved_sip_tls_port, sip_tcp_handle);
 
     exported_pdu_tap = find_tap_id(EXPORT_PDU_TAP_NAME_LAYER_7);

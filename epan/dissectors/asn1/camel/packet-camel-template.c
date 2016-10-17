@@ -43,6 +43,7 @@
 #include <epan/stat_tap_ui.h>
 #include <epan/asn1.h>
 #include <epan/expert.h>
+#include <wsutil/strtoi.h>
 
 #include "packet-ber.h"
 #include "packet-camel.h"
@@ -1079,7 +1080,7 @@ dissect_camel_camelPDU(gboolean implicit_tag _U_, tvbuff_t *tvb, int offset, asn
         if (p_private_tcap->acv==TRUE ){
             version_ptr = strrchr((const char *)p_private_tcap->oid,'.');
             if (version_ptr)
-                application_context_version = atoi(version_ptr+1);
+              ws_strtoi32(version_ptr + 1, NULL, &application_context_version);
         }
         gp_camelsrt_info->tcap_context=p_private_tcap->context;
         if (p_private_tcap->context)
@@ -1561,13 +1562,13 @@ void proto_register_camel(void) {
   /* Register dissector tables */
   camel_rose_ctx.arg_local_dissector_table = register_dissector_table("camel.ros.local.arg",
                                                                       "CAMEL Operation Argument (local opcode)", proto_camel,
-                                                                      FT_UINT32, BASE_HEX, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
+                                                                      FT_UINT32, BASE_HEX);
   camel_rose_ctx.res_local_dissector_table = register_dissector_table("camel.ros.local.res",
                                                                       "CAMEL Operation Result (local opcode)", proto_camel,
-                                                                      FT_UINT32, BASE_HEX, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
+                                                                      FT_UINT32, BASE_HEX);
   camel_rose_ctx.err_local_dissector_table = register_dissector_table("camel.ros.local.err",
                                                                       "CAMEL Error (local opcode)", proto_camel,
-                                                                      FT_UINT32, BASE_HEX, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
+                                                                      FT_UINT32, BASE_HEX);
 
   /* Register our configuration options, particularly our SSNs */
   /* Set default SSNs */

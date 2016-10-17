@@ -5072,8 +5072,8 @@ proto_register_sctp(void)
   sctp_tap = register_tap("sctp");
   exported_pdu_tap = find_tap_id(EXPORT_PDU_TAP_NAME_LAYER_3);
   /* subdissector code */
-  sctp_port_dissector_table = register_dissector_table("sctp.port", "SCTP port", proto_sctp, FT_UINT16, BASE_DEC, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
-  sctp_ppi_dissector_table  = register_dissector_table("sctp.ppi",  "SCTP payload protocol identifier", proto_sctp, FT_UINT32, BASE_HEX, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
+  sctp_port_dissector_table = register_dissector_table("sctp.port", "SCTP port", proto_sctp, FT_UINT16, BASE_DEC);
+  sctp_ppi_dissector_table  = register_dissector_table("sctp.ppi",  "SCTP payload protocol identifier", proto_sctp, FT_UINT32, BASE_HEX);
 
   register_dissector("sctp", dissect_sctp, proto_sctp);
   sctp_heur_subdissector_list = register_heur_dissector_list("sctp", proto_sctp);
@@ -5098,7 +5098,7 @@ proto_reg_handoff_sctp(void)
   sctp_handle = find_dissector("sctp");
   dissector_add_uint("wtap_encap", WTAP_ENCAP_SCTP, sctp_handle);
   dissector_add_uint("ip.proto", IP_PROTO_SCTP, sctp_handle);
-  dissector_add_uint("udp.port", UDP_TUNNELING_PORT, sctp_handle);
+  dissector_add_uint_with_preference("udp.port", UDP_TUNNELING_PORT, sctp_handle);
   register_capture_dissector("ip.proto", IP_PROTO_SCTP, capture_sctp, proto_sctp);
 }
 

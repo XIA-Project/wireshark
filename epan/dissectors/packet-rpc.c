@@ -69,6 +69,8 @@
 void proto_register_rpc(void);
 void proto_reg_handoff_rpc(void);
 
+#define RPC_TCP_PORT 111
+
 /* desegmentation of RPC over TCP */
 static gboolean rpc_desegment = TRUE;
 
@@ -4360,8 +4362,8 @@ proto_register_rpc(void)
 
 	proto_rpc = proto_register_protocol("Remote Procedure Call", "RPC", "rpc");
 
-	subdissector_call_table = register_custom_dissector_table("rpc.call", "RPC Call Functions", proto_rpc, rpc_proc_hash, rpc_proc_equal, DISSECTOR_TABLE_ALLOW_DUPLICATE);
-	subdissector_reply_table = register_custom_dissector_table("rpc.reply", "RPC Reply Functions", proto_rpc, rpc_proc_hash, rpc_proc_equal, DISSECTOR_TABLE_ALLOW_DUPLICATE);
+	subdissector_call_table = register_custom_dissector_table("rpc.call", "RPC Call Functions", proto_rpc, rpc_proc_hash, rpc_proc_equal);
+	subdissector_reply_table = register_custom_dissector_table("rpc.reply", "RPC Reply Functions", proto_rpc, rpc_proc_hash, rpc_proc_equal);
 
 	/* this is a dummy dissector for all those unknown rpc programs */
 	proto_register_field_array(proto_rpc, hf, array_length(hf));
@@ -4434,9 +4436,9 @@ proto_reg_handoff_rpc(void)
 	   to match some port for which we have a dissector)
 	*/
 	rpc_tcp_handle = find_dissector("rpc-tcp");
-	dissector_add_uint("tcp.port", 111, rpc_tcp_handle);
+	dissector_add_uint_with_preference("tcp.port", RPC_TCP_PORT, rpc_tcp_handle);
 	rpc_handle = find_dissector("rpc");
-	dissector_add_uint("udp.port", 111, rpc_handle);
+	dissector_add_uint_with_preference("udp.port", RPC_TCP_PORT, rpc_handle);
 
 	heur_dissector_add("tcp", dissect_rpc_tcp_heur, "RPC over TCP", "rpc_tcp", proto_rpc, HEURISTIC_ENABLE);
 	heur_dissector_add("udp", dissect_rpc_heur, "RPC over UDP", "rpc_udp", proto_rpc, HEURISTIC_ENABLE);

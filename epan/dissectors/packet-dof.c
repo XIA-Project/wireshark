@@ -877,11 +877,10 @@ static void dof_packet_delete_proto_data(dof_packet_data *packet, int proto);
  * source address, and the DPS dissector is associated with that port. In this
  * way, servers on non-standard ports will automatically be decoded using DPS.
  */
-#define DOF_P2P_NEG_SEC_UDP_PORT    3567
+#define DOF_NEG_SEC_UDP_PORT_RANGE  "3567,5567" /* P2P + Multicast */
 #define DOF_P2P_NEG_SEC_TCP_PORT    3567
 /* Reserved UDP port                3568*/
 #define DOF_TUN_SEC_TCP_PORT        3568
-#define DOF_MCAST_NEG_SEC_UDP_PORT  5567
 #define DOF_P2P_SEC_TCP_PORT        5567
 /* Reserved UDP port                8567*/
 #define DOF_TUN_NON_SEC_TCP_PORT    8567
@@ -5800,7 +5799,7 @@ static dof_packet_data* create_packet_data(packet_info *pinfo)
  */
 static int dissect_dof_udp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
-    dof_api_data *api_data = (dof_api_data *)p_get_proto_data(NULL, pinfo, proto_2008_1_dof_udp, 0);
+    dof_api_data *api_data = (dof_api_data *)p_get_proto_data(wmem_file_scope(), pinfo, proto_2008_1_dof_udp, 0);
     if (api_data == NULL)
     {
         conversation_t *conversation;
@@ -5861,7 +5860,7 @@ static int dissect_dof_udp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
 
         api_data->transport_session = &transport_session->common;
         api_data->transport_packet = transport_packet;
-        p_add_proto_data(NULL, pinfo, proto_2008_1_dof_udp, 0, api_data);
+        p_add_proto_data(wmem_file_scope(), pinfo, proto_2008_1_dof_udp, 0, api_data);
     }
 
     return dissect_dof_common(tvb, pinfo, tree, api_data);
@@ -6018,7 +6017,7 @@ static int dissect_dof_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
     if (session->not_dps)
         return 0;
 
-    packet = (tcp_packet_data *)p_get_proto_data(NULL, pinfo, proto_2008_1_dof_tcp, 0);
+    packet = (tcp_packet_data *)p_get_proto_data(wmem_file_scope(), pinfo, proto_2008_1_dof_tcp, 0);
     if (packet == NULL)
     {
         packet = (tcp_packet_data *)wmem_alloc0(wmem_file_scope(), sizeof(tcp_packet_data));
@@ -6028,7 +6027,7 @@ static int dissect_dof_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
             return 0;
         }
 
-        p_add_proto_data(NULL, pinfo, proto_2008_1_dof_tcp, 0, packet);
+        p_add_proto_data(wmem_file_scope(), pinfo, proto_2008_1_dof_tcp, 0, packet);
     }
 
     if (is_retransmission(pinfo, session, packet, tcpinfo))
@@ -6188,16 +6187,16 @@ static int dissect_tunnel_udp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
     }
 
     /* Add the packet data. */
-    packet = p_get_proto_data(pinfo->fd, proto_2012_1_tunnel, 0);
+    packet = p_get_proto_data(wmem_file_scope(), proto_2012_1_tunnel, 0);
     if (!packet)
     {
-        packet = se_alloc0(sizeof(dof_packet_data));
+        packet = wmem_alloc0(wmem_file_scope(), sizeof(dof_packet_data));
         packet->frame = pinfo->fd->num;
         packet->next = NULL;
         packet->start_offset = 0;
         packet->session_counter = &session_counter;
         packet->transport_session = udp_transport_session;
-        p_add_proto_data(pinfo->fd, proto_2012_1_tunnel, 0, packet);
+        p_add_proto_data(wmem_file_scope(), proto_2012_1_tunnel, 0, packet);
     }
 
     pinfo->private_data = packet;
@@ -6268,7 +6267,7 @@ static int dissect_tunnel_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
         conversation_add_proto_data(conversation, proto_2012_1_tunnel, session);
     }
 
-    packet = (tcp_packet_data *)p_get_proto_data(NULL, pinfo, proto_2012_1_tunnel, 0);
+    packet = (tcp_packet_data *)p_get_proto_data(wmem_file_scope(), pinfo, proto_2012_1_tunnel, 0);
     if (packet == NULL)
     {
         packet = (tcp_packet_data *)wmem_alloc0(wmem_file_scope(), sizeof(tcp_packet_data));
@@ -6278,7 +6277,7 @@ static int dissect_tunnel_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
             return 0;
         }
 
-        p_add_proto_data(NULL, pinfo, proto_2012_1_tunnel, 0, packet);
+        p_add_proto_data(wmem_file_scope(), pinfo, proto_2012_1_tunnel, 0, packet);
     }
 
     if (is_retransmission(pinfo, session, packet, tcpinfo))
@@ -10570,11 +10569,11 @@ static void dof_tun_register(void)
     };
 
     proto_2012_1_tunnel = proto_register_protocol(TUNNEL_PROTOCOL_STACK, "DTPS", "dtps");
-    proto_register_field_array(proto_2008_1_app, hf, array_length(hf));
+    proto_register_field_array(proto_2012_1_tunnel, hf, array_length(hf));
     proto_register_subtree_array(ett, array_length(ett));
 
     register_dissector(TUNNEL_PROTOCOL_STACK, dissect_tunnel_common, proto_2012_1_tunnel);
-    dof_tun_app_dissectors = register_dissector_table("dof.tunnel.app", "DOF Tunnel Version", proto_2012_1_tunnel, FT_UINT8, BASE_DEC, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
+    dof_tun_app_dissectors = register_dissector_table("dof.tunnel.app", "DOF Tunnel Version", proto_2012_1_tunnel, FT_UINT8, BASE_DEC);
 }
 
 static void dof_tun_reset(void)
@@ -10594,7 +10593,7 @@ static void dof_tun_handoff(void)
 
     tcp_handle = create_dissector_handle(dissect_tunnel_tcp, proto_2012_1_tunnel);
 
-    dissector_add_uint("tcp.port", DOF_TUN_NON_SEC_TCP_PORT, tcp_handle);
+    dissector_add_uint_with_preference("tcp.port", DOF_TUN_NON_SEC_TCP_PORT, tcp_handle);
 }
 
 /* Main DOF Registration Support */
@@ -10944,9 +10943,9 @@ static void dof_register(void)
     char *uat_load_err;
     expert_module_t *expert_security;
 
-    dsp_option_dissectors = register_dissector_table("dof.dsp.options", "DSP Protocol Options", proto_2008_1_dsp, FT_UINT32, BASE_DEC, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
-    dof_sec_dissectors = register_dissector_table("dof.secmode", "DOF Security Mode of Operation", proto_2008_1_dof, FT_UINT16, BASE_DEC, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
-    register_dissector_table("dof.2008.1", "DOF Common PDU", proto_2008_1_dof, FT_STRING, BASE_DEC, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
+    dsp_option_dissectors = register_dissector_table("dof.dsp.options", "DSP Protocol Options", proto_2008_1_dsp, FT_UINT32, BASE_DEC);
+    dof_sec_dissectors = register_dissector_table("dof.secmode", "DOF Security Mode of Operation", proto_2008_1_dof, FT_UINT16, BASE_DEC);
+    register_dissector_table("dof.2008.1", "DOF Common PDU", proto_2008_1_dof, FT_STRING, BASE_DEC);
 
     proto_2008_1_dof = proto_register_protocol(DOF_PROTOCOL_STACK, "DOF", "dof");
 
@@ -11050,9 +11049,8 @@ static void dof_handoff(void)
 
     undissected_data_handle = find_dissector("data");
 
-    dissector_add_uint("tcp.port", DOF_P2P_NEG_SEC_TCP_PORT, tcp_handle);
-    dissector_add_uint("udp.port", DOF_P2P_NEG_SEC_UDP_PORT, dof_udp_handle);
-    dissector_add_uint("udp.port", DOF_MCAST_NEG_SEC_UDP_PORT, dof_udp_handle);
+    dissector_add_uint_with_preference("tcp.port", DOF_P2P_NEG_SEC_TCP_PORT, tcp_handle);
+    dissector_add_uint_range_with_preference("udp.port", DOF_NEG_SEC_UDP_PORT_RANGE, dof_udp_handle);
 }
 
 /* OID Registration Support */
@@ -11308,8 +11306,8 @@ static void dof_dnp_register(void)
 
     proto_register_field_array(proto_2008_1_dnp, hf, array_length(hf));
     proto_register_subtree_array(ett, array_length(ett));
-    dnp_dissectors = register_dissector_table("dof.dnp", "DOF DNP Version", proto_2008_1_dnp, FT_UINT8, BASE_DEC, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
-    dnp_framing_dissectors = register_dissector_table("dof.dnp.frame", "DOF DNP Framing", proto_2008_1_dnp, FT_UINT8, BASE_DEC, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
+    dnp_dissectors = register_dissector_table("dof.dnp", "DOF DNP Version", proto_2008_1_dnp, FT_UINT8, BASE_DEC);
+    dnp_framing_dissectors = register_dissector_table("dof.dnp.frame", "DOF DNP Framing", proto_2008_1_dnp, FT_UINT8, BASE_DEC);
 
     dof_register_dnp_0();
     dof_register_dnp_1();
@@ -11531,7 +11529,7 @@ static void dof_dpp_register(void)
 
         proto_register_field_array(proto_2008_1_dpp, hf, array_length(hf));
         proto_register_subtree_array(ett, array_length(ett));
-        dof_dpp_dissectors = register_dissector_table("dof.dpp", "DOF DPP Version", proto_2008_1_dpp, FT_UINT8, BASE_DEC, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
+        dof_dpp_dissectors = register_dissector_table("dof.dpp", "DOF DPP Version", proto_2008_1_dpp, FT_UINT8, BASE_DEC);
 
         expert_dpp = expert_register_protocol(proto_2008_1_dpp);
         expert_register_field_array(expert_dpp, ei, array_length(ei));
@@ -11565,7 +11563,7 @@ static void app_register(void)
     if (proto_2008_1_app == -1)
     {
         proto_2008_1_app = proto_register_protocol(DOF_APPLICATION_PROTOCOL, "DPS.APP", "dof.app");
-        app_dissectors = register_dissector_table("dof.app", "DOF APP Version", proto_2008_1_app, FT_UINT16, BASE_DEC, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
+        app_dissectors = register_dissector_table("dof.app", "DOF APP Version", proto_2008_1_app, FT_UINT16, BASE_DEC);
     }
 }
 

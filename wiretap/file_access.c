@@ -98,7 +98,7 @@ add_extensions(GSList *extensions, const gchar *extension,
 	/*
 	 * Add the specified extension.
 	 */
-	extensions = g_slist_append(extensions, g_strdup(extension));
+	extensions = g_slist_prepend(extensions, g_strdup(extension));
 
 	/*
 	 * Now add the extensions for compressed-file versions of
@@ -107,7 +107,7 @@ add_extensions(GSList *extensions, const gchar *extension,
 	for (compressed_file_extensionp = compressed_file_extensions;
 	    *compressed_file_extensionp != NULL;
 	    compressed_file_extensionp++) {
-		extensions = g_slist_append(extensions,
+		extensions = g_slist_prepend(extensions,
 		    g_strdup_printf("%s.%s", extension,
 		      *compressed_file_extensionp));
 	}
@@ -124,36 +124,36 @@ add_extensions(GSList *extensions, const gchar *extension,
  * extension used by a number of capture file types.
  */
 static const struct file_extension_info file_type_extensions_base[] = {
-	{ "Wireshark/tcpdump/... - pcap", "pcap;cap;dmp" },
-	{ "Wireshark/... - pcapng", "pcapng;ntar" },
-	{ "Network Monitor, Surveyor, NetScaler", "cap" },
-	{ "InfoVista 5View capture", "5vw" },
-	{ "Sniffer (DOS)", "cap;enc;trc;fdc;syc" },
-	{ "Cinco NetXRay, Sniffer (Windows)", "cap;caz" },
-	{ "Endace ERF capture", "erf" },
-	{ "EyeSDN USB S0/E1 ISDN trace format", "trc" },
-	{ "HP-UX nettl trace", "trc0;trc1" },
-	{ "Network Instruments Observer", "bfr" },
-	{ "Colasoft Capsa", "cscpkt" },
-	{ "Novell LANalyzer", "tr1" },
-	{ "Tektronix K12xx 32-bit .rf5 format", "rf5" },
-	{ "Savvius *Peek", "pkt;tpc;apc;wpz" },
-	{ "Catapult DCT2000 trace (.out format)", "out" },
-	{ "Micropross mplog", "mplog" },
-	{ "MPEG files", "mpg;mp3" },
-	{ "TamoSoft CommView", "ncf" },
-	{ "Symbian OS btsnoop", "log" },
-	{ "Transport-Neutral Encapsulation Format", "tnef" },
-	{ "XML files (including Gammu DCT3 traces)", "xml" },
-	{ "OS X PacketLogger", "pklg" },
-	{ "Daintree SNA", "dcf" },
-	{ "JPEG/JFIF files", "jpg;jpeg;jfif" },
-	{ "IPFIX File Format", "pfx;ipfix" },
-	{ "Aethra .aps file", "aps" },
-	{ "MPEG2 transport stream", "mp2t;ts;mpg" },
-	{ "Ixia IxVeriWave .vwr Raw 802.11 Capture", "vwr" },
-	{ "CAM Inspector file", "camins" },
-	{ "JavaScript Object Notation file", "json" }
+	{ "Wireshark/tcpdump/... - pcap", TRUE, "pcap;cap;dmp" },
+	{ "Wireshark/... - pcapng", TRUE, "pcapng;ntar" },
+	{ "Network Monitor, Surveyor, NetScaler", TRUE, "cap" },
+	{ "InfoVista 5View capture", TRUE, "5vw" },
+	{ "Sniffer (DOS)", TRUE, "cap;enc;trc;fdc;syc" },
+	{ "Cinco NetXRay, Sniffer (Windows)", TRUE, "cap;caz" },
+	{ "Endace ERF capture", TRUE, "erf" },
+	{ "EyeSDN USB S0/E1 ISDN trace format", TRUE, "trc" },
+	{ "HP-UX nettl trace", TRUE, "trc0;trc1" },
+	{ "Network Instruments Observer", TRUE, "bfr" },
+	{ "Colasoft Capsa", TRUE, "cscpkt" },
+	{ "Novell LANalyzer", TRUE, "tr1" },
+	{ "Tektronix K12xx 32-bit .rf5 format", TRUE, "rf5" },
+	{ "Savvius *Peek", TRUE, "pkt;tpc;apc;wpz" },
+	{ "Catapult DCT2000 trace (.out format)", TRUE, "out" },
+	{ "Micropross mplog", TRUE, "mplog" },
+	{ "TamoSoft CommView", TRUE, "ncf" },
+	{ "Symbian OS btsnoop", TRUE, "log" },
+	{ "XML files (including Gammu DCT3 traces)", TRUE, "xml" },
+	{ "OS X PacketLogger", TRUE, "pklg" },
+	{ "Daintree SNA", TRUE, "dcf" },
+	{ "IPFIX File Format", TRUE, "pfx;ipfix" },
+	{ "Aethra .aps file", TRUE, "aps" },
+	{ "MPEG2 transport stream", TRUE, "mp2t;ts;mpg" },
+	{ "Ixia IxVeriWave .vwr Raw 802.11 Capture", TRUE, "vwr" },
+	{ "CAM Inspector file", TRUE, "camins" },
+	{ "MPEG files", FALSE, "mpg;mp3" },
+	{ "Transport-Neutral Encapsulation Format", FALSE, "tnef" },
+	{ "JPEG/JFIF files", FALSE, "jpg;jpeg;jfif" },
+	{ "JavaScript Object Notation file", FALSE, "json" }
 };
 
 #define	N_FILE_TYPE_EXTENSIONS	(sizeof file_type_extensions_base / sizeof file_type_extensions_base[0])
@@ -253,14 +253,24 @@ wtap_get_file_extension_type_extensions(guint extension_type)
 	return extensions;
 }
 
-/* Return a list of all extensions that are used by all file types,
-   including compressed extensions, e.g. not just "pcap" but also
-   "pcap.gz" if we can read gzipped files.
+/* Return a list of all extensions that are used by all capture file
+   types, including compressed extensions, e.g. not just "pcap" but
+   also "pcap.gz" if we can read gzipped files.
+
+   "Capture files" means "include file types that correspond to
+   collections of network packets, but not file types that
+   store data that just happens to be transported over protocols
+   such as HTTP but that aren't collections of network packets",
+   so that it could be used for "All Capture Files" without picking
+   up JPEG files or files such as that - those aren't capture files,
+   and we *do* have them listed in the long list of individual file
+   types, so omitting them from "All Capture Files" is the right
+   thing to do.
 
    All strings in the list are allocated with g_malloc() and must be freed
    with g_free(). */
 GSList *
-wtap_get_all_file_extensions_list(void)
+wtap_get_all_capture_file_extensions_list(void)
 {
 	GSList *extensions;
 	unsigned int i;
@@ -271,11 +281,17 @@ wtap_get_all_file_extensions_list(void)
 
 	for (i = 0; i < file_type_extensions_arr->len; i++) {
 		/*
-		 * Add all this file extension type's extensions, with
-		 * compressed variants.
+		 * Is this a capture file, rather than one of the
+		 * other random file types we can read?
 		 */
-		extensions = add_extensions_for_file_extensions_type(i,
-		    extensions, compressed_file_extension_table);
+		if (file_type_extensions[i].is_capture_file) {
+			/*
+			 * Yes.  Add all this file extension type's
+			 * extensions, with compressed variants.
+			 */
+			extensions = add_extensions_for_file_extensions_type(i,
+			    extensions, compressed_file_extension_table);
+		}
 	}
 
 	return extensions;
@@ -2068,7 +2084,8 @@ wtap_get_file_extensions_list(int file_type_subtype, gboolean include_compressed
 
 /*
  * Free a list returned by wtap_get_file_extension_type_extensions(),
- * wtap_get_all_file_extensions_list, or wtap_get_file_extensions_list().
+ * wtap_get_all_capture_file_extensions_list, or
+ * wtap_get_file_extensions_list().
  */
 void
 wtap_free_extensions_list(GSList *extensions)
@@ -2187,7 +2204,8 @@ wtap_dump_init_dumper(int file_type_subtype, int encap, int snaplen, gboolean co
 	if ((idb_inf != NULL) && (idb_inf->interface_data->len > 0)) {
 		guint itf_count;
 
-		/* XXX: what free's this stuff? */
+		/* Note: this memory is owned by wtap_dumper and will become
+		 * invalid after wtap_dump_close. */
 		wdh->interface_data = g_array_new(FALSE, FALSE, sizeof(wtap_block_t));
 		for (itf_count = 0; itf_count < idb_inf->interface_data->len; itf_count++) {
 			file_int_data = g_array_index(idb_inf->interface_data, wtap_block_t, itf_count);
@@ -2557,6 +2575,7 @@ wtap_dump_close(wtap_dumper *wdh, int *err)
 	}
 	if (wdh->priv != NULL)
 		g_free(wdh->priv);
+	wtap_block_array_free(wdh->interface_data);
 	g_free(wdh);
 	return ret;
 }

@@ -62,6 +62,7 @@ typedef enum {
     SSL_HND_SERVER_HELLO           = 2,
     SSL_HND_HELLO_VERIFY_REQUEST   = 3,
     SSL_HND_NEWSESSION_TICKET      = 4,
+    SSL_HND_HELLO_RETRY_REQUEST    = 6,
     SSL_HND_CERTIFICATE            = 11,
     SSL_HND_SERVER_KEY_EXCHG       = 12,
     SSL_HND_CERT_REQUEST           = 13,
@@ -136,24 +137,46 @@ typedef enum {
 #define PCT_ERR_SERVER_AUTH_FAILED     0x05
 #define PCT_ERR_SPECS_MISMATCH         0x06
 
-#define SSL_HND_HELLO_EXT_SERVER_NAME        0x0
-#define SSL_HND_HELLO_EXT_STATUS_REQUEST     0x0005
-#define SSL_HND_HELLO_EXT_CERT_TYPE          0x0009
-#define SSL_HND_HELLO_EXT_ELLIPTIC_CURVES    0x000a
-#define SSL_HND_HELLO_EXT_EC_POINT_FORMATS   0x000b
-#define SSL_HND_HELLO_EXT_SIG_HASH_ALGS      0x000d
-#define SSL_HND_HELLO_EXT_HEARTBEAT          0x000f
-#define SSL_HND_HELLO_EXT_ALPN               0x0010
-#define SSL_HND_HELLO_EXT_STATUS_REQUEST_V2  0x0011
-#define SSL_HND_HELLO_EXT_CLIENT_CERT_TYPE   0x0013
-#define SSL_HND_HELLO_EXT_SERVER_CERT_TYPE   0x0014
-#define SSL_HND_HELLO_EXT_PADDING            0x0015
-#define SSL_HND_HELLO_EXT_EXTENDED_MASTER_SECRET_TYPE 0x0017
-#define SSL_HND_HELLO_EXT_SESSION_TICKET     0x0023
-#define SSL_HND_HELLO_EXT_RENEG_INFO         0xff01
-#define SSL_HND_HELLO_EXT_NPN                0x3374
-#define SSL_HND_HELLO_EXT_CHANNEL_ID_OLD     0x754f
-#define SSL_HND_HELLO_EXT_CHANNEL_ID         0x7550
+#define SSL_HND_HELLO_EXT_SERVER_NAME                   0
+#define SSL_HND_HELLO_EXT_MAX_FRAGMENT_LENGTH           1
+#define SSL_HND_HELLO_EXT_CLIENT_CERTIFICATE_URL        2
+#define SSL_HND_HELLO_EXT_TRUSTED_CA_KEYS               3
+#define SSL_HND_HELLO_EXT_TRUNCATED_HMAC                4
+#define SSL_HND_HELLO_EXT_STATUS_REQUEST                5
+#define SSL_HND_HELLO_EXT_USER_MAPPING                  6
+#define SSL_HND_HELLO_EXT_CLIENT_AUTHZ                  7
+#define SSL_HND_HELLO_EXT_SERVER_AUTHZ                  8
+#define SSL_HND_HELLO_EXT_CERT_TYPE                     9
+#define SSL_HND_HELLO_EXT_SUPPORTED_GROUPS               10 /* renamed from "elliptic_curves (RFC7919)*/
+#define SSL_HND_HELLO_EXT_EC_POINT_FORMATS              11
+#define SSL_HND_HELLO_EXT_SRP                           12
+#define SSL_HND_HELLO_EXT_SIGNATURE_ALGORITHMS          13
+#define SSL_HND_HELLO_EXT_USE_SRTP                      14
+#define SSL_HND_HELLO_EXT_HEARTBEAT                     15
+#define SSL_HND_HELLO_EXT_ALPN                          16
+#define SSL_HND_HELLO_EXT_STATUS_REQUEST_V2             17
+#define SSL_HND_HELLO_EXT_SIGNED_CERTIFICATE_TIMESTAMP  18
+#define SSL_HND_HELLO_EXT_CLIENT_CERT_TYPE              19
+#define SSL_HND_HELLO_EXT_SERVER_CERT_TYPE              20
+#define SSL_HND_HELLO_EXT_PADDING                       21
+#define SSL_HND_HELLO_EXT_ENCRYPT_THEN_MAC              22
+#define SSL_HND_HELLO_EXT_EXTENDED_MASTER_SECRET        23
+#define SSL_HND_HELLO_EXT_TOKEN_BINDING                 24
+#define SSL_HND_HELLO_EXT_CACHED_INFO                   25
+/* 26-34  Unassigned*/
+#define SSL_HND_HELLO_EXT_SESSION_TICKET_TLS            35
+/* TLS 1.3 draft */
+#define SSL_HND_HELLO_EXT_KEY_SHARE                     40
+#define SSL_HND_HELLO_EXT_PRE_SHARED_KEY                41
+#define SSL_HND_HELLO_EXT_EARLY_DATA                    42
+#define SSL_HND_HELLO_EXT_SUPPORTED_VERSIONS            43
+#define SSL_HND_HELLO_EXT_COOKIE                        44
+#define SSL_HND_HELLO_EXT_NPN                           13712 /* 0x3374 */
+#define SSL_HND_HELLO_EXT_CHANNEL_ID_OLD                30031 /* 0x754f */
+#define SSL_HND_HELLO_EXT_CHANNEL_ID                    30032 /* 0x7550 */
+#define SSL_HND_HELLO_EXT_RENEGOTIATION_INFO            65281 /* 0xFF01 */
+#define SSL_HND_HELLO_EXT_DRAFT_VERSION_TLS13           65282 /* 0xFF02 */
+
 #define SSL_HND_CERT_URL_TYPE_INDIVIDUAL_CERT       1
 #define SSL_HND_CERT_URL_TYPE_PKIPATH               2
 #define SSL_HND_CERT_STATUS_TYPE_OCSP        1
@@ -198,6 +221,8 @@ extern const value_string ssl_extension_curves[];
 extern const value_string ssl_extension_ec_point_formats[];
 extern const value_string ssl_curve_types[];
 extern const value_string tls_hello_ext_server_name_type_vs[];
+extern const value_string tls_hello_ext_psk_ke_mode[];
+extern const value_string tls_hello_ext_psk_auth_mode[];
 
 /* XXX Should we use GByteArray instead? */
 typedef struct _StringInfo {
@@ -215,6 +240,7 @@ typedef struct _StringInfo {
 #define TLSV1_VERSION          0x301
 #define TLSV1DOT1_VERSION      0x302
 #define TLSV1DOT2_VERSION      0x303
+#define TLSV1DOT3_VERSION      0x304
 #define DTLSV1DOT0_VERSION     0xfeff
 #define DTLSV1DOT0_OPENSSL_VERSION 0x100
 #define DTLSV1DOT2_VERSION     0xfefd
@@ -229,7 +255,6 @@ typedef struct _StringInfo {
 #define SSL_PRE_MASTER_SECRET   (1<<6)
 #define SSL_CLIENT_EXTENDED_MASTER_SECRET (1<<7)
 #define SSL_SERVER_EXTENDED_MASTER_SECRET (1<<8)
-#define SSL_SERVER_HELLO_DONE   (1<<9)
 #define SSL_NEW_SESSION_TICKET  (1<<10)
 
 #define SSL_EXTENDED_MASTER_SECRET_MASK (SSL_CLIENT_EXTENDED_MASTER_SECRET|SSL_SERVER_EXTENDED_MASTER_SECRET)
@@ -254,9 +279,6 @@ typedef struct _SslCipherSuite {
     gint number;
     gint kex;
     gint enc;
-    gint block; /* IV block size */
-    gint bits;
-    gint eff_bits;
     gint dig;
     ssl_cipher_mode_t mode;
 } SslCipherSuite;
@@ -471,6 +493,9 @@ WS_DLL_PUBLIC guint32
 ssl_starttls_post_ack(dissector_handle_t ssl_handle, packet_info *pinfo,
                  dissector_handle_t app_handle);
 
+extern dissector_handle_t
+ssl_find_appdata_dissector(const char *name);
+
 /** set the data and len for the stringInfo buffer. buf should be big enough to
  * contain the provided data
  @param buf the buffer to update
@@ -487,6 +512,13 @@ ssl_cipher_setiv(SSL_CIPHER_CTX *cipher, guchar* iv, gint iv_len);
  @return pointer to the cipher suite struct (or NULL if not found). */
 extern const SslCipherSuite *
 ssl_find_cipher(int num);
+
+/** Obtains the block size for a CBC block cipher.
+ * @param cipher_suite a cipher suite as returned by ssl_find_cipher().
+ * @return the block size of a cipher or 0 if unavailable.
+ */
+guint
+ssl_get_cipher_blocksize(const SslCipherSuite *cipher_suite);
 
 gboolean
 ssl_generate_pre_master_secret(SslDecryptSession *ssl_session,
@@ -638,12 +670,28 @@ typedef struct ssl_common_dissect {
         gint hs_ext_npn_str_len;
         gint hs_ext_reneg_info_len;
         gint hs_ext_reneg_info;
+        gint hs_ext_key_share_client_length;
+        gint hs_ext_key_share_group;
+        gint hs_ext_key_share_key_exchange_length;
+        gint hs_ext_key_share_key_exchange;
+        gint hs_ext_key_share_selected_group;
+        gint hs_ext_psk_identities_length;
+        gint hs_ext_psk_identity_ke_modes_length;
+        gint hs_ext_psk_identity_ke_mode;
+        gint hs_ext_psk_identity_auth_modes_length;
+        gint hs_ext_psk_identity_auth_mode;
+        gint hs_ext_psk_identity_length;
+        gint hs_ext_psk_identity;
+        gint hs_ext_psk_identity_selected;
+        gint hs_ext_early_data_obfuscated_ticket_age;
+        gint hs_ext_supported_versions_len;
+        gint hs_ext_supported_versions;
+        gint hs_ext_cookie_len;
+        gint hs_ext_cookie;
         gint hs_ext_server_name;
         gint hs_ext_server_name_len;
         gint hs_ext_server_name_list_len;
         gint hs_ext_server_name_type;
-        gint hs_ext_padding;
-        gint hs_ext_padding_len;
         gint hs_ext_padding_data;
         gint hs_ext_type;
         gint hs_sig_hash_alg;
@@ -688,6 +736,7 @@ typedef struct ssl_common_dissect {
         gint hs_dnames;
         gint hs_dname_len;
         gint hs_dname;
+        gint hs_random;
         gint hs_random_time;
         gint hs_random_bytes;
         gint hs_session_id;
@@ -707,6 +756,9 @@ typedef struct ssl_common_dissect {
         gint hs_client_cert_vrfy_sig_len;
         gint hs_client_cert_vrfy_sig;
 
+        /* TLS 1.3 */
+        gint hs_ext_draft_version_tls13;
+
         /* do not forget to update SSL_COMMON_LIST_T and SSL_COMMON_HF_LIST! */
     } hf;
     struct {
@@ -717,8 +769,11 @@ typedef struct ssl_common_dissect {
         gint hs_ext_curves_point_formats;
         gint hs_ext_npn;
         gint hs_ext_reneg_info;
+        gint hs_ext_key_share;
+        gint hs_ext_key_share_ks;
+        gint hs_ext_pre_shared_key;
+        gint hs_ext_psk_identity;
         gint hs_ext_server_name;
-        gint hs_ext_padding;
         gint hs_sig_hash_alg;
         gint hs_sig_hash_algs;
         gint urlhash;
@@ -781,6 +836,11 @@ ssl_dissect_hnd_srv_hello(ssl_common_dissect_t *hf, tvbuff_t *tvb, packet_info* 
                           gboolean is_dtls);
 
 extern void
+ssl_dissect_hnd_hello_retry_request(ssl_common_dissect_t *hf, tvbuff_t *tvb, packet_info* pinfo,
+                                    proto_tree *tree, guint32 offset, guint32 length,
+                                    SslSession *session, SslDecryptSession *ssl);
+
+extern void
 ssl_dissect_hnd_new_ses_ticket(ssl_common_dissect_t *hf, tvbuff_t *tvb,
                                proto_tree *tree, guint32 offset,
                                SslDecryptSession *ssl,
@@ -830,11 +890,12 @@ ssl_common_dissect_t name = {   \
         -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, \
         -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, \
         -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, \
-        -1, -1, -1, -1,                                                 \
+        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, \
+        -1, -1, -1, -1, -1, -1,                                         \
     },                                                                  \
     /* ett */ {                                                         \
         -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, \
-        -1, -1, -1, -1,                                                 \
+        -1, -1, -1, -1, -1, -1, -1,                                     \
     },                                                                  \
     /* ei */ {                                                          \
         EI_INIT, EI_INIT, EI_INIT, EI_INIT, EI_INIT,                    \
@@ -856,7 +917,7 @@ ssl_common_dissect_t name = {   \
     },                                                                  \
     { & name .hf.hs_ext_type,                                           \
       { "Type", prefix ".handshake.extension.type",                     \
-        FT_UINT16, BASE_HEX, VALS(tls_hello_extension_types), 0x0,      \
+        FT_UINT16, BASE_DEC, VALS(tls_hello_extension_types), 0x0,      \
         "Hello extension type", HFILL }                                 \
     },                                                                  \
     { & name .hf.hs_ext_len,                                            \
@@ -934,6 +995,96 @@ ssl_common_dissect_t name = {   \
         FT_BYTES, BASE_NONE, NULL, 0x0,                                 \
         NULL, HFILL }                                                   \
     },                                                                  \
+    { & name .hf.hs_ext_key_share_client_length,                        \
+      { "Client Key Share Length", prefix ".handshake.extensions_key_share_client_length",  \
+         FT_UINT16, BASE_DEC, NULL, 0x00,                               \
+         NULL, HFILL }                                                  \
+    },                                                                  \
+    { & name .hf.hs_ext_key_share_group,                                \
+      { "Group", prefix ".handshake.extensions_key_share_group",        \
+         FT_UINT16, BASE_DEC, VALS(ssl_extension_curves), 0x00,         \
+         NULL, HFILL }                                                  \
+    },                                                                  \
+    { & name .hf.hs_ext_key_share_key_exchange_length,                  \
+      { "Key Exchange Length", prefix ".handshake.extensions_key_share_key_exchange_length",   \
+        FT_UINT16, BASE_DEC, NULL, 0x00,                                \
+        NULL, HFILL }                                                   \
+    },                                                                  \
+    { & name .hf.hs_ext_key_share_key_exchange,                         \
+      { "Key Exchange", prefix ".handshake.extensions_key_share_key_exchange",  \
+        FT_BYTES, BASE_NONE, NULL, 0x0,                                 \
+        NULL, HFILL }                                                   \
+    },                                                                  \
+    { & name .hf.hs_ext_key_share_selected_group,                       \
+      { "Selected Group", prefix ".handshake.extensions_key_share_selected_group",  \
+         FT_UINT16, BASE_DEC, VALS(ssl_extension_curves), 0x00,         \
+         NULL, HFILL }                                                  \
+    },                                                                  \
+    { & name .hf.hs_ext_psk_identities_length,                          \
+      { "Identities Length", prefix ".handshake.extensions.psk.identities.length",  \
+        FT_UINT16, BASE_DEC, NULL, 0x0,                                 \
+        NULL, HFILL }                                                   \
+    },                                                                  \
+    { & name .hf.hs_ext_psk_identity_ke_modes_length,                   \
+      { "Key Exchange Modes length", prefix ".handshake.extensions.psk.identity.ke_modes_length",   \
+        FT_UINT8, BASE_DEC, NULL, 0x0,                                  \
+        NULL, HFILL }                                                   \
+    },                                                                  \
+    { & name .hf.hs_ext_psk_identity_ke_mode,                           \
+      { "Key Exchange Mode", prefix ".handshake.extensions.psk.identity.ke_mode",   \
+        FT_UINT8, BASE_DEC, VALS(tls_hello_ext_psk_ke_mode), 0x0,       \
+        NULL, HFILL }                                                   \
+    },                                                                  \
+    { & name .hf.hs_ext_psk_identity_auth_modes_length,                 \
+      { "Authentification Modes length", prefix ".handshake.extensions.psk.identity.auth_modes_length", \
+        FT_UINT8, BASE_DEC, NULL, 0x0,                                  \
+        NULL, HFILL }                                                   \
+    },                                                                  \
+    { & name .hf.hs_ext_psk_identity_auth_mode,                         \
+      { "Authentification Mode", prefix ".handshake.extensions.psk.identity.auth_mode", \
+        FT_UINT8, BASE_DEC, VALS(tls_hello_ext_psk_auth_mode), 0x0,     \
+        NULL, HFILL }                                                   \
+    },                                                                  \
+    { & name .hf.hs_ext_psk_identity_length,                            \
+      { "Identity Length", prefix ".handshake.extensions.psk.identity.length",   \
+        FT_UINT16, BASE_DEC, NULL, 0x0,                                 \
+        NULL, HFILL }                                                   \
+    },                                                                  \
+    { & name .hf.hs_ext_psk_identity,                                   \
+      { "Identity", prefix ".handshake.extensions.psk.identity",        \
+        FT_BYTES, BASE_NONE, NULL, 0x0,                                 \
+        NULL, HFILL }                                                   \
+    },                                                                  \
+    { & name .hf.hs_ext_psk_identity_selected,                          \
+      { "Selected Identity", prefix ".handshake.extensions.psk.identity.selected", \
+        FT_UINT16, BASE_DEC, NULL, 0x0,                                 \
+        NULL, HFILL }                                                   \
+    },                                                                  \
+    { & name .hf.hs_ext_early_data_obfuscated_ticket_age,               \
+      { "Obfuscated ticket age", prefix ".handshake.extensions.early_data.obfuscated_ticket_age",    \
+        FT_UINT32, BASE_DEC, NULL, 0x0,                                 \
+        "The time since the client learned about the server configuration that it is using, in milliseconds", HFILL }   \
+    },                                                                  \
+    { & name .hf.hs_ext_supported_versions_len,                         \
+      { "Supported Versions length", prefix ".handshake.extensions.supported_versions_len", \
+        FT_UINT8, BASE_DEC, NULL, 0x0,                                  \
+        NULL, HFILL }                                                   \
+    },                                                                  \
+    { & name .hf.hs_ext_supported_versions,                             \
+      { "Supported Versions", prefix ".handshake.extensions.supported_versions",    \
+        FT_UINT16, BASE_HEX, VALS(ssl_versions), 0x0,                   \
+        NULL, HFILL }                                                   \
+    },                                                                  \
+    { & name .hf.hs_ext_cookie_len,                                     \
+      { "Cookie length", prefix ".handshake.extensions.cookie_len",     \
+        FT_UINT16, BASE_DEC, NULL, 0x0,                                 \
+        NULL, HFILL }                                                   \
+    },                                                                  \
+    { & name .hf.hs_ext_cookie,                                         \
+      { "Cookie", prefix ".handshake.extensions.cookie",                \
+        FT_BYTES, BASE_NONE, NULL, 0x0,                                 \
+        NULL, HFILL }                                                   \
+    },                                                                  \
     { & name .hf.hs_ext_server_name_list_len,                           \
       { "Server Name list length", prefix ".handshake.extensions_server_name_list_len",    \
         FT_UINT16, BASE_DEC, NULL, 0x0,                                 \
@@ -953,16 +1104,6 @@ ssl_common_dissect_t name = {   \
       { "Server Name", prefix ".handshake.extensions_server_name",      \
         FT_STRING, BASE_NONE, NULL, 0x0,                                \
         NULL, HFILL }                                                   \
-    },                                                                  \
-    { & name .hf.hs_ext_padding,                                        \
-      { "Padding", prefix ".handshake.extensions_padding",              \
-        FT_NONE, BASE_NONE, NULL, 0x0,                                  \
-        NULL, HFILL }                                                   \
-    },                                                                  \
-    { & name .hf.hs_ext_padding_len,                                    \
-      { "Padding length", prefix ".handshake.extensions_padding_len",   \
-        FT_UINT16, BASE_DEC, NULL, 0x0,                                 \
-        "Length of Padding", HFILL }                                    \
     },                                                                  \
     { & name .hf.hs_ext_padding_data,                                   \
       { "Padding Data", prefix ".handshake.extensions_padding_data",    \
@@ -1254,13 +1395,18 @@ ssl_common_dissect_t name = {   \
         FT_NONE, BASE_NONE, NULL, 0x0,                                  \
         "Distinguished name of a CA that server trusts", HFILL }        \
     },                                                                  \
+    { & name .hf.hs_random,                                             \
+      { "Random", prefix ".handshake.random",                           \
+        FT_BYTES, BASE_NONE, NULL, 0x0,                                 \
+        "Random values used for deriving keys", HFILL }                 \
+    },                                                                  \
     { & name .hf.hs_random_time,                                        \
       { "GMT Unix Time", prefix ".handshake.random_time",               \
         FT_ABSOLUTE_TIME, ABSOLUTE_TIME_LOCAL, NULL, 0x0,               \
         "Unix time field of random structure", HFILL }                  \
     },                                                                  \
     { & name .hf.hs_random_bytes,                                       \
-      { "Random Bytes", prefix ".handshake.random",                     \
+      { "Random Bytes", prefix ".handshake.random_bytes",               \
         FT_BYTES, BASE_NONE, NULL, 0x0,                                 \
         "Random values used for deriving keys", HFILL }                 \
     },                                                                  \
@@ -1344,6 +1490,11 @@ ssl_common_dissect_t name = {   \
       { "Signature", prefix ".handshake.client_cert_vrfy.sig",          \
         FT_BYTES, BASE_NONE, NULL, 0x0,                                 \
         "CertificateVerify's signature", HFILL }                        \
+    },                                                                  \
+    { & name .hf.hs_ext_draft_version_tls13,                            \
+      { "Draft version of TLS 1.3", prefix ".extension.draft_version_tls13", \
+        FT_UINT16, BASE_DEC, NULL, 0x0,                                 \
+        "Indicate the version of draft supported by client", HFILL }    \
     }
 /* }}} */
 
@@ -1356,8 +1507,11 @@ ssl_common_dissect_t name = {   \
         & name .ett.hs_ext_curves_point_formats,    \
         & name .ett.hs_ext_npn,                     \
         & name .ett.hs_ext_reneg_info,              \
+        & name .ett.hs_ext_key_share,               \
+        & name .ett.hs_ext_key_share_ks,            \
+        & name .ett.hs_ext_pre_shared_key,          \
+        & name .ett.hs_ext_psk_identity,            \
         & name .ett.hs_ext_server_name,             \
-        & name .ett.hs_ext_padding,                 \
         & name .ett.hs_sig_hash_alg,                \
         & name .ett.hs_sig_hash_algs,               \
         & name .ett.urlhash,                        \

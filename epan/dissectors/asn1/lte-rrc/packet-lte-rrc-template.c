@@ -1,7 +1,7 @@
 /* packet-lte-rrc-template.c
  * Routines for Evolved Universal Terrestrial Radio Access (E-UTRA);
  * Radio Resource Control (RRC) protocol specification
- * (3GPP TS 36.331 V13.2.0 Release 13) packet dissection
+ * (3GPP TS 36.331 V13.3.0 Release 13) packet dissection
  * Copyright 2008, Vincent Helfre
  * Copyright 2009-2016, Pascal Quantin
  *
@@ -2198,7 +2198,7 @@ static const value_string lte_rrc_messageIdentifier_vals[] = {
   { 0x112b, "CMAS Identifier for operator defined use for additional languages"},
   {      0, NULL},
 };
-static value_string_ext lte_rrc_messageIdentifier_vals_ext = VALUE_STRING_EXT_INIT(lte_rrc_messageIdentifier_vals);
+value_string_ext lte_rrc_messageIdentifier_vals_ext = VALUE_STRING_EXT_INIT(lte_rrc_messageIdentifier_vals);
 
 static const value_string lte_rrc_serialNumber_gs_vals[] = {
   { 0, "Display mode immediate, cell wide"},
@@ -3624,7 +3624,7 @@ void proto_register_lte_rrc(void) {
         NULL, HFILL }},
     { &hf_lte_rrc_warningMessageSegment_decoded_page,
       { "Decoded Page", "lte-rrc.warningMessageSegment.decoded_page",
-        FT_STRING, BASE_NONE, NULL, 0,
+        FT_STRING, STR_UNICODE, NULL, 0,
         NULL, HFILL }},
     { &hf_lte_rrc_interBandTDD_CA_WithDifferentConfig_bit1,
       { "Bit 1", "lte-rrc.interBandTDD_CA_WithDifferentConfig.bit1",
@@ -4023,7 +4023,7 @@ proto_reg_handoff_lte_rrc(void)
 	static dissector_handle_t lte_rrc_dl_ccch_handle;
 
 	lte_rrc_dl_ccch_handle = find_dissector("lte_rrc.dl_ccch");
-	dissector_add_for_decode_as("udp.port", lte_rrc_dl_ccch_handle);
+	dissector_add_for_decode_as_with_preference("udp.port", lte_rrc_dl_ccch_handle);
 	nas_eps_handle = find_dissector("nas-eps");
 	rrc_irat_ho_to_utran_cmd_handle = find_dissector("rrc.irat.ho_to_utran_cmd");
 	rrc_sys_info_cont_handle = find_dissector("rrc.sysinfo.cont");

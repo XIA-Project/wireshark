@@ -70,14 +70,14 @@ print_usage(FILE *output)
 
 #ifdef HAVE_PLUGINS
 /*
- *  Don't report failures to load plugins because most (non-wiretap) plugins
- *  *should* fail to load (because we're not linked against libwireshark and
- *  dissector plugins need libwireshark).
+ * General errors are reported with an console message in captype.
  */
 static void
-failure_message(const char *msg_format _U_, va_list ap _U_)
+failure_message(const char *msg_format, va_list ap)
 {
-  return;
+  fprintf(stderr, "captype: ");
+  vfprintf(stderr, msg_format, ap);
+  fprintf(stderr, "\n");
 }
 #endif
 
@@ -118,6 +118,8 @@ main(int argc, char *argv[])
          "\n"
          "%s",
       get_ws_vcs_version_info(), comp_info_str->str, runtime_info_str->str);
+  g_string_free(comp_info_str, TRUE);
+  g_string_free(runtime_info_str, TRUE);
 
 #ifdef _WIN32
   arg_list_utf_16to8(argc, argv);
@@ -141,8 +143,12 @@ main(int argc, char *argv[])
     init_report_err(failure_message,NULL,NULL,NULL);
 
     /* Scan for plugins.  This does *not* call their registration routines;
-       that's done later. */
-    scan_plugins();
+       that's done later.
+
+       Don't report failures to load plugins because most (non-wiretap)
+       plugins *should* fail to load (because we're not linked against
+       libwireshark and dissector plugins need libwireshark). */
+    scan_plugins(DONT_REPORT_LOAD_FAILURE);
 
     /* Register all libwiretap plugin modules. */
     register_all_wiretap_modules();
@@ -164,6 +170,8 @@ main(int argc, char *argv[])
         break;
 
       case 'v':
+        comp_info_str = get_compiled_version_info(NULL, NULL);
+        runtime_info_str = get_runtime_version_info(NULL);
         show_version("Captype (Wireshark)", comp_info_str, runtime_info_str);
         g_string_free(comp_info_str, TRUE);
         g_string_free(runtime_info_str, TRUE);

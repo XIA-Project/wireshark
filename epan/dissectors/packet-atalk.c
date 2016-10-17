@@ -2035,7 +2035,7 @@ proto_register_atalk(void)
 
   /* subdissector code */
   ddp_dissector_table = register_dissector_table("ddp.type", "DDP packet type", proto_ddp,
-                                                 FT_UINT8, BASE_HEX, DISSECTOR_TABLE_ALLOW_DUPLICATE);
+                                                 FT_UINT8, BASE_HEX);
 
   atalk_address_type = address_type_dissector_register("AT_ATALK", "Appletalk DDP", atalk_to_str, atalk_str_len, NULL, atalk_col_filter_str, atalk_len, NULL, NULL);
 }
@@ -2058,7 +2058,7 @@ proto_reg_handoff_atalk(void)
 
   nbp_handle = create_dissector_handle(dissect_nbp, proto_nbp);
   dissector_add_uint("ddp.type", DDP_NBP, nbp_handle);
-  dissector_add_for_decode_as("udp.port", nbp_handle);
+  dissector_add_for_decode_as_with_preference("udp.port", nbp_handle);
 
   atp_handle = create_dissector_handle(dissect_atp, proto_atp);
   dissector_add_uint("ddp.type", DDP_ATP, atp_handle);

@@ -127,6 +127,10 @@ static int hf_smb2_max_ioctl_in_size = -1;
 static int hf_smb2_max_ioctl_out_size = -1;
 static int hf_smb2_flags = -1;
 static int hf_smb2_required_buffer_size = -1;
+static int hf_smb2_getinfo_size = -1;
+static int hf_smb2_getinfo_offset = -1;
+static int hf_smb2_getinfo_additional = -1;
+static int hf_smb2_getinfo_flags = -1;
 static int hf_smb2_setinfo_size = -1;
 static int hf_smb2_setinfo_offset = -1;
 static int hf_smb2_file_basic_info = -1;
@@ -157,6 +161,13 @@ static int hf_smb2_fs_info_06 = -1;
 static int hf_smb2_fs_info_07 = -1;
 static int hf_smb2_fs_objectid_info = -1;
 static int hf_smb2_sec_info_00 = -1;
+static int hf_smb2_quota_info = -1;
+static int hf_smb2_query_quota_info = -1;
+static int hf_smb2_qq_single = -1;
+static int hf_smb2_qq_restart = -1;
+static int hf_smb2_qq_sidlist_len = -1;
+static int hf_smb2_qq_start_sid_len = -1;
+static int hf_smb2_qq_start_sid_offset = -1;
 static int hf_smb2_fid = -1;
 static int hf_smb2_write_length = -1;
 static int hf_smb2_write_data = -1;
@@ -479,6 +490,8 @@ static gint ett_smb2_fs_info_06 = -1;
 static gint ett_smb2_fs_info_07 = -1;
 static gint ett_smb2_fs_objectid_info = -1;
 static gint ett_smb2_sec_info_00 = -1;
+static gint ett_smb2_quota_info = -1;
+static gint ett_smb2_query_quota_info = -1;
 static gint ett_smb2_tid_tree = -1;
 static gint ett_smb2_sesid_tree = -1;
 static gint ett_smb2_create_chain_element = -1;
@@ -572,11 +585,13 @@ static const fragment_items smb2_pipe_frag_items = {
 #define SMB2_CLASS_FILE_INFO	0x01
 #define SMB2_CLASS_FS_INFO	0x02
 #define SMB2_CLASS_SEC_INFO	0x03
+#define SMB2_CLASS_QUOTA_INFO	0x04
 #define SMB2_CLASS_POSIX_INFO	0x80
 static const value_string smb2_class_vals[] = {
 	{ SMB2_CLASS_FILE_INFO,	"FILE_INFO"},
 	{ SMB2_CLASS_FS_INFO,	"FS_INFO"},
 	{ SMB2_CLASS_SEC_INFO,	"SEC_INFO"},
+	{ SMB2_CLASS_QUOTA_INFO, "QUOTA_INFO"},
 	{ SMB2_CLASS_POSIX_INFO, "POSIX_INFO"},
 	{ 0, NULL }
 };
@@ -2448,6 +2463,24 @@ dissect_smb2_sec_info_00(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *pare
 }
 
 static int
+dissect_smb2_quota_info(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *parent_tree, int offset, smb2_info_t *si _U_)
+{
+	proto_item *item = NULL;
+	proto_tree *tree = NULL;
+	guint16 bcp;
+
+	if (parent_tree) {
+		item = proto_tree_add_item(parent_tree, hf_smb2_quota_info, tvb, offset, -1, ENC_NA);
+		tree = proto_item_add_subtree(item, ett_smb2_quota_info);
+	}
+
+	bcp = tvb_captured_length_remaining(tvb, offset);
+	offset = dissect_nt_user_quota(tvb, tree, offset, &bcp);
+
+	return offset;
+}
+
+static int
 dissect_smb2_fs_info_05(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *parent_tree, int offset, smb2_info_t *si _U_)
 {
 	proto_item *item = NULL;
@@ -4193,42 +4226,83 @@ dissect_smb2_negotiate_protocol_response(tvbuff_t *tvb, packet_info *pinfo, prot
 static int
 dissect_smb2_getinfo_parameters(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int offset, smb2_info_t *si)
 {
+	/* Additional Info */
 	switch (si->saved->smb2_class) {
-	case SMB2_CLASS_FILE_INFO:
-		switch (si->saved->infolevel) {
-		default:
-			/* we don't handle this infolevel yet */
-			proto_tree_add_item(tree, hf_smb2_unknown, tvb, offset, 16, ENC_NA);
-			offset += tvb_captured_length_remaining(tvb, offset);
-		}
-		break;
-	case SMB2_CLASS_FS_INFO:
-		switch (si->saved->infolevel) {
-		default:
-			/* we don't handle this infolevel yet */
-			proto_tree_add_item(tree, hf_smb2_unknown, tvb, offset, 16, ENC_NA);
-			offset += tvb_captured_length_remaining(tvb, offset);
-		}
-		break;
 	case SMB2_CLASS_SEC_INFO:
-		switch (si->saved->infolevel) {
-		case SMB2_SEC_INFO_00:
-			dissect_security_information_mask(tvb, tree, offset+8);
-			break;
-		default:
-			/* we don't handle this infolevel yet */
-			proto_tree_add_item(tree, hf_smb2_unknown, tvb, offset, 16, ENC_NA);
-			offset += tvb_captured_length_remaining(tvb, offset);
-		}
+		dissect_security_information_mask(tvb, tree, offset);
 		break;
 	default:
-		/* we don't handle this class yet */
-		proto_tree_add_item(tree, hf_smb2_unknown, tvb, offset, 16, ENC_NA);
-		offset += tvb_captured_length_remaining(tvb, offset);
+		proto_tree_add_item(tree, hf_smb2_getinfo_additional, tvb, offset, 4, ENC_LITTLE_ENDIAN);
 	}
+	offset += 4;
+
+	/* Flags */
+	proto_tree_add_item(tree, hf_smb2_getinfo_flags, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+	offset += 4;
+
 	return offset;
 }
 
+
+static int
+dissect_smb2_getinfo_buffer_quota(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *parent_tree, int offset, smb2_info_t *si _U_)
+{
+	guint32 sidlist_len = 0;
+	guint32 startsid_len = 0;
+	guint32 startsid_offset = 0;
+
+	proto_item *item = NULL;
+	proto_tree *tree = NULL;
+
+	if (parent_tree) {
+		item = proto_tree_add_item(parent_tree, hf_smb2_query_quota_info, tvb, offset, -1, ENC_NA);
+		tree = proto_item_add_subtree(item, ett_smb2_query_quota_info);
+	}
+
+	proto_tree_add_item(tree, hf_smb2_qq_single, tvb, offset, 1, ENC_LITTLE_ENDIAN);
+	offset += 1;
+
+	proto_tree_add_item(tree, hf_smb2_qq_restart, tvb, offset, 1, ENC_LITTLE_ENDIAN);
+	offset += 1;
+
+	/* reserved */
+	proto_tree_add_item(tree, hf_smb2_reserved, tvb, offset, 2, ENC_NA);
+	offset += 2;
+
+	proto_tree_add_item_ret_uint(tree, hf_smb2_qq_sidlist_len, tvb, offset, 4, ENC_LITTLE_ENDIAN, &sidlist_len);
+	offset += 4;
+
+	proto_tree_add_item_ret_uint(tree, hf_smb2_qq_start_sid_len, tvb, offset, 4, ENC_LITTLE_ENDIAN, &startsid_len);
+	offset += 4;
+
+	proto_tree_add_item_ret_uint(tree, hf_smb2_qq_start_sid_offset, tvb, offset, 4, ENC_LITTLE_ENDIAN, &startsid_offset);
+	offset += 4;
+
+	if (sidlist_len != 0) {
+		offset = dissect_nt_get_user_quota(tvb, tree, offset, &sidlist_len);
+	} else if (startsid_len != 0) {
+		offset = dissect_nt_sid(tvb, offset + startsid_offset, tree, "Start SID", NULL, -1);
+	}
+
+	return offset;
+}
+
+static int
+dissect_smb2_getinfo_buffer(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, int size, smb2_info_t *si)
+{
+	switch (si->saved->smb2_class) {
+	case SMB2_CLASS_QUOTA_INFO:
+		dissect_smb2_getinfo_buffer_quota(tvb, pinfo, tree, offset, si);
+		break;
+	default:
+		if (size > 0) {
+			proto_tree_add_item(tree, hf_smb2_unknown, tvb, offset, size, ENC_NA);
+		}
+	}
+	offset += size;
+
+	return offset;
+}
 
 static int
 dissect_smb2_class_infolevel(packet_info *pinfo, tvbuff_t *tvb, int offset, proto_tree *tree, smb2_info_t *si)
@@ -4266,6 +4340,11 @@ dissect_smb2_class_infolevel(packet_info *pinfo, tvbuff_t *tvb, int offset, prot
 	case SMB2_CLASS_SEC_INFO:
 		hfindex = hf_smb2_infolevel_sec_info;
 		vsx = &smb2_sec_info_levels_ext;
+		break;
+	case SMB2_CLASS_QUOTA_INFO:
+		/* infolevel is not being used for quota */
+		hfindex = hf_smb2_infolevel;
+		vsx = NULL;
 		break;
 	case SMB2_CLASS_POSIX_INFO:
 		hfindex = hf_smb2_infolevel_posix_info;
@@ -4305,6 +4384,9 @@ dissect_smb2_class_infolevel(packet_info *pinfo, tvbuff_t *tvb, int offset, prot
 static int
 dissect_smb2_getinfo_request(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, smb2_info_t *si)
 {
+	guint32 getinfo_size = 0;
+	guint32 getinfo_offset = 0;
+
 	/* buffer code */
 	offset = dissect_smb2_buffercode(tree, tvb, offset, NULL);
 
@@ -4315,17 +4397,31 @@ dissect_smb2_getinfo_request(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
 	proto_tree_add_item(tree, hf_smb2_max_response_size, tvb, offset, 4, ENC_LITTLE_ENDIAN);
 	offset += 4;
 
+	/* offset */
+	proto_tree_add_item_ret_uint(tree, hf_smb2_getinfo_offset, tvb, offset, 2, ENC_LITTLE_ENDIAN, &getinfo_offset);
+	offset += 4;
+
+	/* size */
+	proto_tree_add_item_ret_uint(tree, hf_smb2_getinfo_size, tvb, offset, 4, ENC_LITTLE_ENDIAN, &getinfo_size);
+	offset += 4;
+
 	/* parameters */
 	if (si->saved) {
 		dissect_smb2_getinfo_parameters(tvb, pinfo, tree, offset, si);
 	} else {
 		/* some unknown bytes */
-		proto_tree_add_item(tree, hf_smb2_unknown, tvb, offset, 16, ENC_NA);
+		proto_tree_add_item(tree, hf_smb2_unknown, tvb, offset, 8, ENC_NA);
 	}
-	offset += 16;
+	offset += 8;
 
 	/* fid */
-	offset = dissect_smb2_fid(tvb, pinfo, tree, offset, si, FID_MODE_USE);
+	dissect_smb2_fid(tvb, pinfo, tree, offset, si, FID_MODE_USE);
+
+	/* buffer */
+	if (si->saved) {
+		dissect_smb2_getinfo_buffer(tvb, pinfo, tree, getinfo_offset, getinfo_size, si);
+	}
+	offset = getinfo_offset + getinfo_size;
 
 	return offset;
 }
@@ -4443,6 +4539,9 @@ dissect_smb2_infolevel(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, 
 			proto_tree_add_item(tree, hf_smb2_unknown, tvb, offset, tvb_captured_length_remaining(tvb, offset), ENC_NA);
 			offset += tvb_captured_length_remaining(tvb, offset);
 		}
+		break;
+	case SMB2_CLASS_QUOTA_INFO:
+		offset = dissect_smb2_quota_info(tvb, pinfo, tree, offset, si);
 		break;
 	default:
 		/* we don't handle this class yet */
@@ -8938,6 +9037,26 @@ proto_register_smb2(void)
 			NULL, 0, "SMB2 Maximum response size", HFILL }
 		},
 
+		{ &hf_smb2_getinfo_size,
+			{ "Getinfo Size", "smb2.getinfo_size", FT_UINT32, BASE_DEC,
+			NULL, 0, "SMB2 getinfo size", HFILL }
+		},
+
+		{ &hf_smb2_getinfo_offset,
+			{ "Getinfo Offset", "smb2.getinfo_offset", FT_UINT16, BASE_HEX,
+			NULL, 0, "SMB2 getinfo offset", HFILL }
+		},
+
+		{ &hf_smb2_getinfo_additional,
+			{ "Additional Info", "smb2.getinfo_additional", FT_UINT32, BASE_HEX,
+			NULL, 0, "SMB2 getinfo additional info", HFILL }
+		},
+
+		{ &hf_smb2_getinfo_flags,
+			{ "Flags", "smb2.getinfo_flags", FT_UINT32, BASE_HEX,
+			NULL, 0, "SMB2 getinfo flags", HFILL }
+		},
+
 		{ &hf_smb2_setinfo_size,
 			{ "Setinfo Size", "smb2.setinfo_size", FT_UINT32, BASE_DEC,
 			NULL, 0, "SMB2 setinfo size", HFILL }
@@ -9386,6 +9505,41 @@ proto_register_smb2(void)
 		{ &hf_smb2_sec_info_00,
 			{ "SMB2_SEC_INFO_00", "smb2.sec_info_00", FT_NONE, BASE_NONE,
 			NULL, 0, "SMB2_SEC_INFO_00 structure", HFILL }
+		},
+
+		{ &hf_smb2_quota_info,
+			{ "SMB2_QUOTA_INFO", "smb2.quota_info", FT_NONE, BASE_NONE,
+			NULL, 0, "SMB2_QUOTA_INFO structure", HFILL }
+		},
+
+		{ &hf_smb2_query_quota_info,
+			{ "SMB2_QUERY_QUOTA_INFO", "smb2.query_quota_info", FT_NONE, BASE_NONE,
+			NULL, 0, "SMB2_QUERY_QUOTA_INFO structure", HFILL }
+		},
+
+		{ &hf_smb2_qq_single,
+			{ "ReturnSingle", "smb2.query_quota_info.single", FT_BOOLEAN, 8,
+			NULL, 0xff, NULL, HFILL }
+		},
+
+		{ &hf_smb2_qq_restart,
+			{ "RestartScan", "smb2.query_quota_info.restart", FT_BOOLEAN, 8,
+			NULL, 0xff, NULL, HFILL }
+		},
+
+		{ &hf_smb2_qq_sidlist_len,
+			{ "SidListLength", "smb2.query_quota_info.sidlistlen", FT_UINT32, BASE_DEC,
+			NULL, 0, NULL, HFILL }
+		},
+
+		{ &hf_smb2_qq_start_sid_len,
+			{ "StartSidLength", "smb2.query_quota_info.startsidlen", FT_UINT32, BASE_DEC,
+			NULL, 0, NULL, HFILL }
+		},
+
+		{ &hf_smb2_qq_start_sid_offset,
+			{ "StartSidOffset", "smb2.query_quota_info.startsidoffset", FT_UINT32, BASE_DEC,
+			NULL, 0, NULL, HFILL }
 		},
 
 		{ &hf_smb2_disposition_delete_on_close,
@@ -10792,6 +10946,8 @@ proto_register_smb2(void)
 		&ett_smb2_fs_info_07,
 		&ett_smb2_fs_objectid_info,
 		&ett_smb2_sec_info_00,
+		&ett_smb2_quota_info,
+		&ett_smb2_query_quota_info,
 		&ett_smb2_tid_tree,
 		&ett_smb2_sesid_tree,
 		&ett_smb2_create_chain_element,

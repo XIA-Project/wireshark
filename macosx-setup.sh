@@ -106,11 +106,6 @@ if [ "$QT_VERSION" ]; then
     QT_MAJOR_MINOR_DOTDOT_VERSION=$QT_MAJOR_VERSION.$QT_MINOR_VERSION.$QT_DOTDOT_VERSION
 fi
 
-# In case we want to build GTK *and* we don't have Apple's X11 SDK installed
-# we may want to install XQuartz. The version will only be used in the printing
-# of a URL, the package will not be installed.
-#
-XQUARTZ_VERSION=2.7.5
 #
 # The following libraries are optional.
 # Comment them out if you don't want them, but note that some of
@@ -139,9 +134,11 @@ PORTAUDIO_VERSION=pa_stable_v19_20111121
 #
 GEOIP_VERSION=1.4.8
 
-CARES_VERSION=1.10.0
+CARES_VERSION=1.12.0
 
 LIBSSH_VERSION=0.7.2
+
+NGHTTP2_VERSION=1.14.0
 
 DARWIN_MAJOR_VERSION=`uname -r | sed 's/\([0-9]*\).*/\1/'`
 
@@ -1405,7 +1402,7 @@ uninstall_geoip() {
 install_c_ares() {
     if [ "$CARES_VERSION" -a ! -f c-ares-$CARES_VERSION-done ] ; then
         echo "Downloading, building, and installing C-Ares API:"
-        [ -f c-ares-$CARES_VERSION.tar.gz ] || curl -L -O http://c-ares.haxx.se/download/c-ares-$CARES_VERSION.tar.gz || exit 1
+        [ -f c-ares-$CARES_VERSION.tar.gz ] || curl -L -O https://c-ares.haxx.se/download/c-ares-$CARES_VERSION.tar.gz || exit 1
         gzcat c-ares-$CARES_VERSION.tar.gz | tar xf - || exit 1
         cd c-ares-$CARES_VERSION
         CFLAGS="$CFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" CXXFLAGS="$CXXFLAGS $VERSION_MIN_FLAGS $SDKFLAGS"  LDFLAGS="$LDFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" ./configure || exit 1
@@ -1474,11 +1471,57 @@ uninstall_libssh() {
     fi
 }
 
+install_nghttp2() {
+    if [ "$NGHTTP2_VERSION" -a ! -f nghttp2-$NGHTTP2_VERSION-done ] ; then
+        echo "Downloading, building, and installing nghttp2:"
+        [ -f nghttp2-$NGHTTP2_VERSION.tar.xz ] || curl -L -O https://github.com/nghttp2/nghttp2/releases/download/v$NGHTTP2_VERSION/nghttp2-$NGHTTP2_VERSION.tar.xz || exit 1
+        xzcat nghttp2-$NGHTTP2_VERSION.tar.xz | tar xf - || exit 1
+        cd nghttp2-$NGHTTP2_VERSION
+        ./configure || exit 1
+        make $MAKE_BUILD_OPTS || exit 1
+        $DO_MAKE_INSTALL || exit 1
+        cd ..
+        touch nghttp2-$NGHTTP2_VERSION-done
+    fi
+}
+
+uninstall_nghttp2() {
+    if [ ! -z "$installed_nghttp2_version" ] ; then
+        echo "Uninstalling nghttp2:"
+        cd nghttp2-$installed_nghttp2_version
+        $DO_MAKE_UNINSTALL || exit 1
+        make distclean || exit 1
+        cd ..
+        rm nghttp2-$installed_nghttp2_version-done
+
+        if [ "$#" -eq 1 -a "$1" = "-r" ] ; then
+            #
+            # Get rid of the previously downloaded and unpacked version.
+            #
+            rm -rf nghttp2-$installed_nghttp2_version
+            rm -rf nghttp2-$installed_nghttp2_version.tar.xz
+        fi
+
+        installed_nghttp2_version=""
+    fi
+}
+
 install_all() {
     #
     # Check whether the versions we have installed are the versions
     # requested; if not, uninstall the installed versions.
     #
+    if [ ! -z "$installed_nghttp2_version" -a \
+              "$installed_nghttp2_version" != "$NGHTTP2_VERSION" ] ; then
+        echo "Installed nghttp2 version is $installed_nghttp2_version"
+        if [ -z "$NGHTTP2_VERSION" ] ; then
+            echo "nghttp2 is not requested"
+        else
+            echo "Requested nghttp2 version is $NGHTTP2_VERSION"
+        fi
+        uninstall_nghttp2 -r
+    fi
+
     if [ ! -z "$installed_libssh_version" -a \
               "$installed_libssh_version" != "$LIBSSH_VERSION" ] ; then
         echo "Installed libssh version is $installed_libssh_version"
@@ -1879,6 +1922,8 @@ install_all() {
     install_c_ares
 
     install_libssh
+
+    install_nghttp2
 }
 
 uninstall_all() {
@@ -1895,6 +1940,8 @@ uninstall_all() {
         # We also do a "make distclean", so that we don't have leftovers from
         # old configurations.
         #
+        uninstall_nghttp2
+
         uninstall_libssh
 
         uninstall_c_ares
@@ -2052,6 +2099,7 @@ then
     installed_geoip_version=`ls geoip-*-done 2>/dev/null | sed 's/geoip-\(.*\)-done/\1/'`
     installed_cares_version=`ls c-ares-*-done 2>/dev/null | sed 's/c-ares-\(.*\)-done/\1/'`
     installed_libssh_version=`ls libssh-*-done 2>/dev/null | sed 's/libssh-\(.*\)-done/\1/'`
+    installed_nghttp2_version=`ls nghttp2-*-done 2>/dev/null | sed 's/nghttp2-\(.*\)-done/\1/'`
 
     #
     # If we don't have a versioned -done file for portaudio, but do have
@@ -2337,7 +2385,7 @@ export CXXFLAGS
 # You need Xcode or the command-line tools installed to get the compilers.
 #
 if [ ! -x /usr/bin/xcodebuild ]; then
-    echo "Please install Xcode first (should be available on DVD or from http://developer.apple.com/xcode/index.php)."
+    echo "Please install Xcode first (should be available on DVD or from the Mac App Store)."
     exit 1
 fi
 
@@ -2346,8 +2394,16 @@ if [ "$QT_VERSION" ]; then
     # We need Xcode, not just the command-line tools, installed to build
     # Qt.
     #
-    if ! /usr/bin/xcrun -find xcrun >/dev/null 2>&1; then
-        echo "Please install Xcode first (should be available on DVD or from http://developer.apple.com/xcode/index.php)."
+    # At least with Xcode 8, /usr/bin/xcodebuild --help fails if only
+    # the command-line tools are installed and succeeds if Xcode is
+    # installed.  Unfortunately, it fails *with* Xcode 3, but
+    # /usr/bin/xcodebuild -version works with that and with Xcode 8.
+    # Hopefully it fails with only the command-line tools installed.
+    #
+    if /usr/bin/xcodebuild -version >/dev/null 2>&1; then
+        :
+    else
+        echo "Please install Xcode first (should be available on DVD or from the Mac App Store)."
         echo "The command-line build tools are not sufficient to build Qt."
         exit 1
     fi
@@ -2361,9 +2417,9 @@ if [ "$GTK_VERSION" ]; then
     #
     if [ ! -d /usr/X11/include ]; then
         echo "Please install X11 and the X11 SDK first."
-        echo "  You can either use http://xquartz.macosforge.org/, e.g."
-        echo "  http://xquartz-dl.macosforge.org/SL/XQuartz-$XQUARTZ_VERSION.dmg"
-        echo "  or the native Apple packages if you are on Lion or below."
+        echo "  You can either download the latest package from"
+        echo "  http://www.xquartz.org/ and install it or install"
+        echo "  the native Apple package if you are on Lion or below."
         exit 1
     fi
 fi

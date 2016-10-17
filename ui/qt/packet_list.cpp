@@ -369,6 +369,9 @@ PacketList::PacketList(QWidget *parent) :
     action = window()->findChild<QAction *>("actionContextCopyBytesBinary");
     submenu->addAction(action);
     copy_actions_ << action;
+    action = window()->findChild<QAction *>("actionContextCopyBytesEscapedString");
+    submenu->addAction(action);
+    copy_actions_ << action;
 
     ctx_menu_.addSeparator();
     ctx_menu_.addMenu(&proto_prefs_menu_);
@@ -486,10 +489,6 @@ void PacketList::setByteViewTab (ByteViewTab *byte_view_tab) {
 
 PacketListModel *PacketList::packetListModel() const {
     return packet_list_model_;
-}
-
-void PacketList::showEvent (QShowEvent *) {
-    setColumnVisibility();
 }
 
 void PacketList::selectionChanged (const QItemSelection & selected, const QItemSelection & deselected) {
@@ -777,10 +776,10 @@ void PacketList::columnsChanged()
     prefs.num_cols = g_list_length(prefs.col_list);
     col_cleanup(&cap_file_->cinfo);
     build_column_format_array(&cap_file_->cinfo, prefs.num_cols, FALSE);
-    setColumnVisibility();
     create_far_overlay_ = true;
     resetColumns();
     applyRecentColumnWidths();
+    setColumnVisibility();
     columns_changed_ = false;
 }
 
@@ -911,8 +910,6 @@ void PacketList::thaw()
     // We don't reapply the recent settings because the user could have
     // resized the columns manually since they were initially loaded.
     header()->restoreState(column_state_);
-
-    setColumnVisibility();
 }
 
 void PacketList::clear() {
@@ -928,8 +925,6 @@ void PacketList::clear() {
     overlay_sb_->setMarkedPacketImage(overlay);
     create_near_overlay_ = true;
     create_far_overlay_ = true;
-
-    setColumnVisibility();
 }
 
 void PacketList::writeRecent(FILE *rf) {

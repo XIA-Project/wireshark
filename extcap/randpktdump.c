@@ -27,6 +27,7 @@
 #include "extcap-base.h"
 
 #include "randpkt_core/randpkt_core.h"
+#include <wsutil/strtoi.h>
 
 #define RANDPKT_EXTCAP_INTERFACE "randpkt"
 #define RANDPKTDUMP_VERSION_MAJOR "0"
@@ -126,7 +127,7 @@ int main(int argc, char *argv[])
 {
 	int option_idx = 0;
 	int result;
-	int maxbytes = 5000;
+	guint16 maxbytes = 5000;
 	guint64 count = 1000;
 	int random_type = FALSE;
 	int all_random = FALSE;
@@ -150,10 +151,11 @@ int main(int argc, char *argv[])
 
 	help_header = g_strdup_printf(
 		" %s --extcap-interfaces\n"
-		" %s --extcap-interface=INTERFACE --extcap-dlts\n"
-		" %s --extcap-interface=INTERFACE --extcap-config\n"
-		" %s --extcap-interface=INTERFACE --type dns --count 10 "
-		"--fifo=FILENAME --capture\n", argv[0], argv[0], argv[0], argv[0]);
+		" %s --extcap-interface=%s --extcap-dlts\n"
+		" %s --extcap-interface=%s --extcap-config\n"
+		" %s --extcap-interface=%s --type dns --count 10 "
+		"--fifo=FILENAME --capture\n", argv[0], argv[0], RANDPKT_EXTCAP_INTERFACE, argv[0], RANDPKT_EXTCAP_INTERFACE,
+		argv[0], RANDPKT_EXTCAP_INTERFACE);
 	extcap_help_add_header(extcap_conf, help_header);
 	g_free(help_header);
 
@@ -191,15 +193,18 @@ int main(int argc, char *argv[])
 			goto end;
 
 		case OPT_MAXBYTES:
-			maxbytes = atoi(optarg);
-			if (maxbytes > MAXBYTES_LIMIT) {
-				g_warning("randpktdump: Max bytes is %d", MAXBYTES_LIMIT);
+			if (!ws_strtou16(optarg, NULL, &maxbytes)) {
+				g_warning("Invalid parameter maxbytes: %s (max value is %u)",
+					optarg, G_MAXUINT16);
 				goto end;
 			}
 			break;
 
 		case OPT_COUNT:
-			count = g_ascii_strtoull(optarg, NULL, 10);
+			if (!ws_strtou64(optarg, NULL, &count)) {
+				g_warning("Invalid packet count: %s", optarg);
+				goto end;
+			}
 			break;
 
 		case OPT_RANDOM_TYPE:

@@ -641,6 +641,7 @@ DEBUG_ENTRY("dissect_per_restricted_character_string");
 	if (has_extension) {
 		gboolean extension_present;
 		offset = dissect_per_boolean(tvb, offset, actx, tree, hf_per_extension_present_bit, &extension_present);
+		if (!display_internal_per_fields) PROTO_ITEM_SET_HIDDEN(actx->created_item);
 		if(extension_present){
 			min_len = NO_BOUND;
 			max_len = NO_BOUND;
@@ -2120,6 +2121,7 @@ DEBUG_ENTRY("dissect_per_bit_string");
 	 if (has_extension) {
 		 gboolean extension_present;
 		 offset = dissect_per_boolean(tvb, offset, actx, tree, hf_per_extension_present_bit, &extension_present);
+		if (!display_internal_per_fields) PROTO_ITEM_SET_HIDDEN(actx->created_item);
 		 if(extension_present){
 			offset=dissect_per_length_determinant(tvb, offset, actx, tree, hf_per_bit_string_length, &length);
 			if(length){
@@ -2728,7 +2730,7 @@ proto_register_per(void)
 				       "Whether the dissector should put the internal PER data in the tree or if it should hide it",
 				       &display_internal_per_fields);
 
-	per_oid_dissector_table = register_dissector_table("per.oid", "PER OID Dissectors", proto_per, FT_STRING, BASE_NONE, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
+	per_oid_dissector_table = register_dissector_table("per.oid", "PER OID Dissectors", proto_per, FT_STRING, BASE_NONE);
 
 
 }

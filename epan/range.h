@@ -92,7 +92,7 @@ WS_DLL_PUBLIC range_t *range_empty(void);
 WS_DLL_PUBLIC convert_ret_t range_convert_str(range_t **range, const gchar *es,
     guint32 max_value);
 
-convert_ret_t range_convert_str_work(range_t **range, const gchar *es,
+WS_DLL_PUBLIC convert_ret_t range_convert_str_work(range_t **range, const gchar *es,
     guint32 max_value, gboolean err_on_max);
 
 /** This function returns TRUE if a given value is within one of the ranges
@@ -102,6 +102,22 @@ convert_ret_t range_convert_str_work(range_t **range, const gchar *es,
  * @return TRUE if the value is in range
  */
 WS_DLL_PUBLIC gboolean value_is_in_range(range_t *range, guint32 val);
+
+/** This function returns TRUE if val has successfully been added to
+ * a range.  This may extend an existing range or create a new one
+ * @param range to add value
+ * @param val value to add to range
+ * @return TRUE if the value is successsfully added to range
+ */
+WS_DLL_PUBLIC gboolean range_add_value(range_t **range, guint32 val);
+
+/** This function returns TRUE if val has successfully been removed from
+ * a range.  This may remove an existing range.
+ * @param range to remove value
+ * @param val value to remove within range
+ * @return TRUE if the value is successsfully removed to range
+ */
+WS_DLL_PUBLIC gboolean range_remove_value(range_t **range, guint32 val);
 
 /** This function returns TRUE if the two given range_t's are equal.
  * @param a first range

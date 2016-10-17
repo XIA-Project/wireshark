@@ -156,6 +156,7 @@ static dissector_handle_t media_handle;
 static dissector_handle_t websocket_handle;
 static dissector_handle_t http2_handle;
 static dissector_handle_t sstp_handle;
+static dissector_handle_t spdy_handle;
 static dissector_handle_t ntlmssp_handle;
 static dissector_handle_t gssapi_handle;
 
@@ -283,8 +284,8 @@ static gboolean http_decompress_body = FALSE;
 #define UPGRADE_WEBSOCKET 1
 #define UPGRADE_HTTP2 2
 #define UPGRADE_SSTP 3
+#define UPGRADE_SPDY 4
 
-static range_t *global_http_tcp_range = NULL;
 static range_t *global_http_sctp_range = NULL;
 static range_t *global_http_ssl_range = NULL;
 
@@ -2837,6 +2838,9 @@ process_header(tvbuff_t *tvb, int offset, int next_offset,
 			if ( (g_str_has_prefix(value, "h2")) == 1){
 				eh_ptr->upgrade = UPGRADE_HTTP2;
 			}
+			if (g_ascii_strncasecmp(value, "spdy/", 5) == 0) {
+				eh_ptr->upgrade = UPGRADE_SPDY;
+			}
 			break;
 
 		case HDR_COOKIE:
@@ -3098,6 +3102,9 @@ dissect_http_on_stream(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 		if (conv_data->upgrade == UPGRADE_SSTP && conv_data->response_code == 200 && pinfo->num >= conv_data->startframe) {
 			next_handle = sstp_handle;
 		}
+		if (conv_data->upgrade == UPGRADE_SPDY && pinfo->num >= conv_data->startframe) {
+			next_handle = spdy_handle;
+		}
 		if (next_handle) {
 			/* Increase pinfo->can_desegment because we are traversing
 			 * http and want to preserve desegmentation functionality for
@@ -3259,11 +3266,6 @@ range_add_http_ssl_callback(guint32 port) {
 }
 
 static void reinit_http(void) {
-	dissector_delete_uint_range("tcp.port", http_tcp_range, http_tcp_handle);
-	g_free(http_tcp_range);
-	http_tcp_range = range_copy(global_http_tcp_range);
-	dissector_add_uint_range("tcp.port", http_tcp_range, http_tcp_handle);
-
 	dissector_delete_uint_range("sctp.port", http_sctp_range, http_sctp_handle);
 	g_free(http_sctp_range);
 	http_sctp_range = range_copy(global_http_sctp_range);
@@ -3584,7 +3586,7 @@ proto_register_http(void)
 
 	http_handle = register_dissector("http", dissect_http, proto_http);
 	http_tcp_handle = register_dissector("http-over-tcp", dissect_http_tcp, proto_http);
-	http_ssl_handle = register_dissector("http-over-ssl", dissect_http_ssl, proto_http);
+	http_ssl_handle = register_dissector("http-over-tls", dissect_http_ssl, proto_http); /* RFC 2818 */
 	http_sctp_handle = register_dissector("http-over-sctp", dissect_http_sctp, proto_http);
 
 	http_module = prefs_register_protocol(proto_http, reinit_http);
@@ -3617,12 +3619,6 @@ proto_register_http(void)
 	    &http_decompress_body);
 #endif
 	prefs_register_obsolete_preference(http_module, "tcp_alternate_port");
-
-	range_convert_str(&global_http_tcp_range, TCP_DEFAULT_RANGE, 65535);
-	http_tcp_range = range_empty();
-	prefs_register_range_preference(http_module, "tcp.port", "TCP Ports",
-					"TCP Ports range",
-					&global_http_tcp_range, 65535);
 
 	range_convert_str(&global_http_sctp_range, SCTP_DEFAULT_RANGE, 65535);
 	http_sctp_range = range_empty();
@@ -3667,7 +3663,7 @@ proto_register_http(void)
 	 * HTTP on a specific non-HTTP port.
 	 */
 	port_subdissector_table = register_dissector_table("http.port",
-	    "TCP port for protocols using HTTP", proto_http, FT_UINT16, BASE_DEC, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
+	    "TCP port for protocols using HTTP", proto_http, FT_UINT16, BASE_DEC);
 
 	/*
 	 * Dissectors can register themselves in this table.
@@ -3676,7 +3672,7 @@ proto_register_http(void)
 	 */
 	media_type_subdissector_table =
 	    register_dissector_table("media_type",
-		"Internet media type", proto_http, FT_STRING, BASE_NONE, DISSECTOR_TABLE_ALLOW_DUPLICATE);
+		"Internet media type", proto_http, FT_STRING, BASE_NONE);
 
 	/*
 	 * Heuristic dissectors SHOULD register themselves in
@@ -3704,7 +3700,7 @@ http_tcp_dissector_add(guint32 port, dissector_handle_t handle)
 {
 	/*
 	 * Register ourselves as the handler for that port number
-	 * over TCP.
+	 * over TCP.  "Auto-preference" not needed
 	 */
 	dissector_add_uint("tcp.port", port, http_tcp_handle);
 
@@ -3714,6 +3710,21 @@ http_tcp_dissector_add(guint32 port, dissector_handle_t handle)
 	dissector_add_uint("http.port", port, handle);
 }
 
+WS_DLL_PUBLIC
+void http_tcp_dissector_delete(guint32 port)
+{
+	/*
+	 * Unregister ourselves as the handler for that port number
+	 * over TCP.  "Auto-preference" not needed
+	 */
+	dissector_delete_uint("tcp.port", port, NULL);
+
+	/*
+	 * And unregister them in *our* table for that port.
+	 */
+	dissector_delete_uint("http.port", port, NULL);
+}
+
 void
 http_tcp_port_add(guint32 port)
 {
@@ -3721,6 +3732,7 @@ http_tcp_port_add(guint32 port)
 	 * Register ourselves as the handler for that port number
 	 * over TCP.  We rely on our caller having registered
 	 * themselves for the appropriate media type.
+	 * No "auto-preference" used.
 	 */
 	dissector_add_uint("tcp.port", port, http_tcp_handle);
 }
@@ -3738,11 +3750,12 @@ proto_reg_handoff_http(void)
 	 * request or reply?  I.e., should there be an SSDP dissector?
 	 */
 	ssdp_handle = create_dissector_handle(dissect_ssdp, proto_ssdp);
-	dissector_add_uint("udp.port", UDP_PORT_SSDP, ssdp_handle);
+	dissector_add_uint_with_preference("udp.port", UDP_PORT_SSDP, ssdp_handle);
 
 	ntlmssp_handle = find_dissector_add_dependency("ntlmssp", proto_http);
 	gssapi_handle = find_dissector_add_dependency("gssapi", proto_http);
 	sstp_handle = find_dissector_add_dependency("sstp", proto_http);
+	spdy_handle = find_dissector_add_dependency("spdy", proto_http);
 
 	stats_tree_register("http", "http",     "HTTP/Packet Counter",   0, http_stats_tree_packet,      http_stats_tree_init, NULL );
 	stats_tree_register("http", "http_req", "HTTP/Requests",         0, http_req_stats_tree_packet,  http_req_stats_tree_init, NULL );
@@ -3810,6 +3823,8 @@ proto_reg_handoff_message_http(void)
 	heur_dissector_add("tcp", dissect_http_heur_tcp, "HTTP over TCP", "http_tcp", proto_http, HEURISTIC_ENABLE);
 
 	proto_http2 = proto_get_id_by_filter_name("http2");
+
+	dissector_add_uint_range_with_preference("tcp.port", TCP_DEFAULT_RANGE, http_tcp_handle);
 
 	reinit_http();
 }

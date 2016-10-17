@@ -283,7 +283,7 @@ proto_register_vxlan(void)
     /* Required function calls to register the header fields and subtrees used */
     proto_register_field_array(proto_vxlan, hf, array_length(hf));
     proto_register_subtree_array(ett, array_length(ett));
-    vxlan_dissector_table = register_dissector_table("vxlan.next_proto", "VXLAN Next Protocol", proto_vxlan, FT_UINT8, BASE_DEC, DISSECTOR_TABLE_ALLOW_DUPLICATE);
+    vxlan_dissector_table = register_dissector_table("vxlan.next_proto", "VXLAN Next Protocol", proto_vxlan, FT_UINT8, BASE_DEC);
 
 
 }
@@ -306,8 +306,8 @@ proto_reg_handoff_vxlan(void)
 
     vxlan_handle = create_dissector_handle(dissect_vxlan, proto_vxlan);
     vxlan_gpe_handle = create_dissector_handle(dissect_vxlan_gpe, proto_vxlan_gpe);
-    dissector_add_uint("udp.port", UDP_PORT_VXLAN, vxlan_handle);
-    dissector_add_uint("udp.port", UDP_PORT_VXLAN_GPE, vxlan_gpe_handle);
+    dissector_add_uint_with_preference("udp.port", UDP_PORT_VXLAN, vxlan_handle);
+    dissector_add_uint_with_preference("udp.port", UDP_PORT_VXLAN_GPE, vxlan_gpe_handle);
 }
 
 /*

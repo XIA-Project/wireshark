@@ -3734,8 +3734,8 @@ proto_register_l2tp(void)
     expert_l2tp = expert_register_protocol(proto_l2tp);
     expert_register_field_array(expert_l2tp, ei, array_length(ei));
 
-    l2tp_vendor_avp_dissector_table = register_dissector_table("l2tp.vendor_avp", "L2TP vendor AVP dissector table", proto_l2tp, FT_UINT32, BASE_DEC, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
-    pw_type_table = register_dissector_table("l2tp.pw_type", "L2TPv3 payload type", proto_l2tp, FT_UINT32, BASE_DEC, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
+    l2tp_vendor_avp_dissector_table = register_dissector_table("l2tp.vendor_avp", "L2TP vendor AVP dissector table", proto_l2tp, FT_UINT32, BASE_DEC);
+    pw_type_table = register_dissector_table("l2tp.pw_type", "L2TPv3 payload type", proto_l2tp, FT_UINT32, BASE_DEC);
 
     l2tp_module = prefs_register_protocol(proto_l2tp, NULL);
 
@@ -3771,7 +3771,7 @@ proto_reg_handoff_l2tp(void)
     dissector_handle_t atm_oam_llc_handle;
 
     l2tp_udp_handle = create_dissector_handle(dissect_l2tp_udp, proto_l2tp);
-    dissector_add_uint("udp.port", UDP_PORT_L2TP, l2tp_udp_handle);
+    dissector_add_uint_with_preference("udp.port", UDP_PORT_L2TP, l2tp_udp_handle);
 
     l2tp_ip_handle = create_dissector_handle(dissect_l2tp_ip, proto_l2tp);
     dissector_add_uint("ip.proto", IP_PROTO_L2TP, l2tp_ip_handle);

@@ -62,6 +62,7 @@
 #include <epan/column.h>
 #include <epan/disabled_protos.h>
 #include <epan/epan.h>
+#include <epan/decode_as.h>
 #include <epan/proto.h>
 #include <epan/epan_dissect.h>
 #include <epan/dfilter/dfilter.h>
@@ -921,7 +922,8 @@ void resolve_name_cb(GtkWidget *widget _U_, gpointer data _U_)
         TRUE,   /* dns_pkt_addr_resolution */
         TRUE,   /* use_external_net_name_resolver */
         FALSE,  /* load_hosts_file_from_profile_only */
-        FALSE   /* vlan_name */
+        FALSE,  /* vlan_name */
+        FALSE,  /* ss7pc_name */
     };
 
     if (cfile.edt->tree) {
@@ -2292,7 +2294,7 @@ main(int argc, char *argv[])
 
     /* Scan for plugins.  This does *not* call their registration routines;
        that's done later. */
-    scan_plugins();
+    scan_plugins(REPORT_LOAD_FAILURE);
 
     /* Register all libwiretap plugin modules. */
     register_all_wiretap_modules();
@@ -2754,11 +2756,11 @@ main(int argc, char *argv[])
     gtk_iface_mon_stop();
 #endif
 
+    epan_cleanup();
+
 #ifdef HAVE_EXTCAP
     extcap_cleanup();
 #endif
-
-    epan_cleanup();
 
     AirPDcapDestroyContext(&airpdcap_ctx);
 

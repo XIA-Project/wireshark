@@ -105,7 +105,7 @@ static void print_escaped_xml(FILE *fh, const char *unescaped_string);
 static void print_escaped_json(FILE *fh, const char *unescaped_string);
 static void print_escaped_ek(FILE *fh, const char *unescaped_string);
 
-static void print_pdml_geninfo(proto_tree *tree, FILE *fh);
+static void print_pdml_geninfo(epan_dissect_t *edt, FILE *fh);
 
 static void proto_tree_get_node_field_values(proto_node *node, gpointer data);
 
@@ -250,11 +250,15 @@ write_pdml_preamble(FILE *fh, const gchar *filename)
 
     ts[strlen(ts)-1] = 0; /* overwrite \n */
 
-    fputs("<?xml version=\"1.0\"?>\n", fh);
-    fputs("<?xml-stylesheet type=\"text/xsl\" href=\"" PDML2HTML_XSL "\"?>\n", fh);
+    fprintf(fh, "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n");
+    fprintf(fh, "<?xml-stylesheet type=\"text/xsl\" href=\"" PDML2HTML_XSL "\"?>\n");
     fprintf(fh, "<!-- You can find " PDML2HTML_XSL " in %s or at https://code.wireshark.org/review/gitweb?p=wireshark.git;a=blob_plain;f=" PDML2HTML_XSL ". -->\n", get_datafile_dir());
-    fputs("<pdml version=\"" PDML_VERSION "\" ", fh);
-    fprintf(fh, "creator=\"%s/%s\" time=\"%s\" capture_file=\"%s\">\n", PACKAGE, VERSION, ts, filename ? filename : "");
+    fprintf(fh, "<pdml version=\"" PDML_VERSION "\" creator=\"%s/%s\" time=\"%s\" capture_file=\"", PACKAGE, VERSION, ts);
+    if (filename) {
+        /* \todo filename should be converted to UTF-8. */
+        print_escaped_xml(fh, filename);
+    }
+    fprintf(fh, "\">\n");
 }
 
 void
@@ -296,7 +300,7 @@ write_pdml_proto_tree(output_fields_t* fields, gchar **protocolfilter, epan_diss
     fprintf(fh, "<packet>\n");
 
     /* Print a "geninfo" protocol as required by PDML */
-    print_pdml_geninfo(edt->tree, fh);
+    print_pdml_geninfo(edt, fh);
 
     if (fields == NULL || fields->fields == NULL) {
         /* Write out all fields */
@@ -371,8 +375,6 @@ write_ek_proto_tree(output_fields_t* fields, print_args_t *print_args, gchar **p
     char ts[30];
     time_t t = time(NULL);
     struct tm  *timeinfo;
-    nstime_t   *timestamp;
-    GPtrArray  *finfo_array;
 
     g_assert(edt);
     g_assert(fh);
@@ -381,22 +383,9 @@ write_ek_proto_tree(output_fields_t* fields, print_args_t *print_args, gchar **p
     timeinfo = localtime(&t);
     strftime(ts, 30, "%Y-%m-%d", timeinfo);
 
-    /* Get frame protocol's finfo. */
-    finfo_array = proto_find_finfo(edt->tree, proto_frame);
-    if (g_ptr_array_len(finfo_array) < 1) {
-        return;
-    }
-    /* frame.time --> geninfo.timestamp */
-    finfo_array = proto_find_finfo(edt->tree, hf_frame_arrival_time);
-    if (g_ptr_array_len(finfo_array) < 1) {
-        return;
-    }
-    timestamp = (nstime_t *)fvalue_get(&((field_info*)finfo_array->pdata[0])->value);
-    g_ptr_array_free(finfo_array, TRUE);
-
     fprintf(fh, "{\"index\" : {\"_index\": \"packets-%s\", \"_type\": \"pcap_file\", \"_score\": null}}\n", ts);
     /* Timestamp added for time indexing in Elasticsearch */
-    fprintf(fh, "{\"timestamp\" : \"%" G_GUINT64_FORMAT "%03d\", \"layers\" : {", (guint64)timestamp->secs, timestamp->nsecs/1000000);
+    fprintf(fh, "{\"timestamp\" : \"%" G_GUINT64_FORMAT "%03d\", \"layers\" : {", (guint64)edt->pi.abs_ts.secs, edt->pi.abs_ts.nsecs/1000000);
 
     if (fields == NULL || fields->fields == NULL) {
         /* Write out all fields */
@@ -1115,53 +1104,29 @@ proto_tree_write_node_ek(proto_node *node, gpointer data)
  * but we produce a 'geninfo' protocol in the PDML to conform to spec.
  * The 'frame' protocol follows the 'geninfo' protocol in the PDML. */
 static void
-print_pdml_geninfo(proto_tree *tree, FILE *fh)
+print_pdml_geninfo(epan_dissect_t *edt, FILE *fh)
 {
     guint32     num, len, caplen;
-    nstime_t   *timestamp;
     GPtrArray  *finfo_array;
     field_info *frame_finfo;
     gchar      *tmp;
 
     /* Get frame protocol's finfo. */
-    finfo_array = proto_find_finfo(tree, proto_frame);
+    finfo_array = proto_find_first_finfo(edt->tree, proto_frame);
     if (g_ptr_array_len(finfo_array) < 1) {
         return;
     }
     frame_finfo = (field_info *)finfo_array->pdata[0];
     g_ptr_array_free(finfo_array, TRUE);
 
-    /* frame.number --> geninfo.num */
-    finfo_array = proto_find_finfo(tree, hf_frame_number);
-    if (g_ptr_array_len(finfo_array) < 1) {
-        return;
-    }
-    num = fvalue_get_uinteger(&((field_info*)finfo_array->pdata[0])->value);
-    g_ptr_array_free(finfo_array, TRUE);
+    /* frame.number, packet_info.num */
+    num = edt->pi.num;
 
-    /* frame.frame_len --> geninfo.len */
-    finfo_array = proto_find_finfo(tree, hf_frame_len);
-    if (g_ptr_array_len(finfo_array) < 1) {
-        return;
-    }
-    len = fvalue_get_uinteger(&((field_info*)finfo_array->pdata[0])->value);
-    g_ptr_array_free(finfo_array, TRUE);
+    /* frame.frame_len, packet_info.frame_data->pkt_len */
+    len = edt->pi.fd->pkt_len;
 
-    /* frame.cap_len --> geninfo.caplen */
-    finfo_array = proto_find_finfo(tree, hf_frame_capture_len);
-    if (g_ptr_array_len(finfo_array) < 1) {
-        return;
-    }
-    caplen = fvalue_get_uinteger(&((field_info*)finfo_array->pdata[0])->value);
-    g_ptr_array_free(finfo_array, TRUE);
-
-    /* frame.time --> geninfo.timestamp */
-    finfo_array = proto_find_finfo(tree, hf_frame_arrival_time);
-    if (g_ptr_array_len(finfo_array) < 1) {
-        return;
-    }
-    timestamp = (nstime_t *)fvalue_get(&((field_info*)finfo_array->pdata[0])->value);
-    g_ptr_array_free(finfo_array, TRUE);
+    /* frame.cap_len --> packet_info.frame_data->cap_len */
+    caplen = edt->pi.fd->cap_len;
 
     /* Print geninfo start */
     fprintf(fh,
@@ -1183,12 +1148,12 @@ print_pdml_geninfo(proto_tree *tree, FILE *fh)
             "    <field name=\"caplen\" pos=\"0\" show=\"%u\" showname=\"Captured Length\" value=\"%x\" size=\"%d\"/>\n",
             caplen, caplen, frame_finfo->length);
 
-    tmp = abs_time_to_str(NULL, timestamp, ABSOLUTE_TIME_LOCAL, TRUE);
+    tmp = abs_time_to_str(NULL, &edt->pi.abs_ts, ABSOLUTE_TIME_LOCAL, TRUE);
 
     /* Print geninfo.timestamp */
     fprintf(fh,
             "    <field name=\"timestamp\" pos=\"0\" show=\"%s\" showname=\"Captured Time\" value=\"%d.%09d\" size=\"%d\"/>\n",
-            tmp, (int) timestamp->secs, timestamp->nsecs, frame_finfo->length);
+            tmp, (int)edt->pi.abs_ts.secs, edt->pi.abs_ts.nsecs, frame_finfo->length);
 
     wmem_free(NULL, tmp);
 
@@ -1214,9 +1179,8 @@ write_psml_preamble(column_info *cinfo, FILE *fh)
 {
     gint i;
 
-    fputs("<?xml version=\"1.0\"?>\n", fh);
-    fputs("<psml version=\"" PSML_VERSION "\" ", fh);
-    fprintf(fh, "creator=\"%s/%s\">\n", PACKAGE, VERSION);
+    fprintf(fh, "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n");
+    fprintf(fh, "<psml version=\"" PSML_VERSION "\" creator=\"%s/%s\">\n", PACKAGE, VERSION);
     fprintf(fh, "<structure>\n");
 
     for (i = 0; i < cinfo->num_cols; i++) {

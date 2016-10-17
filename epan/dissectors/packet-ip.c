@@ -3080,7 +3080,7 @@ proto_register_ip(void)
 
   /* subdissector code */
   ip_dissector_table = register_dissector_table("ip.proto", "IP protocol",
-                                                proto_ip, FT_UINT8, BASE_DEC, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
+                                                proto_ip, FT_UINT8, BASE_DEC);
   heur_subdissector_list = register_heur_dissector_list("ip", proto_ip);
   register_capture_dissector_table("ip.proto", "IP protocol");
 
@@ -3160,7 +3160,7 @@ proto_reg_handoff_ip(void)
   dissector_add_uint("pwach.channel_type", 0x21, ip_handle); /* IPv4, RFC4385 clause 6. */
   dissector_add_uint("sflow_245.header_protocol", SFLOW_245_HEADER_IPv4, ip_handle);
   dissector_add_uint("l2tp.pw_type", L2TPv3_PROTOCOL_IP, ip_handle);
-  dissector_add_for_decode_as("udp.port", ip_handle);
+  dissector_add_for_decode_as_with_preference("udp.port", ip_handle);
   dissector_add_for_decode_as("pcli.payload", ip_handle);
   dissector_add_uint("wtap_encap", WTAP_ENCAP_RAW_IP4, ip_handle);
   dissector_add_uint("enc", BSD_AF_INET, ip_handle);

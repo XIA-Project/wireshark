@@ -222,18 +222,18 @@
      <command name="Aggregated-RUCI-Report"		code="8388721" vendor-id="None"/>
      <command name="Modify-Uecontext"		code="8388722" vendor-id="None"/>
     <!--
-      8388723 Background-Data-Transfer-Request/Answer (BTR/BTA) [3GPP TS 29.154][Kimmo_Kymalainen] 
-      8388724 Network-Status-Request/Answer (NSR/NSA) [3GPP TS 29.153][Kimmo_Kymalainen] 
-      8388725 Network-Status-Continuous-Report-Request/Answer (NCR/NCA) [3GPP TS 29.153][Kimmo_Kymalainen] 
-      8388726 NIDD-Information-Request/Answer (NIR/NIA) [3GPP TS 29.336][Kimmo_Kymalainen] 
-      8388727 ProXimity-Application-Request/Answer (XAR/XAA) [3GPP TS 29.343][Kimmo_Kymalainen] 
-      8388728 Data-Pull-Request/Answer (DPR/DPA) [3GPP TS 29.283][Kimmo_Kymalainen] 
-      8388729 Data-Update-Request/Answer (DMR/DMA) [3GPP TS 29.283][Kimmo_Kymalainen] 
-      8388730 Notification-Data-Request/Answer (NDR/NDA) [3GPP TS 29.283][Kimmo_Kymalainen] 
-      8388731 TSSF-Notification-Request/Answer (TNR/TNA) [3GPP TS 29.212][Kimmo_Kymalainen] 
-      8388732 Connection-Management-Request/Answer (CMR/CMA) [3GPP TS 29.128][Kimmo_Kymalainen] 
-      8388733 MO-Data-Request/Answer (ODR/ODA) [3GPP TS 29.128][Kimmo_Kymalainen] 
-      8388734 MT-Data-Request/Answer (TDR/TDA) [3GPP TS 29.128][Kimmo_Kymalainen] 
+      8388723 Background-Data-Transfer-Request/Answer (BTR/BTA) [3GPP TS 29.154][Kimmo_Kymalainen]
+      8388724 Network-Status-Request/Answer (NSR/NSA) [3GPP TS 29.153][Kimmo_Kymalainen]
+      8388725 Network-Status-Continuous-Report-Request/Answer (NCR/NCA) [3GPP TS 29.153][Kimmo_Kymalainen]
+      8388726 NIDD-Information-Request/Answer (NIR/NIA) [3GPP TS 29.336][Kimmo_Kymalainen]
+      8388727 ProXimity-Application-Request/Answer (XAR/XAA) [3GPP TS 29.343][Kimmo_Kymalainen]
+      8388728 Data-Pull-Request/Answer (DPR/DPA) [3GPP TS 29.283][Kimmo_Kymalainen]
+      8388729 Data-Update-Request/Answer (DMR/DMA) [3GPP TS 29.283][Kimmo_Kymalainen]
+      8388730 Notification-Data-Request/Answer (NDR/NDA) [3GPP TS 29.283][Kimmo_Kymalainen]
+      8388731 TSSF-Notification-Request/Answer (TNR/TNA) [3GPP TS 29.212][Kimmo_Kymalainen]
+      8388732 Connection-Management-Request/Answer (CMR/CMA) [3GPP TS 29.128][Kimmo_Kymalainen]
+      8388733 MO-Data-Request/Answer (ODR/ODA) [3GPP TS 29.128][Kimmo_Kymalainen]
+      8388734 MT-Data-Request/Answer (TDR/TDA) [3GPP TS 29.128][Kimmo_Kymalainen]
 
     -->
 		<!--
@@ -1643,7 +1643,7 @@
 			<enum name="INSUFFICIENT_CLASSIFIERS" code="5047"/>
 			<enum name="DIAMETER_ERROR_EAP_CODE_UNKNOWN" code="5048"/>
 
-      <!-- (Ericsson) SCAP Result Codes, see 155 19-FAY 112 51/2 rev B -->
+			<!-- (Ericsson) SCAP Result Codes, see 155 19-FAY 112 51/2 rev B -->
 			<enum name="DIAMETER_END_USER_SERVICE_DENIED" code="4241"/>
 			<enum name="DIAMETER_END_USER_NOT_FOUND" code="5241"/>
 			<!-- END SCAP Result Codes -->
@@ -1958,7 +1958,28 @@
 				<gavp name="Session-Id"/>
 			</grouped>
 		</avp>
-		<!-- 301-317    Unallocated -->
+		<!-- RFC7944 AVP -->
+		<avp name="DRMP" code="301" vendor-bit="mustnot">
+			<type type-name="Enumerated"/>
+				<enum name="PRIORITY_0" code="0"/>
+				<enum name="PRIORITY_1" code="1"/>
+				<enum name="PRIORITY_2" code="2"/>
+				<enum name="PRIORITY_3" code="3"/>
+				<enum name="PRIORITY_4" code="4"/>
+				<enum name="PRIORITY_5" code="5"/>
+				<enum name="PRIORITY_6" code="6"/>
+				<enum name="PRIORITY_7" code="7"/>
+				<enum name="PRIORITY_8" code="8"/>
+				<enum name="PRIORITY_9" code="9"/>
+				<enum name="PRIORITY_10" code="10"/>
+				<enum name="PRIORITY_11" code="11"/>
+				<enum name="PRIORITY_12" code="12"/>
+				<enum name="PRIORITY_13" code="13"/>
+				<enum name="PRIORITY_14" code="14"/>
+				<enum name="PRIORITY_15" code="15"/>
+		</avp>
+
+		<!-- 302-317    Unallocated -->
 
 		<!-- AVPs 318 - 348 belong to Diameter Mobile IPv4 Application and are defined in mobileipv4.xml
 		318 MIP-FA-to-HA-SPI [RFC4004]
@@ -3201,10 +3222,11 @@
 				<gavp name="Charging-Rule-Name"/>
 				<gavp name="Service-Identifier"/>
 				<gavp name="Rating-Group"/>
-				<gavp name="Flow-Description"/>
 				<gavp name="Flow-Information"/>
+				<gavp name="TDF-Application-Identifier"/>
 				<gavp name="Flow-Status"/>
 				<gavp name="QoS-Information"/>
+				<gavp name="PS-to-CS-Session-Continuity"/>
 				<gavp name="Reporting-Level"/>
 				<gavp name="Online"/>
 				<gavp name="Offline"/>
@@ -3213,7 +3235,16 @@
 				<gavp name="AF-Charging-Identifier"/>
 				<gavp name="Flows"/>
 				<gavp name="Monitoring-Key"/>
+				<gavp name="Redirect-Information"/>
+				<gavp name="Mute-Notification"/>
 				<gavp name="AF-Signalling-Protocol"/>
+				<gavp name="Sponsor-Identity"/>
+				<gavp name="Application-Service-Provider-Identity"/>
+				<gavp name="Required-Access-Info"/>
+				<gavp name="Sharing-Key-DL"/>
+				<gavp name="Sharing-Key-UL"/>
+				<gavp name="Traffic-Steering-Policy-Identifier-DL"/>
+				<gavp name="Traffic-Steering-Policy-Identifier-UL"/>
 			</grouped>
 		</avp>
 		<avp name="Charging-Rule-Base-Name" code="1004" mandatory="must" may-encrypt="yes" protected="may" vendor-bit="must" vendor-id="TGPP">
@@ -3758,6 +3789,7 @@
 			<grouped>
 				<gavp name="ADC-Rule-Name"/>
 				<gavp name="TDF-Application-Identifier"/>
+				<gavp name="Flow-Information"/>
 				<gavp name="Service-Identifier"/>
 				<gavp name="Rating-Group"/>
 				<gavp name="Reporting-Level"/>
@@ -3770,6 +3802,9 @@
 				<gavp name="Monitoring-Key"/>
 				<gavp name="Redirect-Information"/>
 				<gavp name="Mute-Notification"/>
+				<gavp name="Traffic-Steering-Policy-Identifier-DL"/>
+				<gavp name="Traffic-Steering-Policy-Identifier-UL"/>
+				<gavp name="ToS-Traffic-Class"/>
 			</grouped>
 		</avp>
 		<avp name="ADC-Rule-Base-Name" code="1095" mandatory="must" may-encrypt="yes" protected="may" vendor-bit="must" vendor-id="TGPP">
@@ -3794,9 +3829,10 @@
 				<gavp name="Flow-Information"/>
 			</grouped>
 		</avp>
-		<!--
-		1099 PS-to-CS-Session-Continuity Enumerated
-		-->
+		<avp name="PS-to-CS-Session-Continuity" code="1099" mandatory="mustnot" may-encrypt="yes" protected="may" vendor-bit="must" vendor-id="TGPP">
+			<type type-name="Enumerated"/>
+			<enum name="VIDEO_PS2CS_CONT_CANDIDATE" code="0"/>
+		</avp>
 		<!-- Note: The AVP codes from 1085 to 1099 are reserved for TS 29.212 -->
 
 		<!-- ETSI TS 129 140 V6.3.0 (2005-12) -->
@@ -5324,13 +5360,35 @@
 		<avp name="Subscription-Data-Flags" code="1654" vendor-bit="must" vendor-id="TGPP">
 			<type type-name="Unsigned32"/>
 		</avp>
-		<avp name="Measurement-Period-UMTS" code="1655" vendor-bit="must" vendor-id="TGPP">
+		<avp name="Measurement-Period-LTE" code="1655" vendor-bit="must" vendor-id="TGPP">
 			<!-- The possible values are those defined in 3GPP TS 32.422 -->
 			<type type-name="Enumerated"/>
+			<enum name="1024 ms" code="0"/>
+			<enum name="1280 ms" code="1"/>
+			<enum name="2048 ms" code="2"/>
+			<enum name="2560 ms" code="3"/>
+			<enum name="5120 ms" code="4"/>
+			<enum name="10240 ms" code="5"/>
+			<enum name="1 min" code="6"/>
 		</avp>
-		<avp name="Measurement-Period-LTE" code="1656" vendor-bit="must" vendor-id="TGPP">
+		<avp name="Measurement-Period-UMTS" code="1656" vendor-bit="must" vendor-id="TGPP">
 			<!-- The possible values are those defined in 3GPP TS 32.422 -->
 			<type type-name="Enumerated"/>
+			<enum name="250 ms" code="0"/>
+			<enum name="500 ms" code="1"/>
+			<enum name="1000 ms" code="2"/>
+			<enum name="2000 ms" code="3"/>
+			<enum name="3000 ms" code="4"/>
+			<enum name="4000 ms" code="5"/>
+			<enum name="6000 ms" code="6"/>
+			<enum name="8000 ms" code="7"/>
+			<enum name="12000 ms" code="8"/>
+			<enum name="16000 ms" code="9"/>
+			<enum name="20000 ms" code="10"/>
+			<enum name="24000 ms" code="11"/>
+			<enum name="28000 ms" code="12"/>
+			<enum name="32000 ms" code="13"/>
+			<enum name="64000 ms" code="14"/>
 		</avp>
 		<avp name="Collection-Period-RRM-LTE" code="1657" vendor-bit="must" vendor-id="TGPP">
 			<!-- The possible values are those defined in 3GPP TS 32.422 -->
@@ -6170,46 +6228,48 @@
 		</avp>
 
 		<!--
-GERAN-Positioning-Info 2524 7.4.29 Grouped V M No
-GERAN-Positioning-Data 2525 7.4.30 OctetString V M No
-GERAN-GANSS-Positioning-Data 2526 7.4.31 OctetString V M No
-UTRAN-Positioning-Info 2527 7.4.32 Grouped V M No
-UTRAN-Positioning-Data 2528 7.4.33 OctetString V M No
-UTRAN-GANSS-Positioning-Data 2529 7.4.34 OctetString V M No
-LRR-Flags 2530 7.4.35 Unsigned32 V M No
-LCS-Reference-Number 2531 7.4.37 OctetString V M No
-Deferred-Location-Type 2532 7.4.36 Unsigned32 V M No
-Area-Event-Info 2533 7.4.38 Grouped V M No
-Area-Definition 2534 7.4.39 Grouped V M No
-Area 2535 7.4.40 Grouped V M No
-Area-Type 2536 7.4.41 Unsigned32 V M No
-Area-Identification 2537 7.4.42 Grouped V M No
-Occurrence-Info 2538 7.4.43 Enumerated V M No
-Interval-Time 2539 7.4.44 Unsigned32 V M No
-Periodic-LDR-Information 2540 7.4.45 Grouped V M No
-Reporting-Amount 2541 7.4.46 Unsigned32 V M No
-Reporting-Interval 2542 7.4.47 Unsigned32 V M No
-Reporting-PLMN-List 2543 7.4.48 Grouped V M No
-PLMN-ID-List 2544 7.4.49 Grouped V M No
-PLR-Flags 2545 7.4.52 Unsigned32 V M No
-PLA-Flags 2546 7.4.53 Unsigned32 V M No
-Deferred-MT-LR-Data 2547 7.4.54 Grouped V M No
-Termination-Cause 2548 7.4.55 Unsigned32 V M No
-LRA-Flags 2549 7.4.56 Unsigned32 V M No
-Periodic-Location-Support-Indicator 2550 7.4.50 Enumerated V M No
-Prioritized-List-Indicator 2551 7.4.51 Enumerated V M No
-ESMLC-Cell-Info 2552 7.4.57 Grouped V M No
-Cell-Portion-ID 2553 7.4.58 Unsigned32 V M No
-1xRTT-RCID 2554 7.4.59 OctetString V M No
--->
+		GERAN-Positioning-Info 2524 7.4.29 Grouped V M No
+		GERAN-Positioning-Data 2525 7.4.30 OctetString V M No
+		GERAN-GANSS-Positioning-Data 2526 7.4.31 OctetString V M No
+		UTRAN-Positioning-Info 2527 7.4.32 Grouped V M No
+		UTRAN-Positioning-Data 2528 7.4.33 OctetString V M No
+		UTRAN-GANSS-Positioning-Data 2529 7.4.34 OctetString V M No
+		LRR-Flags 2530 7.4.35 Unsigned32 V M No
+		LCS-Reference-Number 2531 7.4.37 OctetString V M No
+		Deferred-Location-Type 2532 7.4.36 Unsigned32 V M No
+		Area-Event-Info 2533 7.4.38 Grouped V M No
+		Area-Definition 2534 7.4.39 Grouped V M No
+		Area 2535 7.4.40 Grouped V M No
+		Area-Type 2536 7.4.41 Unsigned32 V M No
+		Area-Identification 2537 7.4.42 Grouped V M No
+		Occurrence-Info 2538 7.4.43 Enumerated V M No
+		Interval-Time 2539 7.4.44 Unsigned32 V M No
+		Periodic-LDR-Information 2540 7.4.45 Grouped V M No
+		Reporting-Amount 2541 7.4.46 Unsigned32 V M No
+		Reporting-Interval 2542 7.4.47 Unsigned32 V M No
+		Reporting-PLMN-List 2543 7.4.48 Grouped V M No
+		PLMN-ID-List 2544 7.4.49 Grouped V M No
+		PLR-Flags 2545 7.4.52 Unsigned32 V M No
+		PLA-Flags 2546 7.4.53 Unsigned32 V M No
+		Deferred-MT-LR-Data 2547 7.4.54 Grouped V M No
+		Termination-Cause 2548 7.4.55 Unsigned32 V M No
+		LRA-Flags 2549 7.4.56 Unsigned32 V M No
+		Periodic-Location-Support-Indicator 2550 7.4.50 Enumerated V M No
+		Prioritized-List-Indicator 2551 7.4.51 Enumerated V M No
+		ESMLC-Cell-Info 2552 7.4.57 Grouped V M No
+		Cell-Portion-ID 2553 7.4.58 Unsigned32 V M No
+		1xRTT-RCID 2554 7.4.59 OctetString V M No
+		-->
+
 		<avp name="Civic-Address" code="2556" vendor-bit="must" vendor-id="TGPP">
 			<type type-name="UTF8String"/>
 		</avp>
 		<avp name="Barometric-Pressure" code="2557" vendor-bit="must" vendor-id="TGPP">
 			<type type-name="Unsigned32"/>
 		</avp>
-<!--
-UTRAN-Additional-Positioning-Data 2558 7.4.63 OctetString V M No
+
+		<!--
+		UTRAN-Additional-Positioning-Data 2558 7.4.63 OctetString V M No
 		Note: The AVP codes from 2524 to 2599 are reserved for TS 29.172
 		-->
 
@@ -6245,6 +6305,12 @@ UTRAN-Additional-Positioning-Data 2558 7.4.63 OctetString V M No
 		<!--
 		Note: The AVP codes from 2607 to 2699 are reserved for TS 32.299
 		-->
+		<avp name="TWAN-User-Location-Info" code="2714" mandatory="must" vendor-bit="must" vendor-id="TGPP">
+			<grouped>
+				<gavp name="SSID"/>
+				<gavp name="BSSID"/>
+			</grouped>
+		</avp>
 		<avp name="BSSID" code="2716" mandatory="must" vendor-bit="must" vendor-id="TGPP">
 			<type type-name="UTF8String"/>
 		</avp>
@@ -6640,6 +6706,11 @@ UTRAN-Additional-Positioning-Data 2558 7.4.63 OctetString V M No
 		<avp name="ePDG-Address" code="3425" mandatory="must" may-encrypt="no" protected="may" vendor-bit="must" vendor-id="TGPP">
 			<type type-name="IPAddress"/>
 		</avp>
+		<avp name="Enhanced-Diagnostics" code="3901" mandatory="must" may-encrypt="no" protected="may" vendor-bit="must" vendor-id="TGPP">
+			<grouped>
+				<gavp name="RAN-NAS-Release-Cause"/>
+			</grouped>
+		</avp>
 
 	</base>
 
@@ -6783,8 +6854,8 @@ UTRAN-Additional-Positioning-Data 2558 7.4.63 OctetString V M No
 	<application id="16777333"	name="Rivada Xf"			uri="none"/>
 	<application id="16777334"	name="Rivada Xp"			uri="none"/>
 	<application id="16777335"	name="3GPP MB2-C"			uri="http://www.3gpp.org/ftp/Specs/html-info/29468.htm"/>
-  <!-- application 16777336 (3GPP PC4a)	is defined in TGPP.xml -->
-  <application id="16777337"	name="3GPP PC2"				uri="http://www.3gpp.org/ftp/Specs/html-info/29343.htm"/>
+	<!-- application 16777336 (3GPP PC4a)	is defined in TGPP.xml -->
+	<application id="16777337"	name="3GPP PC2"				uri="http://www.3gpp.org/ftp/Specs/html-info/29343.htm"/>
 	<application id="16777338"	name="Juniper Domain Policy"		uri="none"/>
 	<application id="16777339"	name="Host Observer"			uri="none"/>
 	<application id="16777340"	name="3GPP PC6/PC7"			uri="http://www.3gpp.org/ftp/Specs/html-info/29345.htm"/>

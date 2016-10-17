@@ -34,6 +34,8 @@
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QGridLayout>
+#include <QUrl>
+#include <QDesktopServices>
 
 #include "ringbuffer.h"
 #include "ui/capture_ui_utils.h"
@@ -192,7 +194,7 @@ void ExtcapOptionsDialog::anyValueChanged()
 
 void ExtcapOptionsDialog::loadArguments()
 {
-    GList * arguments = NULL, * item = NULL;
+    GList * arguments = NULL, * walker = NULL, * item = NULL;
     ExtcapArgument * argument = NULL;
 
     if ( device_name.length() == 0  )
@@ -205,9 +207,10 @@ void ExtcapOptionsDialog::loadArguments()
     ExtcapArgumentList required;
     ExtcapArgumentList optional;
 
-    while ( arguments != NULL )
+    walker = arguments;
+    while ( walker != NULL )
     {
-        item = g_list_first((GList *)(arguments->data));
+        item = g_list_first((GList *)(walker->data));
         while ( item != NULL )
         {
             argument = ExtcapArgument::create((extcap_arg *)(item->data));
@@ -221,7 +224,7 @@ void ExtcapOptionsDialog::loadArguments()
             }
             item = item->next;
         }
-        arguments = g_list_next(arguments);
+        walker = g_list_next(walker);
     }
 
     if ( required.length() > 0 )
@@ -229,6 +232,9 @@ void ExtcapOptionsDialog::loadArguments()
 
     if ( optional.length() > 0 )
         extcapArguments << optional;
+
+    /* argument items are now owned by ExtcapArgument. Only free the lists */
+    extcap_free_if_configuration(arguments, FALSE);
 }
 
 void ExtcapOptionsDialog::updateWidgets()
@@ -304,8 +310,21 @@ void ExtcapOptionsDialog::on_buttonBox_rejected()
 
 void ExtcapOptionsDialog::on_buttonBox_helpRequested()
 {
-    // Probably the wrong URL.
-    wsApp->helpTopicAction(HELP_EXTCAP_OPTIONS_DIALOG);
+    interface_t device;
+    gchar * interface_help = NULL;
+
+    device = g_array_index(global_capture_opts.all_ifaces, interface_t, device_idx);
+    interface_help = extcap_get_help_for_ifname(device.name);
+
+    if (interface_help)
+    {
+        QUrl help_url = QString(interface_help);
+        QDesktopServices::openUrl(help_url);
+    }
+    else
+    {
+        wsApp->helpTopicAction(HELP_EXTCAP_OPTIONS_DIALOG);
+    }
 }
 
 bool ExtcapOptionsDialog::saveOptionToCaptureInfo()

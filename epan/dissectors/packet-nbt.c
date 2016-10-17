@@ -151,6 +151,7 @@ static gboolean nbss_desegment = TRUE;
 #define UDP_PORT_NBDGM  138
 #define TCP_PORT_NBSS   139
 #define TCP_PORT_CIFS   445
+#define TCP_NBSS_PORT_RANGE  "139,445"
 
 /* Packet structure taken from RFC 1002. See also RFC 1001.
  * Opcode, flags, and rcode treated as "flags", similarly to DNS,
@@ -1350,7 +1351,7 @@ static const value_string message_types[] = {
 
 static const value_string nbss_error_codes[] = {
     { 0x80, "Not listening on called name" },
-    { 0x81, "Not listening for called name" },
+    { 0x81, "Not listening for calling name" },
     { 0x82, "Called name not present" },
     { 0x83, "Called name present, but insufficient resources" },
     { 0x8F, "Unspecified error" },
@@ -2085,14 +2086,13 @@ proto_reg_handoff_nbt(void)
     dissector_handle_t nbns_handle, nbdgm_handle, nbss_handle;
 
     nbns_handle  = create_dissector_handle(dissect_nbns, proto_nbns);
-    dissector_add_uint("udp.port", UDP_PORT_NBNS, nbns_handle);
+    dissector_add_uint_with_preference("udp.port", UDP_PORT_NBNS, nbns_handle);
 
     nbdgm_handle = create_dissector_handle(dissect_nbdgm, proto_nbdgm);
-    dissector_add_uint("udp.port", UDP_PORT_NBDGM, nbdgm_handle);
+    dissector_add_uint_with_preference("udp.port", UDP_PORT_NBDGM, nbdgm_handle);
 
     nbss_handle  = create_dissector_handle(dissect_nbss, proto_nbss);
-    dissector_add_uint("tcp.port", TCP_PORT_NBSS, nbss_handle);
-    dissector_add_uint("tcp.port", TCP_PORT_CIFS, nbss_handle);
+    dissector_add_uint_range_with_preference("tcp.port", TCP_NBSS_PORT_RANGE, nbss_handle);
 
     netbios_heur_subdissector_list = find_heur_dissector_list("netbios");
 }

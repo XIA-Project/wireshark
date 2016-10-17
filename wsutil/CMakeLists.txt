@@ -52,6 +52,7 @@ set(WSUTIL_COMMON_FILES
 	md5.c
 	mpeg-audio.c
 	nstime.c
+	cpu_info.c
 	os_version_info.c
 	plugins.c
 	privileges.c
@@ -60,6 +61,7 @@ set(WSUTIL_COMMON_FILES
 	sober128.c
 	strnatcmp.c
 	str_util.c
+	strtoi.c
 	rc4.c
 	report_err.c
 	tempfile.c
@@ -67,6 +69,7 @@ set(WSUTIL_COMMON_FILES
 	type_util.c
 	unicode-utils.c
 	ws_mempbrk.c
+	wsjsmn.c
 )
 
 set(WSUTIL_FILES ${WSUTIL_COMMON_FILES})
@@ -180,40 +183,25 @@ set(wsutil_LIBS
 	${WIN_WSOCK32_LIBRARY}
 )
 IF(WIN32)
-	set(wsutil_LIBS ${wsutil_LIBS} "ws2_32.lib")
+	set(wsutil_LIBS ${wsutil_LIBS} "iphlpapi.lib" "ws2_32.lib")
 ENDIF(WIN32)
 
 set(CLEAN_FILES
 	${WSUTIL_FILES}
 )
 
-if (WERROR_COMMON_FLAGS)
-	set_source_files_properties(
-		${CLEAN_FILES}
-		PROPERTIES
-		COMPILE_FLAGS ${WERROR_COMMON_FLAGS}
-	)
-else()
-	#
-	# Set the property to an empty string, so that if we try
-	# to get it below, it succeeds.
-	#
-	set_source_files_properties(
-		${CLEAN_FILES}
-		PROPERTIES
-		COMPILE_FLAGS ""
-	)
-endif()
+set_source_files_properties(
+	${CLEAN_FILES}
+	PROPERTIES
+	COMPILE_FLAGS "${WERROR_COMMON_FLAGS}"
+)
 if (HAVE_SSE4_2)
-	get_source_file_property(
-		WS_MEMPBRK_SSE42_COMPILE_FLAGS
-		ws_mempbrk_sse42.c
-		COMPILE_FLAGS
-	)
+	# TODO with CMake 2.8.12, we could use COMPILE_OPTIONS and just append
+	# instead of this COMPILE_FLAGS duplication...
 	set_source_files_properties(
 		ws_mempbrk_sse42.c
 		PROPERTIES
-		COMPILE_FLAGS "${WS_MEMPBRK_SSE42_COMPILE_FLAGS} ${SSE4_2_FLAG}"
+		COMPILE_FLAGS "${WERROR_COMMON_FLAGS} ${SSE4_2_FLAG}"
 	)
 endif()
 
@@ -270,6 +258,8 @@ CHECKAPI(
 	SOURCES
 	  ${WSUTIL_COMMON_FILES}
 )
+
+set_source_files_properties(jsmn.c PROPERTIES COMPILE_DEFINITIONS "JSMN_STRICT")
 
 #
 # Editor modelines  -  http://www.wireshark.org/tools/modelines.html

@@ -80,7 +80,9 @@ set(WIRESHARK_QT_HEADERS
 	gsm_map_summary_dialog.h
 	iax2_analysis_dialog.h
 	import_text_dialog.h
-	interface_tree.h
+	interface_tree_model.h
+	interface_sort_filter_model.h
+	interface_frame.h
 	io_graph_dialog.h
 	label_stack.h
 	layout_preferences_frame.h
@@ -146,8 +148,12 @@ set(WIRESHARK_QT_HEADERS
 	tap_parameter_dialog.h
 	tcp_stream_dialog.h
 	time_shift_dialog.h
+	timeline_delegate.h
 	traffic_table_dialog.h
+	uat_delegate.h
 	uat_dialog.h
+	uat_model.h
+	uat_tree_view.h
 	voip_calls_dialog.h
 	wireless_frame.h
 	wireshark_application.h
@@ -234,7 +240,9 @@ set(WIRESHARK_QT_SRC
 	geometry_state_dialog.cpp
 	iax2_analysis_dialog.cpp
 	import_text_dialog.cpp
-	interface_tree.cpp
+	interface_tree_model.cpp
+	interface_sort_filter_model.cpp
+	interface_frame.cpp
 	label_stack.cpp
 	layout_preferences_frame.cpp
 	lbm_lbtrm_transport_dialog.cpp
@@ -301,8 +309,12 @@ set(WIRESHARK_QT_SRC
 	tap_parameter_dialog.cpp
 	tcp_stream_dialog.cpp
 	time_shift_dialog.cpp
+	timeline_delegate.cpp
 	traffic_table_dialog.cpp
+	uat_delegate.cpp
 	uat_dialog.cpp
+	uat_model.cpp
+	uat_tree_view.cpp
 	voip_calls_dialog.cpp
 	wireless_frame.cpp
 	wireshark_application.cpp
@@ -382,6 +394,7 @@ set(WIRESHARK_QT_UI
 	gsm_map_summary_dialog.ui
 	iax2_analysis_dialog.ui
 	import_text_dialog.ui
+	interface_frame.ui
 	io_graph_dialog.ui
 	layout_preferences_frame.ui
 	lbm_lbtrm_transport_dialog.ui
@@ -506,13 +519,11 @@ add_custom_target(
 )
 set_target_properties(translations PROPERTIES FOLDER "UI")
 
-if (WERROR_COMMON_FLAGS)
-	set_source_files_properties(
-		${WIRESHARK_QT_FILES}
-		PROPERTIES
-		COMPILE_FLAGS ${WERROR_COMMON_FLAGS}
-	)
-endif()
+set_source_files_properties(
+	${WIRESHARK_QT_FILES}
+	PROPERTIES
+	COMPILE_FLAGS "${WERROR_COMMON_FLAGS}"
+)
 
 add_definitions(${QT_DEFINITIONS})
 

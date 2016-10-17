@@ -233,9 +233,45 @@ CaptureInterfacesDialog::CaptureInterfacesDialog(QWidget *parent) :
     connect(ui->browseButton, SIGNAL(clicked()), this, SLOT(browseButtonClicked()));
 }
 
+/* Update global device selections based on the TreeWidget selection. */
+void CaptureInterfacesDialog::updateGlobalDeviceSelections()
+{
+#ifdef HAVE_LIBPCAP
+    QTreeWidgetItemIterator iter(ui->interfaceTree);
+
+    global_capture_opts.num_selected = 0;
+
+    while (*iter) {
+        QString device_name = (*iter)->data(col_interface_, Qt::UserRole).value<QString>();
+        for (guint i = 0; i < global_capture_opts.all_ifaces->len; i++) {
+            interface_t device = g_array_index(global_capture_opts.all_ifaces, interface_t, i);
+            if (device_name.compare(QString().fromUtf8(device.name)) == 0) {
+                if (!device.locked) {
+                    if ((*iter)->isSelected()) {
+                        device.selected = TRUE;
+                        global_capture_opts.num_selected++;
+                    } else {
+                        device.selected = FALSE;
+                    }
+                    device.locked = TRUE;
+                    global_capture_opts.all_ifaces = g_array_remove_index(global_capture_opts.all_ifaces, i);
+                    g_array_insert_val(global_capture_opts.all_ifaces, i, device);
+
+                    device.locked = FALSE;
+                    global_capture_opts.all_ifaces = g_array_remove_index(global_capture_opts.all_ifaces, i);
+                    g_array_insert_val(global_capture_opts.all_ifaces, i, device);
+                }
+                break;
+            }
+        }
+        ++iter;
+    }
+#endif
+}
+
 void CaptureInterfacesDialog::interfaceSelected()
 {
-    InterfaceTree::updateGlobalDeviceSelections(ui->interfaceTree, col_interface_);
+    updateGlobalDeviceSelections();
 
     ui->buttonBox->button(QDialogButtonBox::Ok)->setEnabled((global_capture_opts.num_selected > 0) ? true: false);
 
@@ -282,9 +318,9 @@ CaptureInterfacesDialog::~CaptureInterfacesDialog()
     delete ui;
 }
 
-void CaptureInterfacesDialog::setTab(int index)
+void CaptureInterfacesDialog::setTab(int idx)
 {
-    ui->tabWidget->setCurrentIndex(index);
+    ui->tabWidget->setCurrentIndex(idx);
 }
 
 void CaptureInterfacesDialog::on_capturePromModeCheckBox_toggled(bool checked)
@@ -1097,7 +1133,7 @@ InterfaceTreeDelegate::~InterfaceTreeDelegate()
 }
 
 
-QWidget* InterfaceTreeDelegate::createEditor(QWidget *parent, const QStyleOptionViewItem &, const QModelIndex &index) const
+QWidget* InterfaceTreeDelegate::createEditor(QWidget *parent, const QStyleOptionViewItem &, const QModelIndex &idx) const
 {
     QWidget *w = NULL;
 #ifdef SHOW_BUFFER_COLUMN
@@ -1106,8 +1142,8 @@ QWidget* InterfaceTreeDelegate::createEditor(QWidget *parent, const QStyleOption
     guint snap = WTAP_MAX_PACKET_SIZE;
     GList *links = NULL;
 
-    if (index.column() > 1 && index.data().toString().compare(UTF8_EM_DASH)) {
-        QTreeWidgetItem *ti = tree_->topLevelItem(index.row());
+    if (idx.column() > 1 && idx.data().toString().compare(UTF8_EM_DASH)) {
+        QTreeWidgetItem *ti = tree_->topLevelItem(idx.row());
         QString interface_name = ti->text(col_interface_);
         interface_t *device = find_device_by_if_name(interface_name);
 
@@ -1118,7 +1154,7 @@ QWidget* InterfaceTreeDelegate::createEditor(QWidget *parent, const QStyleOption
             snap = device->snaplen;
             links = device->links;
         }
-        switch (index.column()) {
+        switch (idx.column()) {
         case col_interface_:
         case col_traffic_:
             break;
@@ -1261,6 +1297,8 @@ void InterfaceTreeDelegate::bufferSizeChanged(int value)
         return;
     }
     device->buffer = value;
+#else
+    Q_UNUSED(value);
 #endif
 }
 

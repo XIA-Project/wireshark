@@ -47,6 +47,7 @@
 #include <epan/reassemble.h>
 #include <epan/stream.h>
 #include <epan/expert.h>
+#include <epan/prefs.h>
 #include <epan/range.h>
 #include <epan/asm_utils.h>
 
@@ -99,8 +100,8 @@ struct dissector_table {
 	ftenum_t	type;
 	int		param;
 	protocol_t	*protocol;
-	GHashFunc hash_func;
-	dissector_table_allow_e allow_dup_proto; /* XXX - Could be converted to a flag-like field */
+	GHashFunc	hash_func;
+	gboolean	supports_decode_as;
 };
 
 static GHashTable *dissector_tables = NULL;
@@ -971,11 +972,12 @@ dissector_add_uint(const char *name, const guint32 pattern, dissector_handle_t h
 			     GUINT_TO_POINTER( pattern), (gpointer)dtbl_entry);
 
 	/*
-	 * Now add it to the list of handles that could be used for
-	 * "Decode As" with this table, because it *is* being used
-	 * with this table.
+	 * Now, if this table supports "Decode As", add this handle
+	 * to the list of handles that could be used for "Decode As"
+	 * with this table, because it *is* being used with this table.
 	 */
-	dissector_add_for_decode_as(name, handle);
+	if (sub_dissectors->supports_decode_as)
+		dissector_add_for_decode_as(name, handle);
 }
 
 
@@ -986,12 +988,112 @@ void dissector_add_uint_range(const char *abbrev, range_t *range,
 	guint32 i, j;
 
 	if (range) {
-		for (i = 0; i < range->nranges; i++) {
-			for (j = range->ranges[i].low; j < range->ranges[i].high; j++)
-				dissector_add_uint(abbrev, j, handle);
-			dissector_add_uint(abbrev, range->ranges[i].high, handle);
+		if (range->nranges == 0) {
+			/* Even an empty range would want a chance for Decode As */
+			dissector_add_for_decode_as(abbrev, handle);
+		}
+		else {
+			for (i = 0; i < range->nranges; i++) {
+				for (j = range->ranges[i].low; j < range->ranges[i].high; j++)
+					dissector_add_uint(abbrev, j, handle);
+				dissector_add_uint(abbrev, range->ranges[i].high, handle);
+			}
 		}
 	}
+}
+
+static void
+dissector_add_preference(const char *name, dissector_handle_t handle, guint init_value)
+{
+	guint* uint_var;
+	module_t *module;
+	gchar *description, *title;
+	dissector_table_t  pref_dissector_table = find_dissector_table( name);
+	int proto_id = proto_get_id(handle->protocol);
+
+	uint_var = wmem_new(wmem_epan_scope(), guint);
+	*uint_var = init_value;
+
+	/* If the dissector already has a preference module, use it */
+	module = prefs_find_module(proto_get_protocol_filter_name(proto_id));
+	if (module == NULL)
+	{
+		/* Otherwise create a new one */
+		module = prefs_register_protocol(proto_id, NULL);
+	}
+
+	description = wmem_strdup_printf(wmem_epan_scope(), "Set the %s for %s (if other than the default of %u)",
+									pref_dissector_table->ui_name, proto_get_protocol_short_name(handle->protocol), *uint_var);
+	title = wmem_strdup_printf(wmem_epan_scope(), "%s %s", proto_get_protocol_short_name(handle->protocol),
+									pref_dissector_table->ui_name);
+
+	prefs_register_decode_as_preference(module, name, title, description, uint_var);
+}
+
+void dissector_add_uint_with_preference(const char *name, const guint32 pattern,
+    dissector_handle_t handle)
+{
+	dissector_add_preference(name, handle, pattern);
+	dissector_add_uint(name, pattern, handle);
+}
+
+void dissector_add_uint_range_with_preference(const char *abbrev, const char* range_str,
+    dissector_handle_t handle)
+{
+	range_t** range;
+	module_t *module;
+	gchar *description, *title;
+	dissector_table_t  pref_dissector_table = find_dissector_table( abbrev);
+	int proto_id = proto_get_id(handle->protocol);
+	guint32 max_value = 0;
+
+	/* If a dissector is added for Decode As only, it's dissector
+		table value would default to 0.
+		Set up a preference value with that information
+	 */
+	range = wmem_new(wmem_epan_scope(), range_t*);
+	*range = range_empty();
+
+	/* If the dissector already has a preference module, use it */
+	module = prefs_find_module(proto_get_protocol_filter_name(proto_id));
+	if (module == NULL) {
+		/* Otherwise create a new one */
+		module = prefs_register_protocol(proto_id, NULL);
+	}
+	/* Some preference callback functions use the proto_reg_handoff_
+		routine to apply preferences, which could duplicate the
+		registration of a preference.  Check for that here */
+	if (prefs_find_preference(module, abbrev) == NULL) {
+		description = wmem_strdup_printf(wmem_epan_scope(), "%s %s(s)",
+									    proto_get_protocol_short_name(handle->protocol), pref_dissector_table->ui_name);
+		title = wmem_strdup_printf(wmem_epan_scope(), "%s(s)", pref_dissector_table->ui_name);
+
+		/* Max value is based on datatype of dissector table */
+		switch (pref_dissector_table->type) {
+
+		case FT_UINT8:
+			max_value = 0xFF;
+			break;
+		case FT_UINT16:
+			max_value = 0xFFFF;
+			break;
+		case FT_UINT24:
+			max_value = 0xFFFFFF;
+			break;
+		case FT_UINT32:
+			max_value = 0xFFFFFFFF;
+			break;
+
+		default:
+			g_error("The dissector table %s (%s) is not an integer type - are you using a buggy plugin?", abbrev, pref_dissector_table->ui_name);
+			g_assert_not_reached();
+		}
+
+		range_convert_str(range, range_str, max_value);
+		prefs_register_decode_as_range_preference(module, abbrev, title, description, range, max_value);
+	}
+
+	dissector_add_uint_range(abbrev, *range, handle);
 }
 
 /* Delete the entry for a dissector in a uint dissector table
@@ -1344,11 +1446,12 @@ dissector_add_string(const char *name, const gchar *pattern,
 			     (gpointer)dtbl_entry);
 
 	/*
-	 * Now add it to the list of handles that could be used for
-	 * "Decode As" with this table, because it *is* being used
-	 * with this table.
+	 * Now, if this table supports "Decode As", add this handle
+	 * to the list of handles that could be used for "Decode As"
+	 * with this table, because it *is* being used with this table.
 	 */
-	dissector_add_for_decode_as(name, handle);
+	if (sub_dissectors->supports_decode_as)
+		dissector_add_for_decode_as(name, handle);
 }
 
 /* Delete the entry for a dissector in a string dissector table
@@ -1569,11 +1672,12 @@ void dissector_add_custom_table_handle(const char *name, void *pattern, dissecto
 			     (gpointer)dtbl_entry);
 
 	/*
-	 * Now add it to the list of handles that could be used for
-	 * "Decode As" with this table, because it *is* being used
-	 * with this table.
+	 * Now, if this table supports "Decode As", add this handle
+	 * to the list of handles that could be used for "Decode As"
+	 * with this table, because it *is* being used with this table.
 	 */
-	dissector_add_for_decode_as(name, handle);
+	if (sub_dissectors->supports_decode_as)
+		dissector_add_for_decode_as(name, handle);
 }
 
 dissector_handle_t dissector_get_custom_table_handle(dissector_table_t sub_dissectors, void *key)
@@ -1626,11 +1730,12 @@ void dissector_add_guid(const char *name, guid_key* guid_val, dissector_handle_t
 			     guid_val, (gpointer)dtbl_entry);
 
 	/*
-	 * Now add it to the list of handles that could be used with this
-	 * table, because it *is* being used with this table.
+	 * Now, if this table supports "Decode As", add this handle
+	 * to the list of handles that could be used for "Decode As"
+	 * with this table, because it *is* being used with this table.
 	 */
-	dissector_add_for_decode_as(name, handle);
-
+	if (sub_dissectors->supports_decode_as)
+		dissector_add_for_decode_as(name, handle);
 }
 
 /* Look for a given value in a given guid dissector table and, if found,
@@ -1759,6 +1864,24 @@ dissector_add_for_decode_as(const char *name, dissector_handle_t handle)
 		return;
 	}
 
+	/*
+	 * Make sure it supports Decode As.
+	 */
+	if (!sub_dissectors->supports_decode_as) {
+		const char *dissector_name;
+
+		dissector_name = dissector_handle_get_dissector_name(handle);
+		if (dissector_name == NULL)
+			dissector_name = "(anonymous)";
+		fprintf(stderr, "Registering dissector %s for protocol %s in dissector table %s, which doesn't support Decode As\n",
+				    dissector_name,
+				    proto_get_protocol_short_name(handle->protocol),
+				    name);
+		if (getenv("WIRESHARK_ABORT_ON_DISSECTOR_BUG") != NULL)
+			abort();
+		return;
+	}
+
 	/* Add the dissector as a dependency
 	  (some dissector tables don't have protocol association, so there is
 	  the need for the NULL check */
@@ -1774,9 +1897,12 @@ dissector_add_for_decode_as(const char *name, dissector_handle_t handle)
 		return;
 	}
 
-	/* Ensure the protocol is unique.  This prevents confusion when using Decode As
-	   with duplicative entries */
-	if (sub_dissectors->allow_dup_proto == DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE)
+	/* Ensure the protocol is unique.  This prevents confusion when
+	   using Decode As with duplicative entries.
+
+	   FT_STRING can at least show the string value in the dialog,
+	   so we don't do the check for them. */
+	if (sub_dissectors->type != FT_STRING)
 	{
 		for (entry = sub_dissectors->dissector_handles; entry != NULL; entry = g_slist_next(entry))
 		{
@@ -1806,6 +1932,18 @@ dissector_add_for_decode_as(const char *name, dissector_handle_t handle)
 		g_slist_insert_sorted(sub_dissectors->dissector_handles, (gpointer)handle, (GCompareFunc)dissector_compare_filter_name);
 }
 
+void dissector_add_for_decode_as_with_preference(const char *name,
+    dissector_handle_t handle)
+{
+	/* If a dissector is added for Decode As only, it's dissector
+	   table value would default to 0.
+	   Set up a preference value with that information
+	 */
+	dissector_add_preference(name, handle, 0);
+
+	dissector_add_for_decode_as(name, handle);
+}
+
 dissector_handle_t
 dtbl_entry_get_initial_handle (dtbl_entry_t *dtbl_entry)
 {
@@ -1814,8 +1952,44 @@ dtbl_entry_get_initial_handle (dtbl_entry_t *dtbl_entry)
 
 GSList *
 dissector_table_get_dissector_handles(dissector_table_t dissector_table) {
-	if (!dissector_table) return NULL;
+	if (!dissector_table)
+		return NULL;
+
 	return dissector_table->dissector_handles;
+}
+
+/*
+ * Data structure used as user data when iterating dissector handles
+ */
+typedef struct lookup_entry {
+	gchar*             dissector_short_name;
+	dissector_handle_t handle;
+} lookup_entry_t;
+
+/*
+ * A callback function to changed a dissector_handle if matched
+ * This is used when iterating a dissector table
+ */
+static void
+find_dissector_in_table(gpointer item, gpointer user_data)
+{
+	dissector_handle_t handle = (dissector_handle_t)item;
+	lookup_entry_t * lookup = (lookup_entry_t *)user_data;
+	const gchar *proto_short_name = dissector_handle_get_short_name(handle);
+	if (proto_short_name && strcmp(lookup->dissector_short_name, proto_short_name) == 0) {
+		lookup->handle = handle;
+	}
+}
+
+dissector_handle_t dissector_table_get_dissector_handle(dissector_table_t dissector_table, gchar* short_name)
+{
+	lookup_entry_t lookup;
+
+	lookup.dissector_short_name = short_name;
+	lookup.handle = NULL;
+
+	g_slist_foreach(dissector_table->dissector_handles, find_dissector_in_table, &lookup);
+	return lookup.handle;
 }
 
 ftenum_t
@@ -1824,11 +1998,10 @@ dissector_table_get_type(dissector_table_t dissector_table) {
 	return dissector_table->type;
 }
 
-dissector_table_allow_e
-dissector_table_get_proto_allowed(dissector_table_t dissector_table)
+void
+dissector_table_allow_decode_as(dissector_table_t dissector_table)
 {
-	if (!dissector_table) return DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE;
-	return dissector_table->allow_dup_proto;
+	dissector_table->supports_decode_as = TRUE;
 }
 
 static gint
@@ -2089,7 +2262,7 @@ dissector_all_tables_foreach_table (DATFunc_table func,
 
 dissector_table_t
 register_dissector_table(const char *name, const char *ui_name, const int proto, const ftenum_t type,
-			 const int param, dissector_table_allow_e allow_dup)
+			 const int param)
 {
 	dissector_table_t	sub_dissectors;
 
@@ -2142,13 +2315,13 @@ register_dissector_table(const char *name, const char *ui_name, const int proto,
 	sub_dissectors->type    = type;
 	sub_dissectors->param   = param;
 	sub_dissectors->protocol  = find_protocol_by_id(proto);
-	sub_dissectors->allow_dup_proto   = allow_dup;
+	sub_dissectors->supports_decode_as = FALSE;
 	g_hash_table_insert( dissector_tables, (gpointer)name, (gpointer) sub_dissectors );
 	return sub_dissectors;
 }
 
 dissector_table_t register_custom_dissector_table(const char *name,
-	const char *ui_name, const int proto, GHashFunc hash_func, GEqualFunc key_equal_func, dissector_table_allow_e allow_dup)
+	const char *ui_name, const int proto, GHashFunc hash_func, GEqualFunc key_equal_func)
 {
 	dissector_table_t	sub_dissectors;
 
@@ -2171,7 +2344,7 @@ dissector_table_t register_custom_dissector_table(const char *name,
 	sub_dissectors->type    = FT_BYTES; /* Consider key a "blob" of data, no need to really create new type */
 	sub_dissectors->param   = BASE_NONE;
 	sub_dissectors->protocol  = find_protocol_by_id(proto);
-	sub_dissectors->allow_dup_proto   = allow_dup;
+	sub_dissectors->supports_decode_as = FALSE;
 	g_hash_table_insert( dissector_tables, (gpointer)name, (gpointer) sub_dissectors );
 	return sub_dissectors;
 }

@@ -378,8 +378,8 @@ static const struct {
 	{ 225,		WTAP_ENCAP_FIBRE_CHANNEL_FC2_WITH_FRAME_DELIMS },
 	/* Solaris IPNET */
 	{ 226,		WTAP_ENCAP_IPNET },
-	/* SocketCAN frame, with CAN ID in big-endian byte order */
-	{ 227,		WTAP_ENCAP_SOCKETCAN_BIGENDIAN },
+	/* SocketCAN frame */
+	{ 227,		WTAP_ENCAP_SOCKETCAN },
 	/* Raw IPv4 */
 	{ 228,		WTAP_ENCAP_RAW_IP4 },
 	/* Raw IPv6 */
@@ -436,9 +436,6 @@ static const struct {
 
 	/* ISO14443 contactless smartcard standards */
 	{ 264,		WTAP_ENCAP_ISO14443 },
-
-	/* SocketCAN frame, with CAN ID in host-endian byte order */
-	{ 265,		WTAP_ENCAP_SOCKETCAN_HOSTENDIAN },
 
 	/*
 	 * To repeat:
@@ -752,6 +749,12 @@ wtap_encap_requires_phdr(int wtap_encap)
  */
 #define LINUX_SLL_PROTOCOL_OFFSET	14	/* protocol */
 #define LINUX_SLL_LEN			16	/* length of the header */
+
+/*
+ * The protocols we have to check for.
+ */
+#define LINUX_SLL_P_CAN			0x000C	/* Controller Area Network */
+#define LINUX_SLL_P_CANFD		0x000D	/* Controller Area Network flexible data rate */
 
 /*
  * The fake link-layer header of IrDA packets as introduced by Jean Tourrilhes
@@ -1209,7 +1212,7 @@ pcap_byteswap_linux_sll_pseudoheader(struct wtap_pkthdr *phdr, guint8 *pd)
 	}
 
 	protocol = pntoh16(&pd[LINUX_SLL_PROTOCOL_OFFSET]);
-	if (protocol != 0x000C) {
+	if (protocol != LINUX_SLL_P_CAN && protocol != LINUX_SLL_P_CANFD) {
 		/* Not a CAN packet; nothing to fix */
 		return;
 	}
@@ -1385,37 +1388,6 @@ pcap_byteswap_nflog_pseudoheader(struct wtap_pkthdr *phdr, guint8 *pd)
 		packet_size -= size;
 		p += size;
 	}
-}
-
-static void
-pcap_byteswap_can_socketcan_pseudoheader(struct wtap_pkthdr *phdr, guint8 *pd)
-{
-	guint packet_size;
-	struct can_socketcan_hdr *can_socketcan_phdr;
-
-	/*
-	 * Minimum of captured and actual length (just in case the
-	 * actual length < the captured length, which Should Never
-	 * Happen).
-	 */
-	packet_size = phdr->caplen;
-	if (packet_size > phdr->len)
-		packet_size = phdr->len;
-
-	/*
-	 * Greasy hack, but we never directly dereference any of
-	 * the fields in *can_socketcan_phdr, we just get offsets
-	 * of and addresses of its members and byte-swap it with a
-	 * byte-at-a-time macro, so it's alignment-safe.
-	 */
-	can_socketcan_phdr = (struct can_socketcan_hdr *)(void *)pd;
-
-	if (packet_size < sizeof(can_socketcan_phdr->can_id)) {
-		/* Not enough data to have the full CAN ID */
-		return;
-	}
-
-	PBSWAP32((guint8 *)&can_socketcan_phdr->can_id);
 }
 
 /*
@@ -1998,11 +1970,6 @@ pcap_read_post_process(int file_type, int wtap_encap,
 		 */
 		phdr->len = phdr->pseudo_header.erf.phdr.wlen;
 		phdr->caplen = MIN(phdr->len, phdr->caplen);
-		break;
-
-	case WTAP_ENCAP_SOCKETCAN_HOSTENDIAN:
-		if (bytes_swapped)
-			pcap_byteswap_can_socketcan_pseudoheader(phdr, pd);
 		break;
 
 	default:

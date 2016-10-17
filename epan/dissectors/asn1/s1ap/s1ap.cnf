@@ -30,7 +30,6 @@ SONtransferResponseContainer
 SONtransferCause_PDU
 UE-HistoryInformation_PDU
 
-
 #.PDU
 S1AP-PDU
 SourceeNB-ToTargeteNB-TransparentContainer
@@ -45,6 +44,7 @@ UE-HistoryInformation
 #.MAKE_ENUM
 ProcedureCode
 ProtocolIE-ID
+RAT-Type
 
 #.NO_EMIT
 TBCD-STRING
@@ -87,10 +87,14 @@ ProtocolExtensionField/id ext_id
 #PrivateIE-Field/value private_value
 ProtocolIE-Field/value ie_field_value
 
-#.FN_PARS ProtocolIE-ID  VAL_PTR=&ProtocolIE_ID
+#.FN_BODY ProtocolIE-ID VAL_PTR=&s1ap_data->protocol_ie_id
+  struct s1ap_private_data *s1ap_data = s1ap_get_private_data(actx->pinfo);
+%(DEFAULT_BODY)s
+
 #.FN_FTR ProtocolIE-ID
   if (tree) {
-    proto_item_append_text(proto_item_get_parent_nth(actx->created_item, 2), ": %s", val_to_str_ext(ProtocolIE_ID, &s1ap_ProtocolIE_ID_vals_ext, "unknown (%d)"));
+    proto_item_append_text(proto_item_get_parent_nth(actx->created_item, 2), ": %s",
+                           val_to_str_ext(s1ap_data->protocol_ie_id, &s1ap_ProtocolIE_ID_vals_ext, "unknown (%d)"));
   }
 #.END
 
@@ -101,25 +105,29 @@ ProtocolIE-Field/value ie_field_value
 # FN_PARS ProtocolIE-FieldPair/firstValue  FN_VARIANT=_pdu_new  TYPE_REF_FN=dissect_ProtocolIEFieldPairFirstValue
 # FN_PARS ProtocolIE-FieldPair/secondValue  FN_VARIANT=_pdu_new  TYPE_REF_FN=dissect_ProtocolIEFieldPairSecondValue
 
-#.FN_PARS ProtocolExtensionID  VAL_PTR=&ProtocolExtensionID
+#.FN_BODY ProtocolExtensionID  VAL_PTR=&s1ap_data->protocol_extension_id
+  struct s1ap_private_data *s1ap_data = s1ap_get_private_data(actx->pinfo);
+%(DEFAULT_BODY)s
+
 #.FN_PARS ProtocolExtensionField/extensionValue  FN_VARIANT=_pdu_new  TYPE_REF_FN=dissect_ProtocolExtensionFieldExtensionValue
 
-#.FN_PARS  ProcedureCode  VAL_PTR = &ProcedureCode
-#.FN_FTR ProcedureCode
-  col_add_fstr(actx->pinfo->cinfo, COL_INFO, "%s",
-               val_to_str_ext(ProcedureCode, &s1ap_ProcedureCode_vals_ext,
-                              "unknown message"));
+#.FN_BODY ProcedureCode  VAL_PTR = &s1ap_data->procedure_code
+  struct s1ap_private_data *s1ap_data = s1ap_get_private_data(actx->pinfo);
+%(DEFAULT_BODY)s
 #.END
 
 #.FN_PARS InitiatingMessage/value  FN_VARIANT=_pdu_new  TYPE_REF_FN=dissect_InitiatingMessageValue
 #.FN_HDR InitiatingMessage/value
-    message_type = INITIATING_MESSAGE;
+  struct s1ap_private_data *s1ap_data = s1ap_get_private_data(actx->pinfo);
+  s1ap_data->message_type = INITIATING_MESSAGE;
 #.FN_PARS SuccessfulOutcome/value  FN_VARIANT=_pdu_new  TYPE_REF_FN=dissect_SuccessfulOutcomeValue
 #.FN_HDR SuccessfulOutcome/value
-    message_type = SUCCESSFUL_OUTCOME;
+  struct s1ap_private_data *s1ap_data = s1ap_get_private_data(actx->pinfo);
+  s1ap_data->message_type = SUCCESSFUL_OUTCOME;
 #.FN_PARS UnsuccessfulOutcome/value  FN_VARIANT=_pdu_new  TYPE_REF_FN=dissect_UnsuccessfulOutcomeValue
 #.FN_HDR UnsuccessfulOutcome/value
-    message_type = UNSUCCESSFUL_OUTCOME;
+  struct s1ap_private_data *s1ap_data = s1ap_get_private_data(actx->pinfo);
+  s1ap_data->message_type = UNSUCCESSFUL_OUTCOME;
 
 #--- Parameterization is not supported in asn2wrs ---
 
@@ -186,15 +194,18 @@ MAX_VAL = asn1_param_get_integer(%(ACTX)s,"upperBound")
 # END
 
 #.FN_HDR PrivateIE-ID
-obj_id = NULL;
+  struct s1ap_private_data *s1ap_data = s1ap_get_private_data(actx->pinfo);
+  s1ap_data->obj_id = NULL;
 
-#.FN_PARS PrivateIE-ID/global  FN_VARIANT = _str  VAL_PTR = &obj_id
+#.FN_BODY PrivateIE-ID/global  FN_VARIANT = _str  VAL_PTR = &s1ap_data->obj_id
+  struct s1ap_private_data *s1ap_data = s1ap_get_private_data(actx->pinfo);
+%(DEFAULT_BODY)s
 
 #.FN_BODY PrivateIE-Field/value
-
-  if (obj_id){
-    offset=call_per_oid_callback(obj_id, tvb, actx->pinfo, tree, offset, actx, hf_index);
-  }else{
+  struct s1ap_private_data *s1ap_data = s1ap_get_private_data(actx->pinfo);
+  if (s1ap_data->obj_id) {
+    offset = call_per_oid_callback(s1ap_data->obj_id, tvb, actx->pinfo, tree, offset, actx, hf_index);
+  } else {
 %(DEFAULT_BODY)s
   }
 
@@ -205,6 +216,7 @@ obj_id = NULL;
 
 #.FN_BODY PLMNidentity  VAL_PTR = parameter_tvb
   tvbuff_t *parameter_tvb=NULL;
+  struct s1ap_private_data *s1ap_data = s1ap_get_private_data(actx->pinfo);
 
   offset = dissect_per_octet_string(tvb, offset, actx, tree, hf_index,
                                        3, 3, FALSE, &parameter_tvb);
@@ -214,6 +226,12 @@ obj_id = NULL;
   if (!parameter_tvb)
     return offset;
   dissect_e212_mcc_mnc(parameter_tvb, actx->pinfo, tree, 0, E212_NONE, FALSE);
+  if (s1ap_data->supported_ta) {
+    guint32 plmn = tvb_get_ntoh24(parameter_tvb, 0);
+    wmem_array_append_one(s1ap_data->supported_ta->plmn, plmn);
+  } else if (s1ap_data->tai) {
+    s1ap_data->tai->plmn = tvb_get_ntoh24(parameter_tvb, 0);
+  }
 #.END
 
 #.FN_BODY ENBname VAL_PTR = parameter_tvb
@@ -237,18 +255,30 @@ obj_id = NULL;
     }
   }
   if (is_ascii)
-     proto_item_append_text(actx->created_item,"(%%s)",tvb_format_text(parameter_tvb, 0, length));
+     proto_item_append_text(actx->created_item," (%%s)",tvb_format_text(parameter_tvb, 0, length));
 
-
-#.FN_BODY TAC VAL_PTR = &parameter_tvb
-tvbuff_t *parameter_tvb=NULL;
+#.FN_BODY MMEname VAL_PTR = parameter_tvb
+  tvbuff_t *parameter_tvb=NULL;
+  int length;
+  int p_offset;
+  gboolean is_ascii;
 
 %(DEFAULT_BODY)s
 
   if (!parameter_tvb)
     return offset;
 
-  proto_item_append_text(actx->created_item," (%%u)",tvb_get_ntohs(parameter_tvb, 0));
+  length = tvb_reported_length(parameter_tvb);
+
+  is_ascii = TRUE;
+  for (p_offset=0; p_offset < length; p_offset++){
+    if(!g_ascii_isprint(tvb_get_guint8(parameter_tvb, p_offset ))){
+      is_ascii = FALSE;
+      break;
+    }
+  }
+  if (is_ascii)
+     proto_item_append_text(actx->created_item," (%%s)",tvb_format_text(parameter_tvb, 0, length));
 
 #.END
 
@@ -281,19 +311,34 @@ tvbuff_t *parameter_tvb=NULL;
     return offset;
 
 # The Transport Layer Address signalled in S1-AP messages is a bit string of
-# a) 32 bits in case of IPv4 address according to [6]; and
-# b) 128 bits in case of IPv6 address according to [5].
+# a) 32 bits in case of IPv4 address according to IETF RFC 791 [6]; or
+# b) 128 bits in case of IPv6 address according to IETF RFC 2460 [5]; or
+# c) 160 bits if both IPv4 and IPv6 addresses are signalled, in which case the IPv4 address is contained in the first 32 bits.
   /* Get the length */
   tvb_len = tvb_reported_length(parameter_tvb);
   subtree = proto_item_add_subtree(actx->created_item, ett_s1ap_TransportLayerAddress);
-  if (tvb_len==4){
+  if (tvb_len==4) {
     /* IPv4 */
-     proto_tree_add_item(subtree, hf_s1ap_transportLayerAddressIPv4, parameter_tvb, 0, tvb_len, ENC_BIG_ENDIAN);
-  }
-  if (tvb_len==16){
+     proto_tree_add_item(subtree, hf_s1ap_transportLayerAddressIPv4, parameter_tvb, 0, 4, ENC_BIG_ENDIAN);
+  } else if (tvb_len==16) {
     /* IPv6 */
-     proto_tree_add_item(subtree, hf_s1ap_transportLayerAddressIPv6, parameter_tvb, 0, tvb_len, ENC_NA);
+     proto_tree_add_item(subtree, hf_s1ap_transportLayerAddressIPv6, parameter_tvb, 0, 16, ENC_NA);
+  } else if (tvb_len==20) {
+    /* IPv4 */
+     proto_tree_add_item(subtree, hf_s1ap_transportLayerAddressIPv4, parameter_tvb, 0, 4, ENC_BIG_ENDIAN);
+    /* IPv6 */
+     proto_tree_add_item(subtree, hf_s1ap_transportLayerAddressIPv6, parameter_tvb, 4, 16, ENC_NA);
   }
+
+#.TYPE_ATTR
+Port-Number TYPE = FT_UINT16 DISPLAY = BASE_DEC
+#.FN_BODY Port-Number VAL_PTR = &parameter_tvb HF_INDEX = -1
+  tvbuff_t *parameter_tvb = NULL;
+%(DEFAULT_BODY)s
+  if (parameter_tvb) {
+    actx->created_item = proto_tree_add_item(tree, hf_index, parameter_tvb, 0, 2, ENC_BIG_ENDIAN);
+  }
+
 #.FN_HDR InitialUEMessage
   /* Set the direction of the message */
   actx->pinfo->link_dir=P2P_DIR_UL;
@@ -306,19 +351,23 @@ tvbuff_t *parameter_tvb=NULL;
   /* Set the direction of the message */
   actx->pinfo->link_dir=P2P_DIR_UL;
 
-#.FN_BODY HandoverType VAL_PTR = &handover_type_value
-
+#.FN_BODY HandoverType VAL_PTR = &s1ap_data->handover_type_value
+  struct s1ap_private_data *s1ap_data = s1ap_get_private_data(actx->pinfo);
 %(DEFAULT_BODY)s
 
 #Zero the value before use
 #.FN_HDR HandoverRequired
-  handover_type_value = 0;
+  struct s1ap_private_data *s1ap_data = s1ap_get_private_data(actx->pinfo);
+  s1ap_data->handover_type_value = 0;
 #.FN_HDR HandoverCommand
-  handover_type_value = 0;
+  struct s1ap_private_data *s1ap_data = s1ap_get_private_data(actx->pinfo);
+  s1ap_data->handover_type_value = 0;
 #.FN_HDR HandoverRequest
-  handover_type_value = 0;
+  struct s1ap_private_data *s1ap_data = s1ap_get_private_data(actx->pinfo);
+  s1ap_data->handover_type_value = 0;
 #.FN_HDR HandoverRequestAcknowledge
-  handover_type_value = 0;
+  struct s1ap_private_data *s1ap_data = s1ap_get_private_data(actx->pinfo);
+  s1ap_data->handover_type_value = 0;
 
 #.FN_BODY Source-ToTarget-TransparentContainer VAL_PTR = &parameter_tvb
 # I think the message is "directly encoded" into the octet string(no "double encoding")
@@ -329,16 +378,17 @@ tvbuff_t *parameter_tvb=NULL;
 # it is described how the container shall be encoded with respect to the scenario
 # in which it is used.
   tvbuff_t *parameter_tvb;
-  proto_tree *subtree = NULL;
+  proto_tree *subtree;
 
 %(DEFAULT_BODY)s
 
   if (g_s1ap_dissect_container) {
+    struct s1ap_private_data *s1ap_data = s1ap_get_private_data(actx->pinfo);
     /* Don't want elements inside container to write to info column */
     col_set_writable(actx->pinfo->cinfo, COL_INFO, FALSE);
     subtree = proto_item_add_subtree(actx->created_item, ett_s1ap_ToTargetTransparentContainer);
 
-  switch(handover_type_value){
+    switch(s1ap_data->handover_type_value){
       /*
       HandoverType ::= ENUMERATED {
       intralte,
@@ -387,14 +437,15 @@ tvbuff_t *parameter_tvb=NULL;
 # See Target-ToSource-TransparentContainer in RANAP
 
   tvbuff_t *parameter_tvb;
-  proto_tree *subtree = NULL;
+  proto_tree *subtree;
 
 %(DEFAULT_BODY)s
 
   if (g_s1ap_dissect_container) {
+    struct s1ap_private_data *s1ap_data = s1ap_get_private_data(actx->pinfo);
     subtree = proto_item_add_subtree(actx->created_item, ett_s1ap_ToSourceTransparentContainer);
 
-  switch(handover_type_value){
+    switch(s1ap_data->handover_type_value){
     /*
       HandoverType ::= ENUMERATED {
       intralte,
@@ -476,22 +527,28 @@ tvbuff_t *parameter_tvb=NULL;
 # HandoverCommand and HandoverRequestAcknowledge.
 
   tvbuff_t *parameter_tvb;
-  proto_tree *subtree = NULL;
+  proto_tree *subtree;
 
 %(DEFAULT_BODY)s
   if (!parameter_tvb)
     return offset;
 
   if (g_s1ap_dissect_container) {
+    struct s1ap_private_data *s1ap_data = s1ap_get_private_data(actx->pinfo);
     subtree = proto_item_add_subtree(actx->created_item, ett_s1ap_RRCContainer);
 
-    switch(message_type){
+    switch(s1ap_data->message_type){
       case INITIATING_MESSAGE:
-      /* 9.2.1.7 Source eNB to Target eNB Transparent Container */
-        dissect_lte_rrc_HandoverPreparationInformation_PDU(parameter_tvb, actx->pinfo, subtree, NULL);
+        /* 9.2.1.7 Source eNB to Target eNB Transparent Container */
+        if ((s1ap_is_nbiot_ue(actx->pinfo) && (g_s1ap_dissect_lte_container_as == S1AP_LTE_CONTAINER_AUTOMATIC)) ||
+            (g_s1ap_dissect_lte_container_as == S1AP_LTE_CONTAINER_NBIOT)) {
+          dissect_lte_rrc_HandoverPreparationInformation_NB_PDU(parameter_tvb, actx->pinfo, subtree, NULL);
+        } else {
+          dissect_lte_rrc_HandoverPreparationInformation_PDU(parameter_tvb, actx->pinfo, subtree, NULL);
+        }
         break;
       case SUCCESSFUL_OUTCOME:
-      /* 9.2.1.7 Source eNB to Target eNB Transparent Container */
+        /* 9.2.1.8 Target eNB to Source eNB Transparent Container */
         dissect_lte_rrc_HandoverCommand_PDU(parameter_tvb, actx->pinfo, subtree, NULL);
         break;
       default:
@@ -499,12 +556,22 @@ tvbuff_t *parameter_tvb=NULL;
     }
   }
 
+#.FN_BODY UE-HistoryInformationFromTheUE VAL_PTR = &parameter_tvb
+  tvbuff_t *parameter_tvb;
+  proto_tree *subtree;
 
+%(DEFAULT_BODY)s
+  if (!parameter_tvb)
+    return offset;
 
+  if (g_s1ap_dissect_container) {
+    subtree = proto_item_add_subtree(actx->created_item, ett_s1ap_UE_HistoryInformationFromTheUE);
+    dissect_lte_rrc_VisitedCellInfoList_r12_PDU(parameter_tvb, actx->pinfo, subtree, NULL);
+  }
 
 #.FN_BODY UERadioCapability VAL_PTR = &parameter_tvb
   tvbuff_t *parameter_tvb;
-  proto_tree *subtree = NULL;
+  proto_tree *subtree;
 
 %(DEFAULT_BODY)s
   if (!parameter_tvb)
@@ -512,8 +579,19 @@ tvbuff_t *parameter_tvb=NULL;
 
   if (g_s1ap_dissect_container) {
     subtree = proto_item_add_subtree(actx->created_item, ett_s1ap_UERadioCapability);
-    dissect_lte_rrc_UERadioAccessCapabilityInformation_PDU(parameter_tvb, actx->pinfo, subtree, NULL);
-}
+    if ((s1ap_is_nbiot_ue(actx->pinfo) && (g_s1ap_dissect_lte_container_as == S1AP_LTE_CONTAINER_AUTOMATIC)) ||
+        (g_s1ap_dissect_lte_container_as == S1AP_LTE_CONTAINER_NBIOT)) {
+       dissect_lte_rrc_UERadioAccessCapabilityInformation_NB_PDU(parameter_tvb, actx->pinfo, subtree, NULL);
+    } else {
+      dissect_lte_rrc_UERadioAccessCapabilityInformation_PDU(parameter_tvb, actx->pinfo, subtree, NULL);
+    }
+  }
+
+#.TYPE_ATTR
+Threshold-RSRP DISPLAY = BASE_CUSTOM STRINGS = CF_FUNC(s1ap_Threshold_RSRP_fmt)
+
+#.TYPE_ATTR
+Threshold-RSRQ DISPLAY = BASE_CUSTOM STRINGS = CF_FUNC(s1ap_Threshold_RSRQ_fmt)
 
 # 9.2.3.24 RIM Information
 # Contains the BSSGP RIM PDU
@@ -524,7 +602,7 @@ tvbuff_t *parameter_tvb=NULL;
 %(DEFAULT_BODY)s
 
   if (!parameter_tvb)
-   return offset;
+    return offset;
 
   subtree = proto_item_add_subtree(actx->created_item, ett_s1ap_RIMInformation);
   if ((tvb_reported_length(parameter_tvb)>0)&&(bssgp_handle)){
@@ -536,7 +614,7 @@ tvbuff_t *parameter_tvb=NULL;
 #.FN_BODY Cdma2000PDU VAL_PTR = &parameter_tvb
 
   tvbuff_t *parameter_tvb;
-  proto_tree *subtree = NULL;
+  proto_tree *subtree;
 
 %(DEFAULT_BODY)s
   if (!parameter_tvb)
@@ -556,8 +634,8 @@ if (gcsna_handle) {
  * to handover to. The CDMA2000 Reference Cell
  * ID is statically configured in the eNB.
  */
- tvbuff_t *parameter_tvb;
- proto_tree *subtree = NULL;
+  tvbuff_t *parameter_tvb;
+  proto_tree *subtree;
 
 %(DEFAULT_BODY)s
   if (!parameter_tvb)
@@ -570,19 +648,442 @@ if (gcsna_handle) {
 # 9.2.1.98 UE Radio Capability for Paging
 # Includes the UERadioPagingInformation message as defined in 10.2.2 of TS 36.331 [16].
 
- tvbuff_t *parameter_tvb;
- proto_tree *subtree = NULL;
+  tvbuff_t *parameter_tvb;
+  proto_tree *subtree;
 
 %(DEFAULT_BODY)s
   if (!parameter_tvb)
     return offset;
 
-  subtree = proto_item_add_subtree(actx->created_item, ett_s1ap_UERadioPagingInformation);
-  dissect_lte_rrc_UERadioPagingInformation_PDU(parameter_tvb, actx->pinfo, subtree, NULL);
+  if (g_s1ap_dissect_container) {
+    subtree = proto_item_add_subtree(actx->created_item, ett_s1ap_UERadioPagingInformation);
+    if ((s1ap_is_nbiot_ue(actx->pinfo) && (g_s1ap_dissect_lte_container_as == S1AP_LTE_CONTAINER_AUTOMATIC)) ||
+        (g_s1ap_dissect_lte_container_as == S1AP_LTE_CONTAINER_NBIOT)) {
+       dissect_lte_rrc_UERadioPagingInformation_NB_PDU(parameter_tvb, actx->pinfo, subtree, NULL);
+    } else {
+      dissect_lte_rrc_UERadioPagingInformation_PDU(parameter_tvb, actx->pinfo, subtree, NULL);
+    }
+  }
 
+#.FN_BODY CELevel VAL_PTR = &parameter_tvb
+# 9.2.1.109 Cell Identifier and Coverage Enhancement Level
+# Includes the UEPagingCoverageInformation message as defined in 10.2.2 of TS 36.331
+  tvbuff_t *parameter_tvb;
+  proto_tree *subtree;
+%(DEFAULT_BODY)s
+  if (!parameter_tvb)
+    return offset;
+
+  if (g_s1ap_dissect_container) {
+    subtree = proto_item_add_subtree(actx->created_item, ett_s1ap_CELevel);
+    if ((s1ap_is_nbiot_ue(actx->pinfo) && (g_s1ap_dissect_lte_container_as == S1AP_LTE_CONTAINER_AUTOMATIC)) ||
+        (g_s1ap_dissect_lte_container_as == S1AP_LTE_CONTAINER_NBIOT)) {
+      dissect_lte_rrc_UEPagingCoverageInformation_NB_PDU(parameter_tvb, actx->pinfo, subtree, NULL);
+    } else {
+      dissect_lte_rrc_UEPagingCoverageInformation_PDU(parameter_tvb, actx->pinfo, subtree, NULL);
+    }
+  }
+
+#.FN_BODY UE-RLF-Report-Container VAL_PTR = &parameter_tvb
+# 9.2.3.40 RLF Report Information
+# Includes the rlf-Report-r9 contained in UEInformationResponse message as defined in TS 36.331
+  tvbuff_t *parameter_tvb;
+  proto_tree *subtree;
+%(DEFAULT_BODY)s
+  if (!parameter_tvb)
+    return offset;
+
+  if (g_s1ap_dissect_container) {
+    subtree = proto_item_add_subtree(actx->created_item, ett_s1ap_UE_RLF_Report_Container);
+    dissect_lte_rrc_RLF_Report_r9_PDU(parameter_tvb, actx->pinfo, subtree, NULL);
+  }
+
+#.FN_BODY UE-RLF-Report-Container-for-extended-bands VAL_PTR = &parameter_tvb
+# 9.2.3.40 RLF Report Information
+# Includes the rlf-Report-v9e0 contained in UEInformationResponse message as defined in TS 36.331
+  tvbuff_t *parameter_tvb;
+  proto_tree *subtree;
+%(DEFAULT_BODY)s
+  if (!parameter_tvb)
+    return offset;
+
+  if (g_s1ap_dissect_container) {
+    subtree = proto_item_add_subtree(actx->created_item, ett_s1ap_UE_RLF_Report_Container_for_extended_bands);
+    dissect_lte_rrc_RLF_Report_v9e0_PDU(parameter_tvb, actx->pinfo, subtree, NULL);
+  }
+
+#.FN_BODY TooEarlyInterRATHOReportReportFromEUTRAN/uERLFReportContainer VAL_PTR = &parameter_tvb
+# B.1.17 Failure Event Report
+# Includes the RLF Report contained in the UEInformationResponse message (TS 36.331 [16])
+  tvbuff_t *parameter_tvb;
+  proto_tree *subtree;
+%(DEFAULT_BODY)s
+  if (!parameter_tvb)
+    return offset;
+
+  if (g_s1ap_dissect_container) {
+    subtree = proto_item_add_subtree(actx->created_item, ett_s1ap_UE_RLF_Report_Container);
+    dissect_lte_rrc_RLF_Report_r9_PDU(parameter_tvb, actx->pinfo, subtree, NULL);
+  }
 
 #.TYPE_ATTR
 ProtocolExtensionID TYPE = FT_UINT8  DISPLAY = BASE_DEC|BASE_EXT_STRING STRINGS = &s1ap_ProtocolIE_ID_vals_ext
+
+#.FN_BODY S1-Message VAL_PTR = &parameter_tvb
+  tvbuff_t *parameter_tvb;
+  proto_tree *subtree;
+%(DEFAULT_BODY)s
+  if (!parameter_tvb)
+    return offset;
+
+    subtree = proto_item_add_subtree(actx->created_item, ett_s1ap_S1_Message);
+    dissect_InitialUEMessage_PDU(parameter_tvb, actx->pinfo, subtree, NULL);
+
+#.FN_BODY E-UTRAN-Trace-ID VAL_PTR = &parameter_tvb
+  tvbuff_t *parameter_tvb;
+  proto_tree *subtree;
+%(DEFAULT_BODY)s
+  if (!parameter_tvb)
+    return offset;
+  subtree = proto_item_add_subtree(actx->created_item, ett_s1ap_E_UTRAN_Trace_ID);
+  dissect_e212_mcc_mnc(parameter_tvb, actx->pinfo, subtree, 0, E212_NONE, FALSE);
+  proto_tree_add_item(subtree, hf_s1ap_E_UTRAN_Trace_ID_TraceID, parameter_tvb, 3, 3, ENC_BIG_ENDIAN);
+  proto_tree_add_item(subtree, hf_s1ap_E_UTRAN_Trace_ID_TraceRecordingSessionReference, parameter_tvb, 6, 2, ENC_BIG_ENDIAN);
+
+#.FN_BODY InterfacesToTrace VAL_PTR = &parameter_tvb
+  tvbuff_t *parameter_tvb = NULL;
+%(DEFAULT_BODY)s
+  if(parameter_tvb){
+    const gint *fields[] = {
+      &hf_s1ap_interfacesToTrace_S1_MME,
+      &hf_s1ap_interfacesToTrace_X2,
+      &hf_s1ap_interfacesToTrace_Uu,
+      &hf_s1ap_interfacesToTrace_Reserved,
+      NULL
+    };
+    proto_tree *subtree = proto_item_add_subtree(actx->created_item, ett_s1ap_InterfacesToTrace);
+    proto_tree_add_bitmask_list(subtree, parameter_tvb, 0, 1, fields, ENC_BIG_ENDIAN);
+  }
+
+#.FN_FTR BitRate
+  proto_item_append_text(actx->created_item, "bit/s");
+
+#.TYPE_ATTR
+MME-Code TYPE = FT_UINT8 DISPLAY = BASE_DEC_HEX
+#.FN_BODY MME-Code VAL_PTR = &parameter_tvb HF_INDEX = -1
+  tvbuff_t *parameter_tvb = NULL;
+%(DEFAULT_BODY)s
+  if (parameter_tvb) {
+    actx->created_item = proto_tree_add_item(tree, hf_index, parameter_tvb, 0, 1, ENC_BIG_ENDIAN);
+  }
+
+#.TYPE_ATTR
+MME-Group-ID TYPE = FT_UINT16 DISPLAY = BASE_DEC_HEX
+#.FN_BODY MME-Group-ID VAL_PTR = &parameter_tvb HF_INDEX = -1
+  tvbuff_t *parameter_tvb = NULL;
+%(DEFAULT_BODY)s
+  if (parameter_tvb) {
+    actx->created_item = proto_tree_add_item(tree, hf_index, parameter_tvb, 0, 2, ENC_BIG_ENDIAN);
+  }
+
+#.FN_BODY EncryptionAlgorithms VAL_PTR = &parameter_tvb
+  tvbuff_t *parameter_tvb = NULL;
+%(DEFAULT_BODY)s
+  if(parameter_tvb){
+    const gint *fields[] = {
+      &hf_s1ap_encryptionAlgorithms_EEA1,
+      &hf_s1ap_encryptionAlgorithms_EEA2,
+      &hf_s1ap_encryptionAlgorithms_EEA3,
+      &hf_s1ap_encryptionAlgorithms_Reserved,
+      NULL
+    };
+    proto_tree *subtree = proto_item_add_subtree(actx->created_item, ett_s1ap_EncryptionAlgorithms);
+    proto_tree_add_bitmask_list(subtree, parameter_tvb, 0, 2, fields, ENC_BIG_ENDIAN);
+  }
+
+#.FN_BODY IntegrityProtectionAlgorithms VAL_PTR = &parameter_tvb
+  tvbuff_t *parameter_tvb = NULL;
+%(DEFAULT_BODY)s
+  if(parameter_tvb){
+    const gint *fields[] = {
+      &hf_s1ap_integrityProtectionAlgorithms_EIA1,
+      &hf_s1ap_integrityProtectionAlgorithms_EIA2,
+      &hf_s1ap_integrityProtectionAlgorithms_EIA3,
+      &hf_s1ap_integrityProtectionAlgorithms_Reserved,
+      NULL
+    };
+    proto_tree *subtree = proto_item_add_subtree(actx->created_item, ett_s1ap_IntegrityProtectionAlgorithms);
+    proto_tree_add_bitmask_list(subtree, parameter_tvb, 0, 2, fields, ENC_BIG_ENDIAN);
+  }
+
+#.FN_FTR Time-UE-StayedInCell
+  proto_item_append_text(actx->created_item, "s");
+
+#.TYPE_ATTR
+Time-UE-StayedInCell-EnhancedGranularity DISPLAY = BASE_CUSTOM STRINGS = CF_FUNC(s1ap_Time_UE_StayedInCell_EnhancedGranularity_fmt)
+
+#.FN_BODY LastVisitedUTRANCellInformation VAL_PTR = &parameter_tvb
+  tvbuff_t *parameter_tvb;
+  proto_tree *subtree;
+%(DEFAULT_BODY)s
+  if (!parameter_tvb)
+    return offset;
+
+  if (g_s1ap_dissect_container) {
+    subtree = proto_item_add_subtree(actx->created_item, ett_s1ap_LastVisitedUTRANCellInformation);
+    dissect_ranap_LastVisitedUTRANCell_Item_PDU(parameter_tvb, actx->pinfo, subtree, NULL);
+  }
+
+#.TYPE_ATTR
+MessageIdentifier TYPE = FT_UINT16 DISPLAY = BASE_DEC|BASE_EXT_STRING STRINGS = &lte_rrc_messageIdentifier_vals_ext
+
+#.FN_BODY MessageIdentifier VAL_PTR = &parameter_tvb HF_INDEX = -1
+  tvbuff_t *parameter_tvb = NULL;
+%(DEFAULT_BODY)s
+  if (parameter_tvb) {
+    actx->created_item = proto_tree_add_item(tree, hf_index, parameter_tvb, 0, 2, ENC_BIG_ENDIAN);
+  }
+
+#.FN_BODY SerialNumber VAL_PTR = &parameter_tvb
+  tvbuff_t *parameter_tvb = NULL;
+%(DEFAULT_BODY)s
+  if (parameter_tvb) {
+    proto_tree *subtree = proto_item_add_subtree(actx->created_item, ett_s1ap_SerialNumber);
+    proto_tree_add_item(subtree, hf_s1ap_SerialNumber_gs, parameter_tvb, 0, 2, ENC_BIG_ENDIAN);
+    proto_tree_add_item(subtree, hf_s1ap_SerialNumber_msg_code, parameter_tvb, 0, 2, ENC_BIG_ENDIAN);
+    proto_tree_add_item(subtree, hf_s1ap_SerialNumber_upd_nb, parameter_tvb, 0, 2, ENC_BIG_ENDIAN);
+  }
+
+#.FN_FTR RepetitionPeriod
+  proto_item_append_text(actx->created_item, "s");
+
+#.FN_BODY WarningType VAL_PTR = &parameter_tvb
+  tvbuff_t *parameter_tvb = NULL;
+%(DEFAULT_BODY)s
+  if (parameter_tvb) {
+    proto_tree *subtree = proto_item_add_subtree(actx->created_item, ett_s1ap_WarningType);
+    proto_tree_add_item(subtree, hf_s1ap_WarningType_value, parameter_tvb, 0, 2, ENC_BIG_ENDIAN);
+    proto_tree_add_item(subtree, hf_s1ap_WarningType_emergency_user_alert, parameter_tvb, 0, 2, ENC_BIG_ENDIAN);
+    proto_tree_add_item(subtree, hf_s1ap_WarningType_popup, parameter_tvb, 0, 2, ENC_BIG_ENDIAN);
+  }
+
+#.FN_BODY DataCodingScheme VAL_PTR = &parameter_tvb
+  tvbuff_t *parameter_tvb = NULL;
+%(DEFAULT_BODY)s
+  if (parameter_tvb) {
+    struct s1ap_private_data *s1ap_data = s1ap_get_private_data(actx->pinfo);
+    proto_tree *subtree;
+
+    subtree = proto_item_add_subtree(actx->created_item, ett_s1ap_DataCodingScheme);
+    s1ap_data->data_coding_scheme = dissect_cbs_data_coding_scheme(parameter_tvb, actx->pinfo, subtree, 0);
+  }
+
+#.FN_BODY WarningMessageContents VAL_PTR = &parameter_tvb
+  tvbuff_t *parameter_tvb = NULL;
+%(DEFAULT_BODY)s
+  if (parameter_tvb) {
+    struct s1ap_private_data *s1ap_data = s1ap_get_private_data(actx->pinfo);
+    proto_tree *subtree = proto_item_add_subtree(actx->created_item, ett_s1ap_WarningMessageContents);
+    dissect_s1ap_warningMessageContents(parameter_tvb, subtree, actx->pinfo, s1ap_data->data_coding_scheme);
+  }
+
+#.FN_BODY MSClassmark2 VAL_PTR = &parameter_tvb
+  tvbuff_t *parameter_tvb = NULL;
+%(DEFAULT_BODY)s
+  if (parameter_tvb) {
+    proto_tree *subtree = proto_item_add_subtree(actx->created_item, ett_s1ap_MSClassmark);
+    de_ms_cm_2(parameter_tvb, subtree, actx->pinfo, 0, tvb_reported_length(tvb), NULL, 0);
+  }
+
+#.FN_BODY MSClassmark3 VAL_PTR = &parameter_tvb
+  tvbuff_t *parameter_tvb = NULL;
+%(DEFAULT_BODY)s
+  if (parameter_tvb) {
+    proto_tree *subtree = proto_item_add_subtree(actx->created_item, ett_s1ap_MSClassmark);
+    de_ms_cm_3(parameter_tvb, subtree, actx->pinfo, 0, tvb_reported_length(tvb), NULL, 0);
+  }
+
+#.TYPE_ATTR
+EUTRANRoundTripDelayEstimationInfo DISPLAY = BASE_CUSTOM STRINGS = CF_FUNC(s1ap_EUTRANRoundTripDelayEstimationInfo_fmt)
+
+#.FN_FTR ExtendedRepetitionPeriod
+  proto_item_append_text(actx->created_item, "s");
+
+#.FN_BODY MeasurementsToActivate VAL_PTR = &parameter_tvb
+  tvbuff_t *parameter_tvb = NULL;
+%(DEFAULT_BODY)s
+  if(parameter_tvb){
+    const gint *fields[] = {
+      &hf_s1ap_measurementsToActivate_M1,
+      &hf_s1ap_measurementsToActivate_M2,
+      &hf_s1ap_measurementsToActivate_M3,
+      &hf_s1ap_measurementsToActivate_M4,
+      &hf_s1ap_measurementsToActivate_M5,
+      &hf_s1ap_measurementsToActivate_LoggingM1FromEventTriggered,
+      &hf_s1ap_measurementsToActivate_M6,
+      &hf_s1ap_measurementsToActivate_M7,
+      NULL
+    };
+    proto_tree *subtree = proto_item_add_subtree(actx->created_item, ett_s1ap_MeasurementsToActivate);
+    proto_tree_add_bitmask_list(subtree, parameter_tvb, 0, 1, fields, ENC_BIG_ENDIAN);
+  }
+
+#.FN_BODY MDT-Location-Info VAL_PTR = &parameter_tvb
+  tvbuff_t *parameter_tvb = NULL;
+%(DEFAULT_BODY)s
+  if(parameter_tvb){
+    const gint *fields[] = {
+      &hf_s1ap_MDT_Location_Info_GNSS,
+      &hf_s1ap_MDT_Location_Info_E_CID,
+      &hf_s1ap_MDT_Location_Info_Reserved,
+      NULL
+    };
+    proto_tree *subtree = proto_item_add_subtree(actx->created_item, ett_s1ap_MDT_Location_Info);
+    proto_tree_add_bitmask_list(subtree, parameter_tvb, 0, 1, fields, ENC_BIG_ENDIAN);
+  }
+
+#.TYPE_ATTR
+LHN-ID TYPE=FT_STRING DISPLAY = STR_UNICODE
+#.FN_BODY LHN-ID VAL_PTR = &parameter_tvb HF_INDEX = -1
+  tvbuff_t *parameter_tvb = NULL;
+%(DEFAULT_BODY)s
+  actx->created_item = proto_tree_add_item(tree, hf_index, parameter_tvb, 0, -1, ENC_UTF_8|ENC_NA);
+#.END
+
+#.FN_FTR ExpectedActivityPeriod
+proto_item_append_text(actx->created_item, "s");
+
+#.FN_FTR ExpectedIdlePeriod
+proto_item_append_text(actx->created_item, "s");
+
+#.FN_FTR Time-UE-StayedInCell
+  proto_item_append_text(actx->created_item, "s");
+
+#.TYPE_ATTR
+TAC TYPE = FT_UINT16 DISPLAY = BASE_DEC_HEX
+#.FN_BODY TAC VAL_PTR = &parameter_tvb HF_INDEX = -1
+  tvbuff_t *parameter_tvb = NULL;
+  struct s1ap_private_data *s1ap_data = s1ap_get_private_data(actx->pinfo);
+%(DEFAULT_BODY)s
+  if (parameter_tvb) {
+    actx->created_item = proto_tree_add_item(tree, hf_index, parameter_tvb, 0, 2, ENC_BIG_ENDIAN);
+    if (s1ap_data->supported_ta) {
+      s1ap_data->supported_ta->tac = tvb_get_ntohs(parameter_tvb, 0);
+    } else if (s1ap_data->tai) {
+      s1ap_data->tai->tac = tvb_get_ntohs(parameter_tvb, 0);
+    }
+  }
+
+#.TYPE_ATTR
+LAC TYPE = FT_UINT16 DISPLAY = BASE_DEC_HEX
+#.FN_BODY LAC VAL_PTR = &parameter_tvb HF_INDEX = -1
+  tvbuff_t *parameter_tvb = NULL;
+%(DEFAULT_BODY)s
+  if (parameter_tvb) {
+    actx->created_item = proto_tree_add_item(tree, hf_index, parameter_tvb, 0, 2, ENC_BIG_ENDIAN);
+  }
+
+#.TYPE_ATTR
+RAC TYPE = FT_UINT8 DISPLAY = BASE_DEC_HEX
+#.FN_BODY RAC VAL_PTR = &parameter_tvb HF_INDEX = -1
+  tvbuff_t *parameter_tvb = NULL;
+%(DEFAULT_BODY)s
+  if (parameter_tvb) {
+    actx->created_item = proto_tree_add_item(tree, hf_index, parameter_tvb, 0, 1, ENC_BIG_ENDIAN);
+  }
+
+#.TYPE_ATTR
+M-TMSI TYPE = FT_UINT32 DISPLAY = BASE_DEC_HEX
+#.FN_BODY M-TMSI VAL_PTR = &parameter_tvb HF_INDEX = -1
+  tvbuff_t *parameter_tvb = NULL;
+%(DEFAULT_BODY)s
+  if (parameter_tvb) {
+    actx->created_item = proto_tree_add_item(tree, hf_index, parameter_tvb, 0, 4, ENC_BIG_ENDIAN);
+  }
+
+#.FN_BODY IMSI VAL_PTR = &parameter_tvb
+  tvbuff_t *parameter_tvb;
+%(DEFAULT_BODY)s
+  if (parameter_tvb) {
+    proto_tree *subtree = proto_item_add_subtree(actx->created_item, ett_s1ap_IMSI);
+    dissect_e212_imsi(parameter_tvb, actx->pinfo, subtree, 0, tvb_reported_length(parameter_tvb), FALSE);
+  }
+
+#.FN_BODY NASSecurityParametersfromE-UTRAN VAL_PTR = &parameter_tvb
+  tvbuff_t *parameter_tvb;
+%(DEFAULT_BODY)s
+  if (parameter_tvb) {
+    proto_tree *subtree = proto_item_add_subtree(actx->created_item, ett_s1ap_NASSecurityParameters);
+    de_emm_sec_par_from_eutra(parameter_tvb, subtree, actx->pinfo, 0, tvb_reported_length(parameter_tvb), NULL, 0);
+  }
+
+#.FN_BODY NASSecurityParameterstoE-UTRAN VAL_PTR = &parameter_tvb
+  tvbuff_t *parameter_tvb;
+%(DEFAULT_BODY)s
+  if (parameter_tvb) {
+    proto_tree *subtree = proto_item_add_subtree(actx->created_item, ett_s1ap_NASSecurityParameters);
+    de_emm_sec_par_to_eutra(parameter_tvb, subtree, actx->pinfo, 0, tvb_reported_length(parameter_tvb), NULL, 0);
+  }
+
+#.FN_HDR SupportedTAs-Item
+  struct s1ap_private_data *s1ap_data = s1ap_get_private_data(actx->pinfo);
+
+  if (!PINFO_FD_VISITED(actx->pinfo) &&
+      (s1ap_data->message_type == INITIATING_MESSAGE) &&
+      ((s1ap_data->procedure_code == id_S1Setup) ||
+       (s1ap_data->procedure_code == id_ENBConfigurationUpdate))) {
+    s1ap_data->supported_ta = wmem_new0(wmem_packet_scope(), struct s1ap_supported_ta);
+    s1ap_data->supported_ta->plmn = wmem_array_new(wmem_packet_scope(), sizeof(guint32));
+  }
+
+#.FN_FTR SupportedTAs-Item
+  s1ap_data->supported_ta = NULL;
+
+#.FN_BODY RAT-Type VAL_PTR = &rat_type
+  guint32 rat_type = 0xffffffff;
+  struct s1ap_private_data *s1ap_data = s1ap_get_private_data(actx->pinfo);
+%(DEFAULT_BODY)s
+  if (s1ap_data->s1ap_conv && s1ap_data->supported_ta && (rat_type == nbiot)) {
+    guint64 *key;
+    guint i;
+
+    for (i = 0; i < wmem_array_get_count(s1ap_data->supported_ta->plmn); i++) {
+      key = wmem_new(wmem_file_scope(), guint64);
+      *key = ((*(guint32*)wmem_array_index(s1ap_data->supported_ta->plmn, i)) << 16) | s1ap_data->supported_ta->tac;
+      wmem_map_insert(s1ap_data->s1ap_conv->nbiot_ta, key, GUINT_TO_POINTER(1));
+    }
+  }
+
+#.FN_BODY ENB-UE-S1AP-ID VAL_PTR = &enb_ue_s1ap_id
+  guint32 enb_ue_s1ap_id;
+  struct s1ap_private_data *s1ap_data = s1ap_get_private_data(actx->pinfo);
+%(DEFAULT_BODY)s
+  s1ap_data->enb_ue_s1ap_id = (guint16)enb_ue_s1ap_id;
+
+#.FN_BODY TAI
+  struct s1ap_private_data *s1ap_data = s1ap_get_private_data(actx->pinfo);
+
+  s1ap_data->tai = wmem_new0(wmem_packet_scope(), struct s1ap_tai);
+%(DEFAULT_BODY)s
+  if (!PINFO_FD_VISITED(actx->pinfo) && s1ap_data->s1ap_conv &&
+      (s1ap_data->message_type == INITIATING_MESSAGE) &&
+      (s1ap_data->procedure_code == id_initialUEMessage)) {
+    guint64 key = (s1ap_data->tai->plmn << 16) | s1ap_data->tai->tac;
+
+    if (wmem_map_lookup(s1ap_data->s1ap_conv->nbiot_ta, &key)) {
+      wmem_tree_key_t tree_key[3];
+      guint32 *id = wmem_new(wmem_file_scope(), guint32);
+
+      *id = s1ap_data->enb_ue_s1ap_id;
+      tree_key[0].length = 1;
+      tree_key[0].key = id;
+      tree_key[1].length = 1;
+      tree_key[1].key = &actx->pinfo->num;
+      tree_key[2].length = 0;
+      tree_key[2].key = NULL;
+      wmem_tree_insert32_array(s1ap_data->s1ap_conv->nbiot_enb_ue_s1ap_id, tree_key, id);
+    }
+  }
 
 #.ASSIGN_VALUE_TO_TYPE  # S1AP does not have constants assigned to types, they are pure INTEGER
 # ProcedureCode
@@ -869,6 +1370,9 @@ id-E-RABFailedToResumeListResumeRes                 ProtocolIE-ID
 id-E-RABFailedToResumeItemResumeRes                 ProtocolIE-ID
 id-NB-IoT-Paging-eDRXInformation                    ProtocolIE-ID
 id-UEUserPlaneCIoTSupportIndicator                  ProtocolIE-ID
+id-CE-mode-B-SupportIndicator                       ProtocolIE-ID
+id-SRVCCOperationNotPossible                        ProtocolIE-ID
+id-NB-IoT-UEIdentityIndexValue                      ProtocolIE-ID
 #.END
 
 #.REGISTER
@@ -1047,14 +1551,12 @@ RecommendedENBItem                              N s1ap.ies id-RecommendedENBItem
 PWSfailedECGIList                               N s1ap.ies id-PWSfailedECGIList
 MME-Group-ID                                    N s1ap.ies id-MME-Group-ID
 Additional-GUTI                                 N s1ap.ies id-Additional-GUTI
-#OCTET STRING                                   N s1ap.ies id-S1-Message
+S1-Message                                      N s1ap.ies id-S1-Message
 CSGMembershipInfo                               N s1ap.ies id-CSGMembershipInfo
 Paging-eDRXInformation                          N s1ap.ies id-Paging-eDRXInformation
 UE-RetentionInformation                         N s1ap.ies id-UE-RetentionInformation
 UE-Usage-Type                                   N s1ap.ies id-UE-Usage-Type
 Extended-UEIdentityIndexValue                   N s1ap.ies id-extended-UEIdentityIndexValue
-RAT-Type                                        N s1ap.extension id-RAT-Type
-BearerType                                      N s1ap.extension id-BearerType
 NB-IoT-DefaultPagingDRX                         N s1ap.ies id-NB-IoT-DefaultPagingDRX
 E-RABFailedToResumeListResumeReq                N s1ap.ies id-E-RABFailedToResumeListResumeReq
 E-RABFailedToResumeItemResumeReq                N s1ap.ies id-E-RABFailedToResumeItemResumeReq
@@ -1062,7 +1564,10 @@ E-RABFailedToResumeListResumeRes                N s1ap.ies id-E-RABFailedToResum
 E-RABFailedToResumeItemResumeRes                N s1ap.ies id-E-RABFailedToResumeItemResumeRes
 NB-IoT-Paging-eDRXInformation                   N s1ap.ies id-NB-IoT-Paging-eDRXInformation
 UEUserPlaneCIoTSupportIndicator                 N s1ap.ies id-UEUserPlaneCIoTSupportIndicator
-
+CE-mode-B-SupportIndicator                      N s1ap.ies id-CE-mode-B-SupportIndicator
+NB-IoT-UEIdentityIndexValue                     N s1ap.ies id-NB-IoT-UEIdentityIndexValue
+SRVCCOperationPossible                          N s1ap.ies id-SRVCCOperationPossible
+SRVCCOperationNotPossible                       N s1ap.ies id-SRVCCOperationNotPossible
 
 #S1AP-PROTOCOL-IES-PAIR
 #RAB-SetupOrModifyItemFirst             N s1ap.ies.pair.first id-RAB-SetupOrModifyItem
@@ -1103,6 +1608,8 @@ COUNTvaluePDCP-SNlength18               N s1ap.extension id-DLCOUNTValuePDCP-SNl
 ReceiveStatusOfULPDCPSDUsPDCP-SNlength18 N s1ap.extension id-ReceiveStatusOfULPDCPSDUsPDCP-SNlength18
 M6Configuration                         N s1ap.extension id-M6Configuration
 M7Configuration                         N s1ap.extension id-M7Configuration
+RAT-Type                                N s1ap.extension id-RAT-Type
+BearerType                              N s1ap.extension id-BearerType
 
 #S1AP-ELEMENTARY-PROCEDURE
 HandoverRequired                        N s1ap.proc.imsg id-HandoverPreparation
@@ -1249,136 +1756,182 @@ UEContextResumeRequest                  N s1ap.proc.imsg id-UEContextResume
 UEContextResumeResponse                 N s1ap.proc.sout id-UEContextResume
 UEContextResumeFailure                  N s1ap.proc.uout id-UEContextResume
 
-#.FN_HDR E-RABSetupRequest
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", E_RABSetupRequest ");
-#.FN_HDR E-RABSetupResponse
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", E_RABSetupResponse ");
-#.FN_HDR E-RABModifyRequest
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", E_RABModifyRequest ");
-#.FN_HDR E-RABModifyResponse
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", E_RABModifyResponse ");
-#.FN_HDR E-RABReleaseCommand
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", E_RABReleaseCommand ");
-#.FN_HDR E-RABReleaseResponse
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", E_RABReleaseResponse ");
-#.FN_HDR E-RABReleaseIndication
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", E_RABReleaseIndication ");
-
-#.FN_HDR InitialContextSetupRequest
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", InitialContextSetupRequest ");
-#.FN_HDR InitialContextSetupResponse
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", InitialContextSetupResponse ");
-#.FN_HDR InitialContextSetupFailure
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", InitialContextSetupFailure ");
-#.FN_HDR UEContextReleaseRequest
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", UEContextReleaseRequest ");
-#.FN_HDR UEContextReleaseCommand
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", UEContextReleaseCommand ");
-#.FN_HDR UEContextReleaseComplete
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", UEContextReleaseComplete ");
-#.FN_HDR UEContextModificationRequest
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", UEContextModificationRequest ");
-#.FN_HDR UEContextModificationResponse
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", UEContextModificationResponse ");
-#.FN_HDR UEContextModificationFailure
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", UEContextModificationFailure ");
 
 #.FN_HDR HandoverRequired
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", HandoverRequired ");
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "HandoverRequired");
 #.FN_HDR HandoverCommand
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", HandoverCommand ");
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "HandoverCommand");
 #.FN_HDR HandoverPreparationFailure
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", HandoverPreparationFailure ");
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "HandoverPreparationFailure");
 #.FN_HDR HandoverRequest
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", HandoverRequest ");
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "HandoverRequest");
 #.FN_HDR HandoverRequestAcknowledge
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", HandoverRequestAcknowledge ");
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "HandoverRequestAcknowledge");
 #.FN_HDR HandoverFailure
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", HandoverFailure ");
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "HandoverFailure");
 #.FN_HDR HandoverNotify
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", HandoverNotify ");
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "HandoverNotify");
 #.FN_HDR PathSwitchRequest
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", PathSwitchRequest ");
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "PathSwitchRequest");
 #.FN_HDR PathSwitchRequestAcknowledge
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", PathSwitchRequestAcknowledge ");
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "PathSwitchRequestAcknowledge");
 #.FN_HDR PathSwitchRequestFailure
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", PathSwitchRequestFailure ");
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "PathSwitchRequestFailure");
 #.FN_HDR HandoverCancel
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", HandoverCancel ");
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "HandoverCancel");
 #.FN_HDR HandoverCancelAcknowledge
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", HandoverCancelAcknowledge ");
-
-
-#.FN_HDR Reset
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", Reset ");
-#.FN_HDR ResetAcknowledge
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", ResetAcknowledge ");
-# FN_HDR ErrorIndication
-#  col_append_str(actx->pinfo->cinfo, COL_INFO, ", ErrorIndication ");
-#.FN_HDR S1SetupRequest
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", S1SetupRequest ");
-#.FN_HDR S1SetupResponse
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", S1SetupResponse ");
-#.FN_HDR S1SetupFailure
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", S1SetupFailure ");
-#.FN_HDR ENBConfigurationUpdate
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", ENBConfigurationUpdate ");
-#.FN_HDR ENBConfigurationUpdateAcknowledge
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", ENBConfigurationUpdateAcknowledge ");
-#.FN_HDR ENBConfigurationUpdateFailure
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", ENBConfigurationUpdateFailure ");
-#.FN_HDR MMEConfigurationUpdate
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", MMEConfigurationUpdate ");
-#.FN_HDR MMEConfigurationUpdateAcknowledge
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", MMEConfigurationUpdateAcknowledge ");
-#.FN_HDR MMEConfigurationUpdateFailure
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", MMEConfigurationUpdateFailure ");
-
-#.FN_HDR WriteReplaceWarningRequest
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", WriteReplaceWarningRequest ");
-#.FN_HDR WriteReplaceWarningResponse
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", WriteReplaceWarningResponse ");
-#.FN_HDR KillRequest
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", KillRequest ");
-#.FN_HDR KillResponse
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", KillResponse ");
-
-#.FN_HDR DownlinkUEAssociatedLPPaTransport
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", DownlinkUEAssociatedLPPaTransport ");
-
-#.FN_HDR UplinkUEAssociatedLPPaTransport
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", UplinkUEAssociatedLPPaTransport ");
-
-#.FN_HDR DownlinkNonUEAssociatedLPPaTransport
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", DownlinkNonUEAssociatedLPPaTransport ");
-
-#.FN_HDR UplinkNonUEAssociatedLPPaTransport
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", UplinkNonUEAssociatedLPPaTransport ");
-
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "HandoverCancelAcknowledge");
+#.FN_HDR E-RABSetupRequest
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "E-RABSetupRequest");
+#.FN_HDR E-RABSetupResponse
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "E-RABSetupResponse");
+#.FN_HDR E-RABModifyRequest
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "E-RABModifyRequest");
+#.FN_HDR E-RABModifyResponse
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "E-RABModifyResponse");
+#.FN_HDR E-RABReleaseCommand
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "E-RABReleaseCommand");
+#.FN_HDR E-RABReleaseResponse
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "E-RABReleaseResponse");
+#.FN_HDR E-RABReleaseIndication
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "E-RABReleaseIndication");
+#.FN_HDR InitialContextSetupRequest
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "InitialContextSetupRequest");
+#.FN_HDR InitialContextSetupResponse
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "InitialContextSetupResponse");
+#.FN_HDR InitialContextSetupFailure
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "InitialContextSetupFailure");
+#.FN_HDR Paging
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "Paging");
+#.FN_HDR UEContextReleaseRequest
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "UEContextReleaseRequest");
+#.FN_HDR UEContextReleaseCommand
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "UEContextReleaseCommand");
+#.FN_HDR UEContextReleaseComplete
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "UEContextReleaseComplete");
+#.FN_HDR UEContextModificationRequest
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "UEContextModificationRequest");
+#.FN_HDR UEContextModificationResponse
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "UEContextModificationResponse");
+#.FN_HDR UEContextModificationFailure
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "UEContextModificationFailure");
 #.FN_HDR UERadioCapabilityMatchRequest
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", UERadioCapabilityMatchRequest ");
-
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "UERadioCapabilityMatchRequest");
 #.FN_HDR UERadioCapabilityMatchResponse
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", UERadioCapabilityMatchResponse ");
-
-#.FN_HDR E-RABModificationIndication
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", E-RABModificationIndication ");
-
-#.FN_HDR E-RABModificationConfirm
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", E-RABModificationConfirm ");
-
-#.FN_HDR UEContextModificationIndication
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", UEContextModificationIndication ");
-
-#.FN_HDR UEContextModificationConfirm
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", UEContextModificationConfirm ");
-
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "UERadioCapabilityMatchResponse");
+#.FN_HDR DownlinkNASTransport
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "DownlinkNASTransport");
+#.FN_HDR InitialUEMessage
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "InitialUEMessage");
+#.FN_HDR UplinkNASTransport
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "UplinkNASTransport");
+#.FN_HDR NASNonDeliveryIndication
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "NASNonDeliveryIndication");
 #.FN_HDR RerouteNASRequest
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", RerouteNASRequest ");
-
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "RerouteNASRequest");
+#.FN_HDR Reset
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "Reset");
+#.FN_HDR ResetAcknowledge
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "ResetAcknowledge");
+# FN_HDR ErrorIndication
+#col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "ErrorIndication");
+#.FN_HDR S1SetupRequest
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "S1SetupRequest");
+#.FN_HDR S1SetupResponse
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "S1SetupResponse");
+#.FN_HDR S1SetupFailure
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "S1SetupFailure");
+#.FN_HDR ENBConfigurationUpdate
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "ENBConfigurationUpdate");
+#.FN_HDR ENBConfigurationUpdateAcknowledge
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "ENBConfigurationUpdateAcknowledge");
+#.FN_HDR ENBConfigurationUpdateFailure
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "ENBConfigurationUpdateFailure");
+#.FN_HDR MMEConfigurationUpdate
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "MMEConfigurationUpdate");
+#.FN_HDR MMEConfigurationUpdateAcknowledge
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "MMEConfigurationUpdateAcknowledge");
+#.FN_HDR MMEConfigurationUpdateFailure
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "MMEConfigurationUpdateFailure");
+#.FN_HDR DownlinkS1cdma2000tunnelling
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "DownlinkS1cdma2000tunnelling");
+#.FN_HDR UplinkS1cdma2000tunnelling
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "UplinkS1cdma2000tunnelling");
+#.FN_HDR UECapabilityInfoIndication
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "UECapabilityInfoIndication");
+#.FN_HDR ENBStatusTransfer
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "ENBStatusTransfer");
+#.FN_HDR MMEStatusTransfer
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "MMEStatusTransfer");
+#.FN_HDR TraceStart
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "TraceStart");
+#.FN_HDR TraceFailureIndication
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "TraceFailureIndication");
+#.FN_HDR DeactivateTrace
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "DeactivateTrace");
+#.FN_HDR CellTrafficTrace
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "CellTrafficTrace");
+#.FN_HDR LocationReportingControl
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "LocationReportingControl");
+#.FN_HDR LocationReportingFailureIndication
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "LocationReportingFailureIndication");
+#.FN_HDR LocationReport
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "LocationReport");
+#.FN_HDR OverloadStart
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "OverloadStart");
+#.FN_HDR OverloadStop
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "OverloadStop");
+#.FN_HDR WriteReplaceWarningRequest
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "WriteReplaceWarningRequest");
+#.FN_HDR WriteReplaceWarningResponse
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "WriteReplaceWarningResponse");
+#.FN_HDR ENBDirectInformationTransfer
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "ENBDirectInformationTransfer");
+#.FN_HDR MMEDirectInformationTransfer
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "MMEDirectInformationTransfer");
+#.FN_HDR ENBConfigurationTransfer
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "ENBConfigurationTransfer");
+#.FN_HDR MMEConfigurationTransfer
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "MMEConfigurationTransfer");
+#.FN_HDR PrivateMessage
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "PrivateMessage");
+#.FN_HDR KillRequest
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "KillRequest");
+#.FN_HDR KillResponse
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "KillResponse");
+#.FN_HDR PWSRestartIndication
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "PWSRestartIndication");
 #.FN_HDR PWSFailureIndication
-  col_append_str(actx->pinfo->cinfo, COL_INFO, ", PWSFailureIndication ");
-
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "PWSFailureIndication");
+#.FN_HDR DownlinkUEAssociatedLPPaTransport
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "DownlinkUEAssociatedLPPaTransport");
+#.FN_HDR UplinkUEAssociatedLPPaTransport
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "UplinkUEAssociatedLPPaTransport");
+#.FN_HDR DownlinkNonUEAssociatedLPPaTransport
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "DownlinkNonUEAssociatedLPPaTransport");
+#.FN_HDR UplinkNonUEAssociatedLPPaTransport
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "UplinkNonUEAssociatedLPPaTransport");
+#.FN_HDR E-RABModificationIndication
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "E-RABModificationIndication");
+#.FN_HDR E-RABModificationConfirm
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "E-RABModificationConfirm");
+#.FN_HDR UEContextModificationIndication
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "UEContextModificationIndication");
+#.FN_HDR UEContextModificationConfirm
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "UEContextModificationConfirm");
+#.FN_HDR UEContextSuspendRequest
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "UEContextSuspendRequest");
+#.FN_HDR UEContextSuspendResponse
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "UEContextSuspendResponse");
+#.FN_HDR UEContextResumeRequest
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "UEContextResumeRequest");
+#.FN_HDR UEContextResumeResponse
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "UEContextResumeResponse");
+#.FN_HDR UEContextResumeFailure
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "UEContextResumeFailure");
+#.FN_HDR ConnectionEstablishmentIndication
+col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "ConnectionEstablishmentIndication");
+#.END
 
 /* Whenever a Cause appears, look up the reason and show it in the Info column */
 
@@ -1400,7 +1953,7 @@ UEContextResumeFailure                  N s1ap.proc.uout id-UEContextResume
 #.FN_BODY CauseProtocol VAL_PTR=&value
   guint32 value;
 %(DEFAULT_BODY)s
-  col_append_fstr(actx->pinfo->cinfo, COL_INFO, " [Protocol-cause=%%s]", val_to_str_const(value, s1ap_CauseProtocol_vals, "Unknown"));     
+  col_append_fstr(actx->pinfo->cinfo, COL_INFO, " [Protocol-cause=%%s]", val_to_str_const(value, s1ap_CauseProtocol_vals, "Unknown"));
 
 #.FN_BODY CauseMisc VAL_PTR=&value
   guint32 value;

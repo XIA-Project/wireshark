@@ -623,6 +623,7 @@ void MainWindow::captureCaptureUpdateFinished(capture_session *) {
     /* Enable menu items that make sense if you're not currently running
      a capture. */
     setForCaptureInProgress(false);
+    setMenusForCaptureFile();
 
     setWindowIcon(wsApp->normalIcon());
 
@@ -646,6 +647,7 @@ void MainWindow::captureCaptureFixedFinished(capture_session *) {
     /* Enable menu items that make sense if you're not currently running
      a capture. */
     setForCaptureInProgress(false);
+    setMenusForCaptureFile();
 
     setWindowIcon(wsApp->normalIcon());
 
@@ -671,6 +673,10 @@ void MainWindow::captureCaptureFailed(capture_session *) {
     setForCaptureInProgress(false);
     main_ui_->mainStack->setCurrentWidget(main_welcome_);
 
+    // Reset expert information indicator
+    main_ui_->statusBar->captureFileClosing();
+    main_ui_->statusBar->popFileStatus();
+
     setWindowIcon(wsApp->normalIcon());
 
     if (global_commandline_info.quit_after_cap) {
@@ -687,9 +693,7 @@ void MainWindow::captureCaptureFailed(capture_session *) {
 void MainWindow::captureFileOpened() {
     if (capture_file_.window() != this) return;
 
-    if (file_set_dialog_) {
-        file_set_dialog_->fileOpened(capture_file_.capFile());
-    }
+    file_set_dialog_->fileOpened(capture_file_.capFile());
     setMenusForFileSet(true);
     emit setCaptureFile(capture_file_.capFile());
 }
@@ -769,15 +773,12 @@ void MainWindow::captureFileClosing() {
 void MainWindow::captureFileClosed() {
     packets_bar_update();
 
-    if (file_set_dialog_) {
-        file_set_dialog_->fileClosed();
-    }
+    file_set_dialog_->fileClosed();
     setMenusForFileSet(false);
     setWindowModified(false);
 
     // Reset expert information indicator
     main_ui_->statusBar->captureFileClosing();
-
     main_ui_->statusBar->popFileStatus();
 
     setWSWindowTitle();
@@ -1680,12 +1681,6 @@ void MainWindow::on_actionFileSaveAs_triggered()
 
 void MainWindow::on_actionFileSetListFiles_triggered()
 {
-    if (!file_set_dialog_) {
-        file_set_dialog_ = new FileSetDialog(this);
-        connect(file_set_dialog_, SIGNAL(fileSetOpenCaptureFile(QString)),
-                this, SLOT(openCaptureFile(QString)));
-    }
-
     file_set_dialog_->show();
 }
 
@@ -2003,7 +1998,7 @@ void MainWindow::on_actionEditCopyAsFilter_triggered()
 
 void MainWindow::on_actionEditFindPacket_triggered()
 {
-    if (packet_list_->model()->rowCount() < 1) {
+    if (packet_list_->packetListModel()->rowCount() < 1) {
         return;
     }
     previous_focus_ = wsApp->focusWidget();
@@ -3428,7 +3423,7 @@ void MainWindow::on_actionHelpAbout_triggered()
 }
 
 void MainWindow::on_actionGoGoToPacket_triggered() {
-    if (packet_list_->model()->rowCount() < 1) {
+    if (packet_list_->packetListModel()->rowCount() < 1) {
         return;
     }
     previous_focus_ = wsApp->focusWidget();
@@ -3647,18 +3642,13 @@ void MainWindow::on_actionCaptureOptions_triggered()
         connect(capture_interfaces_dialog_, SIGNAL(stopCapture()), this, SLOT(stopCapture()));
 
         connect(capture_interfaces_dialog_, SIGNAL(getPoints(int,PointList*)),
-                this->main_welcome_->getInterfaceTree(), SLOT(getPoints(int,PointList*)));
-        // Changes in interface selections or capture filters should be propagated
-        // to the main welcome screen where they will be applied to the global
-        // capture options.
-        connect(capture_interfaces_dialog_, SIGNAL(interfaceListChanged()),
-                this->main_welcome_->getInterfaceTree(), SLOT(interfaceListChanged()));
+                this->main_welcome_->getInterfaceFrame(), SLOT(getPoints(int,PointList*)));
         connect(capture_interfaces_dialog_, SIGNAL(interfacesChanged()),
                 this->main_welcome_, SLOT(interfaceSelected()));
         connect(capture_interfaces_dialog_, SIGNAL(interfacesChanged()),
-                this->main_welcome_->getInterfaceTree(), SLOT(updateSelectedInterfaces()));
-        connect(capture_interfaces_dialog_, SIGNAL(interfacesChanged()),
-                this->main_welcome_->getInterfaceTree(), SLOT(updateToolTips()));
+                this->main_welcome_->getInterfaceFrame(), SLOT(updateSelectedInterfaces()));
+        connect(capture_interfaces_dialog_, SIGNAL(interfaceListChanged()),
+                this->main_welcome_->getInterfaceFrame(), SLOT(interfaceListChanged()));
         connect(capture_interfaces_dialog_, SIGNAL(captureFilterTextEdited(QString)),
                 this->main_welcome_, SLOT(setCaptureFilterText(QString)));
 
@@ -3721,7 +3711,7 @@ void MainWindow::extcap_options_finished(int result)
     if (result == QDialog::Accepted) {
         startCapture();
     }
-    this->main_welcome_->getInterfaceTree()->interfaceListChanged();
+    this->main_welcome_->getInterfaceFrame()->interfaceListChanged();
 }
 
 void MainWindow::showExtcapOptionsDialog(QString &device_name)
@@ -3786,6 +3776,16 @@ void MainWindow::on_actionContextCopyBytesBinary_triggered()
     field_info *fi = ca->data().value<field_info *>();
 
     byte_view_tab_->copyData(ByteViewTab::copyDataBinary, fi);
+}
+
+void MainWindow::on_actionContextCopyBytesEscapedString_triggered()
+{
+    QAction *ca = qobject_cast<QAction*>(sender());
+    if (!ca) return;
+
+    field_info *fi = ca->data().value<field_info *>();
+
+    byte_view_tab_->copyData(ByteViewTab::copyDataEscapedString, fi);
 }
 
 void MainWindow::on_actionContextWikiProtocolPage_triggered()

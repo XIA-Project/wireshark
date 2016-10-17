@@ -69,6 +69,7 @@
 #include "packet-bssgp.h"
 #include "packet-e212.h"
 #include "packet-gtp.h"
+#include "packet-ranap.h"
 
 void proto_register_gtp(void);
 void proto_reg_handoff_gtp(void);
@@ -222,11 +223,6 @@ static int hf_gtp_ulink_teid_cp = -1;
 static int hf_gtp_teid_data = -1;
 static int hf_gtp_ulink_teid_data = -1;
 static int hf_gtp_teid_ii = -1;
-static int hf_gtp_tft_code = -1;
-static int hf_gtp_tft_spare = -1;
-static int hf_gtp_tft_number = -1;
-static int hf_gtp_tft_eval = -1;
-static int hf_gtp_tft_content_id = -1;
 static int hf_gtp_tid = -1;
 static int hf_gtp_tlli = -1;
 static int hf_gtp_tr_comm = -1;
@@ -335,7 +331,6 @@ static int hf_gtp_xres_length = -1;
 static int hf_gtp_ggsn_address_length = -1;
 static int hf_gtp_apn_length = -1;
 static int hf_gtp_sequence_number_down = -1;
-static int hf_gtp_tft_packet_filter_id = -1;
 static int hf_gtp_ggsn_2_address_ipv6 = -1;
 static int hf_gtp_pdp_address_ipv4 = -1;
 static int hf_gtp_activity_status_indicator = -1;
@@ -343,7 +338,6 @@ static int hf_gtp_pdp_type = -1;
 static int hf_gtp_ggsn_address_for_user_traffic = -1;
 static int hf_gtp_quintuplet_integrity_key = -1;
 static int hf_gtp_pdp_address_ipv6 = -1;
-static int hf_gtp_tft_content_length = -1;
 static int hf_gtp_rab_setup_length = -1;
 static int hf_gtp_number_of_data_records = -1;
 static int hf_gtp_ciphering_key_kc = -1;
@@ -385,8 +379,6 @@ static gint ett_gtp_quint = -1;
 static gint ett_gtp_proto = -1;
 static gint ett_gtp_gsn_addr = -1;
 static gint ett_gtp_tft = -1;
-static gint ett_gtp_tft_pf = -1;
-static gint ett_gtp_tft_flags = -1;
 static gint ett_gtp_rab_setup = -1;
 static gint ett_gtp_hdr_list = -1;
 static gint ett_gtp_node_addr = -1;
@@ -400,6 +392,7 @@ static gint ett_gtp_cdr_ver = -1;
 static gint ett_gtp_cdr_dr = -1;
 static gint ett_gtp_uli_rai = -1;
 static gint ett_gtp_mm_cntxt = -1;
+static gint ett_gtp_utran_cont = -1;
 
 static expert_field ei_gtp_ext_hdr_pdcpsn = EI_INIT;
 static expert_field ei_gtp_ext_length_mal = EI_INIT;
@@ -489,11 +482,6 @@ static const value_string next_extension_header_fieldvals[] = {
 #define GTP_MASK_CHRG_CHAR_F    0x0200
 #define GTP_MASK_CHRG_CHAR_H    0x0100
 #define GTP_MASK_CHRG_CHAR_R    0x00FF
-
-/* Traffic Flow Templates  mask */
-#define GTPv1_TFT_CODE_MASK 0xE0
-#define GTPv1_TFT_SPARE_MASK    0x10
-#define GTPv1_TFT_NUMBER_MASK   0x0F
 
 /* Definition of GSN Address masks */
 #define GTP_EXT_GSN_ADDR_TYPE_MASK      0xC0
@@ -1746,6 +1734,9 @@ static const value_string gtp_ext_rat_type_vals[] = {
     {3, "WLAN"},
     {4, "GAN"},
     {5, "HSPA Evolution"},
+    {6, "EUTRAN (WB-E-UTRAN)"},
+    {7, "Virtual"},
+    {8, "EUTRAN-NB-IoT"},
     {0, NULL}
 };
 static const value_string chg_rep_act_type_vals[] = {
@@ -1766,18 +1757,6 @@ static const value_string chg_rep_act_type_vals[] = {
 #define MM_PROTO_SMS                    0x09
 #define MM_PROTO_SESSION_MGMT           0x0A
 #define MM_PROTO_NON_CALL_RELATED       0x0B
-
-static const value_string tft_code_type[] = {
-    {0, "Spare"},
-    {1, "Create new TFT"},
-    {2, "Delete existing TFT"},
-    {3, "Add packet filters to existing TFT"},
-    {4, "Replace packet filters in existing TFT"},
-    {5, "Delete packet filters from existing TFT"},
-    {6, "Reserved"},
-    {7, "Reserved"},
-    {0, NULL}
-};
 
 static void
 gtpstat_init(struct register_srt* srt _U_, GArray* srt_array, srt_gui_init_cb gui_callback, void* gui_data)
@@ -3393,6 +3372,7 @@ gtp_match_response(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, gint 
     case GTP_MSG_CREATE_PDP_REQ:
     case GTP_MSG_UPDATE_PDP_REQ:
     case GTP_MSG_DELETE_PDP_REQ:
+    case GTP_MSG_FORW_RELOC_REQ:
         gcr.is_request=TRUE;
         gcr.req_frame=pinfo->num;
         gcr.rep_frame=0;
@@ -3401,6 +3381,7 @@ gtp_match_response(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, gint 
     case GTP_MSG_CREATE_PDP_RESP:
     case GTP_MSG_UPDATE_PDP_RESP:
     case GTP_MSG_DELETE_PDP_RESP:
+    case GTP_MSG_FORW_RELOC_RESP:
         gcr.is_request=FALSE;
         gcr.req_frame=0;
         gcr.rep_frame=pinfo->num;
@@ -3426,6 +3407,7 @@ gtp_match_response(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, gint 
         case GTP_MSG_CREATE_PDP_REQ:
         case GTP_MSG_UPDATE_PDP_REQ:
         case GTP_MSG_DELETE_PDP_REQ:
+        case GTP_MSG_FORW_RELOC_REQ:
             gcr.seq_nr=seq_nr;
 
             gcrp=(gtp_msg_hash_t *)g_hash_table_lookup(gtp_info->unmatched, &gcr);
@@ -3449,6 +3431,7 @@ gtp_match_response(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, gint 
         case GTP_MSG_CREATE_PDP_RESP:
         case GTP_MSG_UPDATE_PDP_RESP:
         case GTP_MSG_DELETE_PDP_RESP:
+        case GTP_MSG_FORW_RELOC_RESP:
             gcr.seq_nr=seq_nr;
             gcrp=(gtp_msg_hash_t *)g_hash_table_lookup(gtp_info->unmatched, &gcr);
 
@@ -5507,138 +5490,20 @@ decode_gtp_auth_qui(tvbuff_t * tvb, int offset, packet_info * pinfo _U_, proto_t
 static int
 decode_gtp_tft(tvbuff_t * tvb, int offset, packet_info * pinfo _U_, proto_tree * tree, session_args_t * args _U_)
 {
-
-    guint16            length, port1, port2, tos;
-    guint8             tft_flags, tft_code, no_packet_filters, i, pf_eval, pf_len, pf_content_id, proto;
-    guint              pf_offset;
-    guint32            ipsec_id, label;
-    proto_tree        *ext_tree_tft, *ext_tree_tft_pf, *ext_tree_tft_flags;
-    proto_item        *tee, *pf_item;
+    proto_tree     *ext_tree_tft;
+    guint          length;
 
     length = tvb_get_ntohs(tvb, offset + 1);
 
     ext_tree_tft = proto_tree_add_subtree(tree, tvb, offset, 3 + length, ett_gtp_tft, NULL, "Traffic flow template");
-
-    tft_flags = tvb_get_guint8(tvb, offset + 3);
-    tft_code = (tft_flags >> 5) & 0x07;
-    no_packet_filters = tft_flags & 0x0F;
-
     proto_tree_add_item(ext_tree_tft, hf_gtp_tft_length, tvb, offset + 1, 2, ENC_BIG_ENDIAN);
 
-    ext_tree_tft_flags = proto_tree_add_subtree(ext_tree_tft, tvb, offset + 3, 1, ett_gtp_tft_flags, NULL, "TFT flags");
-    proto_tree_add_uint(ext_tree_tft_flags, hf_gtp_tft_code,   tvb, offset + 3, 1, tft_flags);
-    proto_tree_add_uint(ext_tree_tft_flags, hf_gtp_tft_spare,  tvb, offset + 3, 1, tft_flags);
-    proto_tree_add_uint(ext_tree_tft_flags, hf_gtp_tft_number, tvb, offset + 3, 1, tft_flags);
-
-    offset = offset + 4;
-
-    for (i = 0; i < no_packet_filters; i++) {
-
-        tee = proto_tree_add_item(ext_tree_tft, hf_gtp_tft_packet_filter_id, tvb, offset, 1, ENC_BIG_ENDIAN);
-        ext_tree_tft_pf = proto_item_add_subtree(tee, ett_gtp_tft_pf);
-        offset++;
-
-        if (tft_code != 2) {
-
-            pf_eval = tvb_get_guint8(tvb, offset);
-            pf_len = tvb_get_guint8(tvb, offset + 1);
-
-            proto_tree_add_uint(ext_tree_tft_pf, hf_gtp_tft_eval, tvb, offset, 1, pf_eval);
-            proto_tree_add_item(ext_tree_tft_pf, hf_gtp_tft_content_length, tvb, offset + 1, 1, ENC_BIG_ENDIAN);
-
-            offset = offset + 2;
-            pf_offset = 0;
-
-            while (pf_offset < pf_len) {
-
-                pf_content_id = tvb_get_guint8(tvb, offset + pf_offset);
-                pf_item = proto_tree_add_item(ext_tree_tft_pf, hf_gtp_tft_content_id, tvb, offset + pf_offset, 1, ENC_BIG_ENDIAN);
-
-                switch (pf_content_id) {
-                    /* address IPv4 and mask = 8 bytes */
-                case 0x10:
-                    proto_item_set_text(pf_item, "ID 0x10: IPv4/mask: %s/%s", tvb_ip_to_str(tvb, offset + pf_offset + 1),
-                                        tvb_ip_to_str(tvb, offset + pf_offset + 5));
-                    proto_item_set_len(pf_item, 9);
-                    pf_offset += 9;
-                    break;
-                    /* address IPv6 and mask = 32 bytes */
-                case 0x20:
-                    proto_item_set_text(pf_item, "ID 0x20: IPv6/mask: %s/%s",
-                                        tvb_ip6_to_str(tvb, offset + pf_offset + 1), tvb_ip6_to_str(tvb, offset + pf_offset + 17));
-                    proto_item_set_len(pf_item, 33);
-                    pf_offset += 33;
-                    break;
-                    /* protocol identifier/next header type = 1 byte */
-                case 0x30:
-                    proto = tvb_get_guint8(tvb, offset + pf_offset + 1);
-                    proto_item_set_text(pf_item, "ID 0x30: IPv4 protocol identifier/IPv6 next header: %u (%x)",
-                                        proto, proto);
-                    proto_item_set_len(pf_item, 2);
-                    pf_offset += 2;
-                    break;
-                    /* single destination port type = 2 bytes */
-                case 0x40:
-                    port1 = tvb_get_ntohs(tvb, offset + pf_offset + 1);
-                    proto_item_set_text(pf_item, "ID 0x40: destination port: %u", port1);
-                    proto_item_set_len(pf_item, 3);
-                    pf_offset += 3;
-                    break;
-                    /* destination port range type = 4 bytes */
-                case 0x41:
-                    port1 = tvb_get_ntohs(tvb, offset + pf_offset + 1);
-                    port2 = tvb_get_ntohs(tvb, offset + pf_offset + 3);
-                    proto_item_set_text(pf_item, "ID 0x41: destination port range: %u - %u", port1, port2);
-                    proto_item_set_len(pf_item, 5);
-                    pf_offset += 5;
-                    break;
-                    /* single source port type = 2 bytes */
-                case 0x50:
-                    port1 = tvb_get_ntohs(tvb, offset + pf_offset + 1);
-                    proto_item_set_text(pf_item, "ID 0x50: source port: %u", port1);
-                    proto_item_set_len(pf_item, 3);
-                    pf_offset += 3;
-                    break;
-                    /* source port range type = 4 bytes */
-                case 0x51:
-                    port1 = tvb_get_ntohs(tvb, offset + pf_offset + 1);
-                    port2 = tvb_get_ntohs(tvb, offset + pf_offset + 3);
-                    proto_item_set_text(pf_item, "ID 0x51: source port range: %u - %u", port1, port2);
-                    proto_item_set_len(pf_item, 5);
-                    pf_offset += 5;
-                    break;
-                    /* security parameter index type = 4 bytes */
-                case 0x60:
-                    ipsec_id = tvb_get_ntohl(tvb, offset + pf_offset + 1);
-                    proto_item_set_text(pf_item, "ID 0x60: security parameter index: %x", ipsec_id);
-                    proto_item_set_len(pf_item, 5);
-                    pf_offset += 5;
-                    break;
-                    /* type of service/traffic class type = 2 bytes */
-                case 0x70:
-                    tos = tvb_get_ntohs(tvb, offset + pf_offset + 1);
-                    proto_item_set_text(pf_item, "ID 0x70: Type of Service/Traffic Class: %u (%x)", tos, tos);
-                    proto_item_set_len(pf_item, 3);
-                    pf_offset += 3;
-                    break;
-                    /* flow label type = 3 bytes */
-                case 0x80:
-                    label = tvb_get_ntoh24(tvb, offset + pf_offset + 1) & 0x0FFFFF;
-                    proto_item_set_text(pf_item, "ID 0x80: Flow Label: %u (%x)", label, label);
-                    proto_item_set_len(pf_item, 4);
-                    pf_offset += 4;
-                    break;
-
-                default:
-                    proto_item_set_text(pf_item, "Unknown value: %x ", pf_content_id);
-                    pf_offset++;        /* to avoid infinite loop */
-                    break;
-                }
-            }
-
-            offset = offset + pf_offset;
-        }
-    }
+    /* The detailed coding of Traffic Flow Template
+    * Description is specified in 3GPP TS 24.008 [5] ,
+    * clause 10.5.6.12, beginning with octet 3..
+    * Use the decoding in packet-gsm_a_gm.c
+    */
+    de_sm_tflow_temp(tvb, ext_tree_tft, pinfo, offset + 3, length, NULL, 0);
 
     return 3 + length;
 }
@@ -5653,8 +5518,9 @@ static int
 decode_gtp_target_id(tvbuff_t * tvb, int offset, packet_info * pinfo, proto_tree * tree, session_args_t * args _U_)
 {
 
-    guint16     length;
-    proto_tree *ext_tree;
+    guint16         length;
+    proto_tree      *ext_tree;
+
 
     length = tvb_get_ntohs(tvb, offset + 1);
 
@@ -5665,6 +5531,7 @@ decode_gtp_target_id(tvbuff_t * tvb, int offset, packet_info * pinfo, proto_tree
     if (length == 0){
         return 3 + length;
     }
+
     /* Quote from specification:
      * The Target Identification information element contains the identification of a target RNC. Octets 4-n shall contain a
      * non-transparent copy of the corresponding IEs (see subclause 7.7.2) and be encoded as specified in Figure 51 below.
@@ -5674,8 +5541,17 @@ decode_gtp_target_id(tvbuff_t * tvb, int offset, packet_info * pinfo, proto_tree
      *         octets 4-n. Also the optional "iE-Extensions" parameter shall not be included into the GTP IE.
      */
     /* Octet 4-6 MCC + MNC */
-    dissect_e212_mcc_mnc(tvb, pinfo, ext_tree, offset, E212_NONE, TRUE);
+    if (length == 9) {
+        /* Patch for systems still not following NOTE 2 */
+        proto_tree_add_expert_format(ext_tree, pinfo, &ei_gtp_undecoded, tvb, offset, 1, "Not Compliant with 3GPP TS 29.060 7.7.37: The preamble of the \"Target RNC-ID\" (numerical value of e.g. 0x20) however shall not be included in octets 4-n.");
+        offset+=1;
+        dissect_e212_mcc_mnc(tvb, pinfo, ext_tree, offset, E212_NONE, FALSE);
+    } else {
+        /* Following Standards */
+        dissect_e212_mcc_mnc(tvb, pinfo, ext_tree, offset, E212_NONE, TRUE);
+    }
     offset+=3;
+
     /* Octet 7-8 LAC */
     proto_tree_add_item(ext_tree, hf_gtp_rai_lac, tvb, offset, 2, ENC_BIG_ENDIAN);
     offset+=2;
@@ -5705,6 +5581,8 @@ decode_gtp_utran_cont(tvbuff_t * tvb, int offset, packet_info * pinfo _U_, proto
 
     guint16     length;
     proto_tree *ext_tree;
+    tvbuff_t   *new_tvb;
+    proto_tree *sub_tree;
 
     length = tvb_get_ntohs(tvb, offset + 1);
 
@@ -5714,6 +5592,21 @@ decode_gtp_utran_cont(tvbuff_t * tvb, int offset, packet_info * pinfo _U_, proto
     proto_tree_add_item(ext_tree, hf_gtp_ext_length, tvb, offset, 2, ENC_BIG_ENDIAN);
     offset = offset + 2;
     proto_tree_add_item(ext_tree, hf_gtp_utran_field, tvb, offset, length, ENC_NA);
+
+    switch (pinfo->link_dir) {
+    case P2P_DIR_UL:
+        sub_tree = proto_tree_add_subtree(ext_tree, tvb, offset, length, ett_gtp_utran_cont, NULL, "Source RNC to Target RNC Transparent Container");
+        new_tvb = tvb_new_subset_remaining(tvb, offset);
+        dissect_ranap_SourceRNC_ToTargetRNC_TransparentContainer_PDU(new_tvb, pinfo, sub_tree, NULL);
+        break;
+    case P2P_DIR_DL:
+        sub_tree = proto_tree_add_subtree(ext_tree, tvb, offset, length, ett_gtp_utran_cont, NULL, "Target RNC to Source RNC Transparent Container");
+        new_tvb = tvb_new_subset_remaining(tvb, offset);
+        dissect_ranap_TargetRNC_ToSourceRNC_TransparentContainer_PDU(new_tvb, pinfo, sub_tree, NULL);
+        break;
+    default:
+        break;
+    }
 
     return 3 + length;
 
@@ -8626,12 +8519,14 @@ dissect_gtp_common(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree)
         case GTP_MSG_INIT_PDP_CONTEXT_ACT_REQ:
         case GTP_MSG_PDU_NOTIFY_REQ:
         case GTP_MSG_PDU_NOTIFY_REJ_REQ:
+        case GTP_MSG_FORW_RELOC_REQ: /* direction added for UTRAN Container decode */
             pinfo->link_dir = P2P_DIR_UL;
             break;
         case GTP_MSG_DELETE_PDP_RESP:
         case GTP_MSG_UPDATE_PDP_RESP:
         case GTP_MSG_CREATE_PDP_RESP:
         case GTP_MSG_INIT_PDP_CONTEXT_ACT_RESP:
+        case GTP_MSG_FORW_RELOC_RESP: /* direction added for UTRAN Container decode */
             pinfo->link_dir = P2P_DIR_DL;
             break;
     default:
@@ -9579,31 +9474,6 @@ proto_register_gtp(void)
            FT_UINT32, BASE_HEX, NULL, 0,
            "Tunnel Endpoint Identifier Data II", HFILL}
         },
-        {&hf_gtp_tft_code,
-         { "TFT operation code", "gtp.tft_code",
-           FT_UINT8, BASE_DEC, VALS(tft_code_type), GTPv1_TFT_CODE_MASK,
-           NULL, HFILL}
-        },
-        {&hf_gtp_tft_spare,
-         { "TFT spare bit", "gtp.tft_spare",
-           FT_UINT8, BASE_DEC, NULL, GTPv1_TFT_SPARE_MASK,
-           NULL, HFILL}
-        },
-        {&hf_gtp_tft_number,
-         { "Number of packet filters", "gtp.tft_number",
-           FT_UINT8, BASE_DEC, NULL, GTPv1_TFT_NUMBER_MASK,
-           NULL, HFILL}
-        },
-        {&hf_gtp_tft_eval,
-         { "Evaluation precedence", "gtp.tft_eval",
-           FT_UINT8, BASE_DEC, NULL, 0,
-           NULL, HFILL}
-        },
-        {&hf_gtp_tft_content_id,
-         { "Content ID", "gtp.tft_content_id",
-           FT_UINT8, BASE_DEC, NULL, 0,
-           NULL, HFILL}
-        },
         {&hf_gtp_tid,
          { "TID", "gtp.tid",
            FT_STRING, BASE_NONE, NULL, 0,
@@ -10017,8 +9887,6 @@ proto_register_gtp(void)
       { &hf_gtp_gsn_address_length, { "GSN address length", "gtp.gsn_address_length", FT_UINT16, BASE_DEC, NULL, 0x0, NULL, HFILL }},
       { &hf_gtp_gsn_address_information_element_length, { "GSN address Information Element length", "gtp.gsn_address_information_element_length", FT_UINT16, BASE_DEC, NULL, 0x0, NULL, HFILL }},
       { &hf_gtp_tft_length, { "TFT length", "gtp.tft_length", FT_UINT16, BASE_DEC, NULL, 0x0, NULL, HFILL }},
-      { &hf_gtp_tft_packet_filter_id, { "Packet filter id", "gtp.tft_packet_filter_id", FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL }},
-      { &hf_gtp_tft_content_length, { "Content length", "gtp.tft_content_length", FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL }},
       { &hf_gtp_rab_setup_length, { "RAB setup length", "gtp.rab_setup_length", FT_UINT16, BASE_DEC, NULL, 0x0, NULL, HFILL }},
       { &hf_gtp_timezone, { "Timezone", "gtp.timezone", FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL }},
       { &hf_gtp_timezone_dst, { "DST", "gtp.timezone_dst", FT_UINT8, BASE_DEC, VALS(daylight_saving_time_vals), 0x03, NULL, HFILL }},
@@ -10074,7 +9942,7 @@ proto_register_gtp(void)
     };
 
     /* Setup protocol subtree array */
-#define GTP_NUM_INDIVIDUAL_ELEMS    29
+#define GTP_NUM_INDIVIDUAL_ELEMS    28
     static gint *ett_gtp_array[GTP_NUM_INDIVIDUAL_ELEMS + NUM_GTP_IES];
 
     ett_gtp_array[0] = &ett_gtp;
@@ -10099,13 +9967,12 @@ proto_register_gtp(void)
     ett_gtp_array[19] = &ett_gtp_proto;
     ett_gtp_array[20] = &ett_gtp_gsn_addr;
     ett_gtp_array[21] = &ett_gtp_tft;
-    ett_gtp_array[22] = &ett_gtp_tft_pf;
-    ett_gtp_array[23] = &ett_gtp_tft_flags;
-    ett_gtp_array[24] = &ett_gtp_rab_setup;
-    ett_gtp_array[25] = &ett_gtp_hdr_list;
-    ett_gtp_array[26] = &ett_gtp_rel_pack;
-    ett_gtp_array[27] = &ett_gtp_node_addr;
-    ett_gtp_array[28] = &ett_gtp_mm_cntxt;
+    ett_gtp_array[22] = &ett_gtp_rab_setup;
+    ett_gtp_array[23] = &ett_gtp_hdr_list;
+    ett_gtp_array[24] = &ett_gtp_rel_pack;
+    ett_gtp_array[25] = &ett_gtp_node_addr;
+    ett_gtp_array[26] = &ett_gtp_mm_cntxt;
+    ett_gtp_array[27] = &ett_gtp_utran_cont;
 
     last_offset = GTP_NUM_INDIVIDUAL_ELEMS;
 
@@ -10156,8 +10023,8 @@ proto_register_gtp(void)
     register_dissector("gtp", dissect_gtp, proto_gtp);
     register_dissector("gtpprime", dissect_gtpprime, proto_gtpprime);
 
-    gtp_priv_ext_dissector_table = register_dissector_table("gtp.priv_ext", "GTP PRIVATE EXT", proto_gtp, FT_UINT16, BASE_DEC, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
-    gtp_cdr_fmt_dissector_table = register_dissector_table("gtp.cdr_fmt", "GTP DATA RECORD TYPE", proto_gtp, FT_UINT16, BASE_DEC, DISSECTOR_TABLE_NOT_ALLOW_DUPLICATE);
+    gtp_priv_ext_dissector_table = register_dissector_table("gtp.priv_ext", "GTP PRIVATE EXT", proto_gtp, FT_UINT16, BASE_DEC);
+    gtp_cdr_fmt_dissector_table = register_dissector_table("gtp.cdr_fmt", "GTP DATA RECORD TYPE", proto_gtp, FT_UINT16, BASE_DEC);
 
     register_init_routine(gtp_init);
     register_cleanup_routine(gtp_cleanup);
@@ -10234,11 +10101,15 @@ proto_reg_handoff_gtp(void)
     gtpv1c_port  = g_gtpv1c_port;
     gtpv1u_port  = g_gtpv1u_port;
 
+    /* This doesn't use the "auto preference" API because the port
+        description is too specific */
     dissector_add_uint("udp.port", g_gtpv0_port, gtp_prime_handle);
     dissector_add_uint("udp.port", g_gtpv1c_port, gtp_handle);
     dissector_add_uint("udp.port", g_gtpv1u_port, gtp_handle);
 
     if (g_gtp_over_tcp) {
+        /* This doesn't use the "auto preference" API because the port
+           description is too specific */
         dissector_add_uint("tcp.port", g_gtpv0_port, gtp_prime_handle);
         dissector_add_uint("tcp.port", g_gtpv1c_port, gtp_handle);
         dissector_add_uint("tcp.port", g_gtpv1u_port, gtp_handle);
