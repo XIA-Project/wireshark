@@ -370,7 +370,7 @@ dissect_xstream_opt_migrate(const ip_tcp_opt *optp _U_, tvbuff_t *tvb,
 	key_tree = proto_tree_add_subtree(m_tree, tvb, offset, size + 2, ett_xstream_option_migrate_key, NULL, "Public Key");
 	proto_tree_add_item(key_tree, hf_xstream_option_migrate_len, tvb, offset, 2, ENC_LITTLE_ENDIAN);
 	offset += 2;
-	proto_tree_add_item(key_tree, hf_xstream_option_migrate_key, tvb, offset, size, ENC_NA);
+	proto_tree_add_item(key_tree, hf_xstream_option_migrate_key, tvb, offset, size, ENC_ASCII);
 	offset += size;
 
 	if (offset != len) {
@@ -866,8 +866,8 @@ proto_register_xstream(void)
 		{&hf_xstream_option_migrate_signature, {"Signature", "xstream.options.signature",
 			FT_BYTES, ENC_NA, NULL, 0x0, "Migration option's signature", HFILL}},
 
-		{&hf_xstream_option_migrate_key, {"Public Key", "xstream.options.src.dag",
-			FT_BYTES, ENC_NA, NULL, 0x0, "Sending host's public key", HFILL}},
+		{&hf_xstream_option_migrate_key, {"Public Key", "xstream.options.key",
+			FT_STRING, ENC_NA, NULL, 0x0, "Sending host's public key", HFILL}},
 
 		{&hf_xstream_option_migrate_ack, {"Migration ACK Signature", "xstream.options.migrate.ack",
 			FT_UINT32, BASE_DEC, NULL, 0x0, "Migration ACK Header", HFILL}}
