@@ -114,7 +114,6 @@ void
 proto_reg_handoff_xdgram(void)
 {
     xdgram_handle = create_dissector_handle(dissect_xdgram, proto_xdgram);
-    dissector_add_uint("xip.next_hdr", XIA_NEXT_HEADER_XDGRAM, xdgram_handle);
 }
 
 /*

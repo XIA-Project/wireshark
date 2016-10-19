@@ -917,7 +917,6 @@ void
 proto_reg_handoff_xstream(void)
 {
     xstream_handle = create_dissector_handle(dissect_xstream, proto_xstream);
-    dissector_add_uint("xip.next_hdr", XIA_NEXT_HEADER_XSTREAM, xstream_handle);
 }
 
 /*

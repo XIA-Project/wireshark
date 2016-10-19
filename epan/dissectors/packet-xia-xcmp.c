@@ -298,8 +298,6 @@ void
 proto_reg_handoff_xcmp(void)
 {
     xcmp_handle = create_dissector_handle(dissect_xcmp, proto_xcmp);
-    dissector_add_uint("xip.next_hdr", XIA_NEXT_HEADER_XCMP, xcmp_handle);
-
     xip_handle = find_dissector("xip");
 }
 
