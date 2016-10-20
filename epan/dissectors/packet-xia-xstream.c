@@ -37,7 +37,7 @@ void proto_reg_handoff_xstream(void);
 void proto_register_xstream(void);
 
 /* If set, do not put the Xstream timestamp information on the summary line */
-static gboolean xstream_ignore_timestamps = TRUE;
+static gboolean xstream_ignore_timestamps = FALSE;
 
 static int proto_xstream = -1;
 static int hf_xstream_next_hdr = -1;
@@ -662,12 +662,18 @@ dissect_xstream(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data 
     flags_str = xstream_flags_to_str(flags);
     flags_str_first_letter = xstream_flags_to_str_first_letter(flags);
 
+	col_set_str(pinfo->cinfo, COL_INFO, "");
+	col_append_lstr(pinfo->cinfo, COL_INFO,
+		" [", flags_str, "]",
+		COL_ADD_LSTR_TERMINATOR);
+
+	xstream_info_append_uint(pinfo, "Win", win);
+
     if (tvb_reported_length(tvb) < XSTREAM_MIN_LENGTH) {
         return 0;
     }
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "Xstream");
-    col_set_str(pinfo->cinfo, COL_INFO, "XIA XStream Packet");
 
     ti = proto_tree_add_item(tree, proto_xstream, tvb, 0, off, ENC_NA);
     xstream_tree = proto_item_add_subtree(ti, ett_xstream);
@@ -700,6 +706,9 @@ dissect_xstream(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data 
     proto_tree_add_uint(xstream_tree, hf_xstream_seqno, tvb, XSTREAM_SEQNO, 4, seq);
     proto_tree_add_uint(xstream_tree, hf_xstream_ackno, tvb, XSTREAM_ACKNO, 4, ack);
     proto_tree_add_uint(xstream_tree, hf_xstream_win, tvb, XSTREAM_WIN, 4, win);
+
+	xstream_info_append_uint(pinfo, "Seq", seq);
+	xstream_info_append_uint(pinfo, "Ack", ack);
 
     options_item = NULL;
     options_tree = NULL;
