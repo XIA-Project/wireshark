@@ -60,8 +60,10 @@
 #define XIA_NEXT_HEADER_XCMP    0x01
 #define XIA_NEXT_HEADER_XDGRAM  0x02
 #define XIA_NEXT_HEADER_XSTREAM 0x03
+#define XIA_NEXT_HEADER_FID     0x04
 
 extern const value_string xidtype_vals[];
 extern const value_string next_header_vals[];
 
 #endif
+

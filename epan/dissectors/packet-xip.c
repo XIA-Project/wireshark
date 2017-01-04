@@ -48,6 +48,7 @@ static dissector_handle_t xip_serval_handle;
 static dissector_handle_t xip_xdgram_handle;
 static dissector_handle_t xip_xstream_handle;
 static dissector_handle_t xip_xcmp_handle;
+static dissector_handle_t xip_fid_handle;
 
 static gint proto_xip			= -1;
 
@@ -395,6 +396,7 @@ const value_string next_header_vals[] = {
 	{ XIA_NEXT_HEADER_XCMP,	  "XCMP" },
 	{ XIA_NEXT_HEADER_XDGRAM, "Xdatagram" },
 	{ XIA_NEXT_HEADER_XSTREAM,"Xstream" },
+	{ XIA_NEXT_HEADER_FID,    "FID" },
 	{ 0,			NULL }
 };
 
@@ -486,6 +488,10 @@ dissect_xip_next_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 	case XIA_NEXT_HEADER_XDGRAM:
 		next_tvb = tvb_new_subset_remaining(tvb, offset);
 		return call_dissector(xip_xdgram_handle, next_tvb, pinfo, tree);
+
+	case XIA_NEXT_HEADER_FID:
+		next_tvb = tvb_new_subset_remaining(tvb, offset);
+		return call_dissector(xip_fid_handle, next_tvb, pinfo, tree);
 
 	case XIA_NEXT_HEADER_XSTREAM:
 		next_tvb = tvb_new_subset_remaining(tvb, offset);
@@ -715,6 +721,7 @@ proto_reg_handoff_xip(void)
 
 	xip_xcmp_handle = find_dissector_add_dependency("xcmp", proto_xip);
 	xip_xstream_handle = find_dissector_add_dependency("xstream", proto_xip);
+	xip_fid_handle = find_dissector_add_dependency("fid", proto_xip);
 	xip_xdgram_handle = find_dissector_add_dependency("xdatagram", proto_xip);
 	xip_serval_handle = find_dissector_add_dependency("xipserval", proto_xip);
 }

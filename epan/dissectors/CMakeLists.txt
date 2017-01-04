@@ -1376,6 +1376,7 @@ set(DISSECTOR_SRC
 	packet-xia-xcmp.c
 	packet-xia-xdgram.c
 	packet-xia-xstream.c
+	packet-xia-fid.c
 	packet-xip.c
 	packet-xip-serval.c
 	packet-xmcp.c

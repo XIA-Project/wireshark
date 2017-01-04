@@ -2249,6 +2249,9 @@ indent_size=4
 [packet-xia-xstream.[ch]]
 indent_size=4
 
+[packet-xia-fid.[ch]]
+indent_size=4
+
 [packet-xia-xcmp.[ch]]
 indent_size=4
 
