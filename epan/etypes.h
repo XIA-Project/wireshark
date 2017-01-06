@@ -577,6 +577,14 @@ extern "C" {
 #define ETHERTYPE_QINQ_OLD		0x9100	/* QinQ: old non-standard 802.1ad */
 #endif
 
+#ifndef ETHERTYPE_XARP
+#define ETHERTYPE_XARP          0x9990 /* XIA Address Resolution Protocol (not officially registered) */
+#endif
+
+#ifndef ETHERTYPE_XNETJ
+#define ETHERTYPE_XNETJ         0x9991  /* Network Joining Protocol (not officially registered) */
+#endif
+
 #ifndef ETHERTYPE_LLT
 #define ETHERTYPE_LLT			0xCAFE	/* Veritas Low Latency Transport (not officially registered) */
 #endif
