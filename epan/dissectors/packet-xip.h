@@ -54,6 +54,7 @@
 #define XIDTYPE_SRVCID 0x18
 #define XIDTYPE_FLOWID 0x19
 #define XIDTYPE_ZF     0x20
+#define XIDTYPE_FID    0x30
 
 /* XIP next header IDs */
 #define XIA_NEXT_HEADER_DATA    0

@@ -90,6 +90,7 @@ const value_string xidtype_vals[] = {
 	{ XIDTYPE_SRVCID,	"serval" },
 	{ XIDTYPE_FLOWID,	"flowid" },
 	{ XIDTYPE_ZF,		"zf" },
+	{ XIDTYPE_FID,      "fid" },
 	{ 0,			NULL }
 };
 
