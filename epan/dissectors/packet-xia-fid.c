@@ -42,6 +42,7 @@ static int hf_fid_next_hdr = -1;
 static int hf_fid_hlen = -1;
 static int hf_fid_extra = -1;
 static int hf_fid_seq = -1;
+static int hf_fid_time = -1;
 
 static dissector_handle_t fid_handle;
 static dissector_handle_t fid_xdgram_handle;
@@ -50,13 +51,14 @@ static dissector_handle_t fid_xcmp_handle;
 
 static gint ett_fid = -1;
 
-#define MIN_FID_HEADER_SIZE 8
+#define MIN_FID_HEADER_SIZE 12
 
 // offsets in bytes
 #define FID_NXTH  0
 #define FID_HLEN  1
 #define FID_EXTRA 2
 #define FID_SEQ   4
+#define FID_TIME  8
 
 
 static gint
@@ -127,6 +129,7 @@ dissect_fid(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
     proto_tree_add_uint(fid_tree, hf_fid_hlen, tvb, FID_HLEN, 1, hlen);
     proto_tree_add_item(fid_tree, hf_fid_extra, tvb, FID_EXTRA, 2, ENC_BIG_ENDIAN);
     proto_tree_add_item(fid_tree, hf_fid_seq, tvb, FID_SEQ, 4, ENC_BIG_ENDIAN);
+    proto_tree_add_item(fid_tree, hf_fid_time, tvb, FID_TIME, 4, ENC_BIG_ENDIAN);
 
 	/* Add next header. */
 	//next_ti = proto_tree_add_item(fid_tree, hf_fid_next_hdr, tvb,
@@ -153,7 +156,10 @@ proto_register_fid(void)
 		{&hf_fid_extra, {"Extra Bytes", "fid.extra", FT_UINT16,
 			BASE_HEX, NULL, 0x0, NULL, HFILL}},
 
-		{&hf_fid_seq, {"Sequence Number", "fid.seq", FT_UINT16,
+		{&hf_fid_seq, {"Sequence Number", "fid.seq", FT_UINT32,
+			BASE_DEC, NULL, 0x0, NULL, HFILL}},
+
+		{&hf_fid_time, {"Timestamp", "fid.timestamp", FT_UINT32,
 			BASE_DEC, NULL, 0x0, NULL, HFILL}}
     };
 
