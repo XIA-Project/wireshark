@@ -416,7 +416,7 @@ const value_string next_header_vals[] = {
 static void
 construct_dag(tvbuff_t *tvb, proto_tree *xip_tree,
 	const gint ett, const gint hf, const gint hf_entry,
-	const guint8 num_nodes, guint8 offset)
+	const guint8 num_nodes, guint16 offset)
 {
 	proto_tree *dag_tree;
 	proto_item *ti;
@@ -424,7 +424,7 @@ construct_dag(tvbuff_t *tvb, proto_tree *xip_tree,
 	wmem_strbuf_t *buf;
 	const gchar *dag_str;
 	guint i, j;
-	guint8 dag_offset = offset;
+	guint16 dag_offset = offset;
 
 	ti = proto_tree_add_item(xip_tree, hf, tvb, offset,
 		num_nodes * XIA_NODE_SIZE, ENC_BIG_ENDIAN);
