@@ -55,6 +55,9 @@
 #define XIDTYPE_FLOWID 0x19
 #define XIDTYPE_ZF     0x20
 #define XIDTYPE_FID    0x30
+#define XIDTYPE_NCID   0x31
+#define XIDTYPE_ICID   0x32
+#define XIDTYPE_AID    0x33
 
 /* XIP next header IDs */
 #define XIA_NEXT_HEADER_DATA    0
@@ -62,6 +65,10 @@
 #define XIA_NEXT_HEADER_XDGRAM  0x02
 #define XIA_NEXT_HEADER_XSTREAM 0x03
 #define XIA_NEXT_HEADER_FID     0x04
+#define XIA_NEXT_HEADER_SECRET  0x05
+#define XIA_NEXT_HEADER_QUIC    0x06
+
+#define UDP_PORT_XIP		8769
 
 extern const value_string xidtype_vals[];
 extern const value_string next_header_vals[];

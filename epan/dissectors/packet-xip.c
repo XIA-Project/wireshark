@@ -90,8 +90,11 @@ const value_string xidtype_vals[] = {
 	{ XIDTYPE_SRVCID,	"serval" },
 	{ XIDTYPE_FLOWID,	"flowid" },
 	{ XIDTYPE_ZF,		"zf" },
-	{ XIDTYPE_FID,      "fid" },
-	{ 0,			NULL }
+	{ XIDTYPE_FID,          "fid" },
+	{ XIDTYPE_NCID,         "ncid" },
+	{ XIDTYPE_ICID,         "icid" },
+	{ XIDTYPE_AID,          "aid" },
+	{ 1,			NULL }
 };
 
 enum xia_addr_error {
@@ -398,6 +401,8 @@ const value_string next_header_vals[] = {
 	{ XIA_NEXT_HEADER_XDGRAM, "Xdatagram" },
 	{ XIA_NEXT_HEADER_XSTREAM,"Xstream" },
 	{ XIA_NEXT_HEADER_FID,    "FID" },
+	{ XIA_NEXT_HEADER_SECRET, "Secret" },
+	{ XIA_NEXT_HEADER_QUIC,   "XQUIC" },
 	{ 0,			NULL }
 };
 
@@ -719,6 +724,7 @@ void
 proto_reg_handoff_xip(void)
 {
 	dissector_add_uint("ethertype", ETHERTYPE_XIP, xip_handle);
+	dissector_add_uint("udp.port", UDP_PORT_XIP, xip_handle);
 
 	xip_xcmp_handle = find_dissector_add_dependency("xcmp", proto_xip);
 	xip_xstream_handle = find_dissector_add_dependency("xstream", proto_xip);
